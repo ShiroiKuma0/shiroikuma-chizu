@@ -74,7 +74,8 @@ class LiveSender extends AsyncTask<Void, Void, Void> {
 				// OsmAnd live track: send the location encrypted
 				urlStr = getTranslationUrl(baseUrl, data);
 				if (urlStr == null) {
-					return false;
+					queue.poll(); // skip point (no key / encryption error)
+					return true;
 				}
 			} else {
 				urlStr = getLiveUrl(baseUrl, data);
