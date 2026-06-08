@@ -199,6 +199,10 @@ class LiveSender extends AsyncTask<Void, Void, Void> {
 		}
 		String deviceId = app.getSettings().BACKUP_DEVICE_ID.get();
 		String accessToken = app.getSettings().BACKUP_ACCESS_TOKEN.get();
+		if (Algorithms.isEmpty(deviceId) || Algorithms.isEmpty(accessToken)) {
+			log.info("Live track device is not registered (deviceId/accessToken missing) — skipping encrypted send");
+			return null;
+		}
 		return "https://" + host + "/userdata/translation/msg?deviceid=" + encode(deviceId)
 				+ "&accessToken=" + encode(accessToken) + "&encryptedData=" + encode(encryptedData);
 	}
