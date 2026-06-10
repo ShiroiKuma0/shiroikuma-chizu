@@ -966,6 +966,8 @@ public class BinaryMapAddressReaderAdapter {
 			int t = codedIS.readTag();
 			int tag = WireFormat.getTagFieldNumber(t);
 			if(tag == 0 || tag == AddressNameIndexDataAtom.SHIFTTOINDEX_FIELD_NUMBER) {
+				// Old OBFs use suffixesBitset, new compact OBFs use suffixesBitsetIndex/extraSuffix.
+				// If both are present, both gates must pass so legacy partial checks cannot bypass compact suffixes.
 				boolean atomMatched = (!legacyBitset || matched) && (!compactSuffixes || suffixMask == null
 						|| suffixMask.isCompactMatched(suffixesBitsetIndex, extraSuffix));
 				if (toAdd != null && add && atomMatched) {
@@ -987,6 +989,8 @@ public class BinaryMapAddressReaderAdapter {
 				codedIS.readString();
 				break;
 			case AddressNameIndexDataAtom.SUFFIXESBITSET_FIELD_NUMBER:
+				// Legacy partial-suffix gate: kept for old OBF compatibility. New compact indexes should
+				// avoid this field and encode partial/separated suffixes through suffixesBitsetIndex.
 				legacyBitset = true;
 				int mask = codedIS.readUInt32();
 				if (!matched && suffixMask != null && suffixMask.isMatched(maskIndex, mask)) {
@@ -995,10 +999,12 @@ public class BinaryMapAddressReaderAdapter {
 				maskIndex++;
 				break;
 			case AddressNameIndexDataAtom.SUFFIXESBITSETINDEX_FIELD_NUMBER:
+				// Compact gate: even values reference the shared dictionary, odd values inline pure decimals.
 				compactSuffixes = true;
 				suffixesBitsetIndex.add(codedIS.readUInt32());
 				break;
 			case AddressNameIndexDataAtom.EXTRASUFFIX_FIELD_NUMBER:
+				// Rare suffix overflow lives per atom so suffixesDictionary can stay capped at 128 entries.
 				compactSuffixes = true;
 				extraSuffix = codedIS.readString();
 				break;
@@ -1014,6 +1020,8 @@ public class BinaryMapAddressReaderAdapter {
 				add = !req.isBboxSpecified() || req.contains(x16, y16, x16, y16);
 				break;
 			case AddressNameIndexDataAtom.SHIFTTOINDEX_FIELD_NUMBER:
+				// Address atoms serialize shift before compact suffix fields; final tag-0 evaluation is the
+				// authoritative compact check after all suffixesBitsetIndex/extraSuffix values are read.
 				shiftindex = (int) (fp - codedIS.readInt32());
 				break;
 			case AddressNameIndexDataAtom.TYPE_FIELD_NUMBER:

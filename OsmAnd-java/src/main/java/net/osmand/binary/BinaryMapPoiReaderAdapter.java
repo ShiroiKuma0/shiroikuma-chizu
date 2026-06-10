@@ -529,7 +529,10 @@ public class BinaryMapPoiReaderAdapter {
 		if (req.matcherMode == StringMatcherMode.CHECK_STARTS_FROM_SPACE && prefixSourceQueries.size() > 1) {
 			prefixSourceQueries.remove(prefixSourceQueries.size() - 1);
 		}
-		List<String> prefixQueries = new ArrayList<>(nameIndexPrepareComplexPrefixes(prefixSourceQueries));
+		// Mirror writer prefix eligibility so standalone number-like POI names can be queried,
+		// while numbers mixed with text remain suffix-only in compact indexes.
+		List<String> prefixQueries = new ArrayList<>(nameIndexPrepareComplexPrefixes(prefixSourceQueries,
+				nameIndexIsSingleRawNumberValue(query, prefixSourceQueries)));
 		List<QueryToken> queryTokens = null;
 		while (true) {
 			final long subStart = req.beginSubSearchStats(), bytes = codedIS.getBytesCounter();
@@ -702,6 +705,9 @@ public class BinaryMapPoiReaderAdapter {
 			int tag = WireFormat.getTagFieldNumber(t);
 			switch (tag) {
 			case 0:
+				// Old OBFs use suffixesBitset, compact OBFs use suffixesBitsetIndex/extraSuffix.
+				// Both gates are ANDed when present to keep legacy partial matching from accepting
+				// objects that fail the new compact separated/partial suffix contract.
 				boolean atomMatched = (!legacyBitset || matched) && (!compactSuffixes || suffixMask == null
 						|| suffixMask.isCompactMatched(suffixesBitsetIndex, extraSuffix));
 				if (!atomMatched) {
@@ -739,6 +745,8 @@ public class BinaryMapPoiReaderAdapter {
 				zoom = codedIS.readUInt32();
 				break;
 			case OsmandOdb.OsmAndPoiNameIndexDataAtom.SUFFIXESBITSET_FIELD_NUMBER:
+				// Legacy partial-suffix gate for old OBFs. New compact indexes should use
+				// suffixesBitsetIndex/extraSuffix so partial and separated suffixes share one path.
 				legacyBitset = true;
 				int mask = codedIS.readUInt32();
 				if (!matched && suffixMask != null && suffixMask.isMatched(maskIndex, mask)) {
@@ -747,14 +755,17 @@ public class BinaryMapPoiReaderAdapter {
 				maskIndex++;
 				break;
 			case OsmandOdb.OsmAndPoiNameIndexDataAtom.SUFFIXESBITSETINDEX_FIELD_NUMBER:
+				// Compact suffix reference: even values index suffixesDictionary, odd values inline decimal suffixes.
 				compactSuffixes = true;
 				suffixesBitsetIndex.add(codedIS.readUInt32());
 				break;
 			case OsmandOdb.OsmAndPoiNameIndexDataAtom.EXTRASUFFIX_FIELD_NUMBER:
+				// Per-atom overflow for rare suffixes keeps the shared dictionary limited to the top 128 entries.
 				compactSuffixes = true;
 				extraSuffix = codedIS.readString();
 				break;
 			case OsmandOdb.OsmAndPoiNameIndexDataAtom.POIINDINBLOCK_FIELD_NUMBER:
+				// Compact grouped atoms may point to a shared POI leaf; this narrows the hit to matching POI indexes.
 				poiIndInBlock.add(codedIS.readUInt32());
 				break;
 			case OsmandOdb.OsmAndPoiNameIndexDataAtom.SHIFTTO_FIELD_NUMBER:

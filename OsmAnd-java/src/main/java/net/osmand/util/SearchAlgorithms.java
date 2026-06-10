@@ -361,52 +361,83 @@ public class SearchAlgorithms {
         return data;
     }
 
-    public static <T> CompactSuffixDictionary<T> nameIndexBuildCompactSuffixDictionary(String prefix, List<T> objects,
-                                                                                       Function<T, Collection<String>> tokenSupplier) {
-        CompactSuffixDictionary<T> data = new CompactSuffixDictionary<>();
+    public static class CombinedSuffixDictionary<T> {
+        public final List<SuffixEntry> dictionaryEntries = new ArrayList<>();
+        public final Map<String, Integer> resolvedSuffixToIndex = new HashMap<>();
+        public final Map<T, int[]> bitsets = new LinkedHashMap<>();
+        public final Map<T, CompactSuffixes> compactSuffixes = new LinkedHashMap<>();
+    }
+
+    /**
+     * Builds one compact suffix dictionary for the new name-index structure.
+     * Partial token remainders are stored as-is; separated word-boundary suffixes are stored with a single leading
+     * space marker. The dictionary is capped at {@link CompactSuffixDictionary#MAX_DICTIONARY_SIZE}; over-cap
+     * suffixes spill into {@code extraSuffix}. Pure decimal separated suffixes use odd inline values and do not
+     * consume dictionary slots.
+     */
+    public static <T> CombinedSuffixDictionary<T> nameIndexBuildCombinedSuffixDictionary(String prefix, List<T> objects,
+            Function<T, Collection<String>> partialTokenSupplier, Function<T, Collection<String>> separatedTokenSupplier) {
+        CombinedSuffixDictionary<T> data = new CombinedSuffixDictionary<>();
         Map<T, Set<String>> suffixesByObject = new LinkedHashMap<>();
         Map<String, Integer> suffixFrequency = new HashMap<>();
+
         for (T object : objects) {
             Set<String> objectSuffixes = new LinkedHashSet<>();
             suffixesByObject.put(object, objectSuffixes);
-            for (String token : tokenSupplier.apply(object)) {
-                if (Objects.equals(token, prefix) || encodePureDecimalSuffix(token) != null) {
+            for (String token : partialTokenSupplier.apply(object)) {
+                int suffixOffset = suffixOffsetAfterPrefix(token, prefix);
+                String suffix = null;
+                if (suffixOffset < 0) {
+                    if (Objects.equals(token, prefix)) {
+                        suffix = "";
+                    }
+                } else {
+                    suffix = Normalizer.normalize(token.substring(suffixOffset), Normalizer.Form.NFC);
+                }
+                if (suffix != null) {
+                    objectSuffixes.add(suffix);
+                }
+            }
+            for (String token : separatedTokenSupplier.apply(object)) {
+                if (Objects.equals(token, prefix) || Algorithms.isEmpty(token) || encodePureDecimalSuffix(token) != null) {
                     continue;
                 }
-                objectSuffixes.add(token);
+                objectSuffixes.add(" " + token);
             }
             for (String suffix : objectSuffixes) {
                 suffixFrequency.merge(suffix, 1, Integer::sum);
             }
         }
-        List<String> dictionarySuffixes = new ArrayList<>(suffixFrequency.keySet());
-        dictionarySuffixes.sort(Comparator
+        List<String> rankedSuffixes = new ArrayList<>(suffixFrequency.keySet());
+        rankedSuffixes.sort(Comparator
                 .comparingInt((String suffix) -> suffixFrequency.get(suffix)).reversed()
                 .thenComparing(Comparator.naturalOrder()));
-        if (dictionarySuffixes.size() > CompactSuffixDictionary.MAX_DICTIONARY_SIZE) {
-            dictionarySuffixes = dictionarySuffixes.subList(0, CompactSuffixDictionary.MAX_DICTIONARY_SIZE);
+        if (rankedSuffixes.size() > CompactSuffixDictionary.MAX_DICTIONARY_SIZE) {
+            rankedSuffixes = rankedSuffixes.subList(0, CompactSuffixDictionary.MAX_DICTIONARY_SIZE);
         }
-        Collections.sort(dictionarySuffixes);
+        Set<String> dictionarySuffixSet = new HashSet<>(rankedSuffixes);
+
         String previousSuffix = null;
-        for (String suffix : dictionarySuffixes) {
+        for (String suffix : rankedSuffixes) {
             String encodedSuffix = nameIndexEncodeSuffix(suffix, previousSuffix);
             SuffixEntry entry = new SuffixEntry(suffix, encodedSuffix);
             data.resolvedSuffixToIndex.put(entry.resolvedSuffix(), data.dictionaryEntries.size());
             data.dictionaryEntries.add(entry);
             previousSuffix = suffix;
         }
+
         for (T object : objects) {
             CompactSuffixes objectSuffixes = new CompactSuffixes();
             List<String> extraSuffixes = new ArrayList<>();
             for (String suffix : suffixesByObject.getOrDefault(object, Collections.emptySet())) {
-                Integer suffixIndex = data.resolvedSuffixToIndex.get(suffix);
-                if (suffixIndex == null) {
-                    extraSuffixes.add(suffix);
-                } else {
+                Integer suffixIndex = dictionarySuffixSet.contains(suffix) ? data.resolvedSuffixToIndex.get(suffix) : null;
+                if (suffixIndex != null) {
                     objectSuffixes.suffixesBitsetIndex.add(suffixIndex << 1);
+                } else {
+                    extraSuffixes.add(suffix);
                 }
             }
-            for (String token : tokenSupplier.apply(object)) {
+            for (String token : new LinkedHashSet<>(separatedTokenSupplier.apply(object))) {
                 if (!Objects.equals(token, prefix)) {
                     Integer encodedNumber = encodePureDecimalSuffix(token);
                     if (encodedNumber != null) {
@@ -419,7 +450,7 @@ public class SearchAlgorithms {
             if (!extraSuffixes.isEmpty()) {
                 objectSuffixes.extraSuffix = String.join(" ", extraSuffixes);
             }
-            data.suffixes.put(object, objectSuffixes);
+            data.compactSuffixes.put(object, objectSuffixes);
         }
         return data;
     }
@@ -451,9 +482,26 @@ public class SearchAlgorithms {
         }
     }
 
-    public static Set<String> nameIndexPrepareComplexPrefixes(List<String> tokens) {
-        return nameIndexPrepareComplexPrefixes(tokens, false);
-    }
+    /**
+     * Cross-category suffix policy for compact complex tokens.
+     * <p>
+     * Current production policy is intentionally strict:
+     * - USUAL prefixes include other USUAL tokens and NUMBER tokens only.
+     * - FREQUENT prefixes include other FREQUENT tokens, COMMON tokens, and NUMBER tokens only.
+     * <p>
+     * After index-size/search-quality testing, cross-category suffixes can be enabled here without changing
+     * writer call sites:
+     * - Set INCLUDE_FREQUENT_SUFFIXES_FOR_USUAL_PREFIX to true to let USUAL prefixes also match FREQUENT tokens.
+     * - Set INCLUDE_COMMON_SUFFIXES_FOR_USUAL_PREFIX to true to let USUAL prefixes also match COMMON tokens.
+     * - Set INCLUDE_USUAL_SUFFIXES_FOR_FREQUENT_PREFIX to true to let FREQUENT prefixes also match USUAL tokens.
+     * <p>
+     * Keep these switches false by default until OBF size, dictionary hit rate, extraSuffix growth, and false-positive
+     * search behavior are measured on representative maps. NUMBER suffixes are not controlled by these switches:
+     * they remain included for both USUAL and FREQUENT prefixes.
+     */
+    private static final boolean INCLUDE_FREQUENT_SUFFIXES_FOR_USUAL_PREFIX = false;
+    private static final boolean INCLUDE_COMMON_SUFFIXES_FOR_USUAL_PREFIX = false;
+    private static final boolean INCLUDE_USUAL_SUFFIXES_FOR_FREQUENT_PREFIX = false;
 
     public static Set<String> nameIndexPrepareComplexPrefixes(List<String> tokens, boolean allowNumberPrefixes) {
         List<String> uniqueTokens = new ArrayList<>(new LinkedHashSet<>(tokens));
@@ -484,6 +532,64 @@ public class SearchAlgorithms {
             prefixes.addAll(numbers);
         }
         return prefixes;
+    }
+
+    public static List<String> nameIndexPrepareComplexSuffixes(List<String> tokens, String prefix) {
+        List<String> uniqueTokens = new ArrayList<>(new LinkedHashSet<>(tokens));
+        List<String> usual = new ArrayList<>();
+        List<String> frequent = new ArrayList<>();
+        List<String> common = new ArrayList<>();
+        List<String> numbers = new ArrayList<>();
+        for (String token : uniqueTokens) {
+            if (CommonWords.isNumber2Letters(token)) {
+                numbers.add(token);
+            } else if (CommonWords.getCommon(token) != -1) {
+                common.add(token);
+            } else if (CommonWords.getFrequentlyUsed(token) != -1) {
+                frequent.add(token);
+            } else {
+                usual.add(token);
+            }
+        }
+        List<String> suffixes = new ArrayList<>();
+        if (usual.contains(prefix)) {
+            suffixes.addAll(usual);
+            if (INCLUDE_FREQUENT_SUFFIXES_FOR_USUAL_PREFIX) {
+                suffixes.addAll(frequent);
+            }
+            if (INCLUDE_COMMON_SUFFIXES_FOR_USUAL_PREFIX) {
+                suffixes.addAll(common);
+            }
+            suffixes.addAll(numbers);
+        } else if (frequent.contains(prefix)) {
+            if (INCLUDE_USUAL_SUFFIXES_FOR_FREQUENT_PREFIX) {
+                suffixes.addAll(usual);
+            }
+            suffixes.addAll(frequent);
+            suffixes.addAll(common);
+            suffixes.addAll(numbers);
+        } else {
+            suffixes.addAll(uniqueTokens);
+        }
+        suffixes.removeIf(token -> Objects.equals(token, prefix));
+        return suffixes;
+    }
+
+    public static boolean nameIndexIsSingleRawNumberValue(String rawText, List<String> normalizedTokens) {
+        if (Algorithms.isEmpty(rawText) || normalizedTokens == null || normalizedTokens.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < rawText.length(); i++) {
+            if (Character.isWhitespace(rawText.charAt(i))) {
+                return false;
+            }
+        }
+        for (String token : normalizedTokens) {
+            if (!CommonWords.isNumber2Letters(token)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static String replaceGermanSS(String fullText) {
