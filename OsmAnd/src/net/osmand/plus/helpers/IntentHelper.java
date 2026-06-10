@@ -144,8 +144,7 @@ public class IntentHelper {
 	}
 
 	public boolean parseLaunchIntents() {
-		return parseLiveTrackIntent()
-				|| parseNavigationIntent()
+		return parseNavigationIntent()
 				|| parseBackupAuthorizationIntent()
 				|| parseSetPinOnMapIntent()
 				|| parseMoveMapToLocationIntent()
@@ -154,7 +153,8 @@ public class IntentHelper {
 				|| parseTileSourceIntent()
 				|| parseOpenGpxIntent()
 				|| parseSendIntent()
-				|| parseOAuthIntent();
+				|| parseOAuthIntent()
+				|| parseLiveTrackIntent();
 	}
 
 	// Web live track share link: https://osmand.net/map/live/?tid=...#<64-hex key>
