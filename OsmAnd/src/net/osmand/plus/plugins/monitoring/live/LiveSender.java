@@ -20,11 +20,9 @@ import org.apache.commons.logging.Log;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -91,13 +89,14 @@ class LiveSender extends AsyncTask<Void, Void, Void> {
 
 	private void sendLiveTrack(@NonNull String baseUrl, @NonNull LiveMonitoringData data) {
 		List<String> translations = app.getSettings().LIVE_MONITORING_TRANSLATIONS.getStringsList();
-		Map<String, String> urlsByTranslation = getTranslationUrls(baseUrl, data, translations);
-		if (urlsByTranslation.isEmpty()) {
+		Map<String, Map<String, String>> paramsByTranslation = getTranslationParams(data, translations);
+		if (paramsByTranslation.isEmpty()) {
 			queue.poll(); // nothing to send (no translations / not registered)
 			return;
 		}
-		for (Map.Entry<String, String> entry : urlsByTranslation.entrySet()) {
-			int code = sendToUrl(entry.getValue());
+		String url = "https://" + baseUrl + "/userdata/translation/msg";
+		for (Map.Entry<String, Map<String, String>> entry : paramsByTranslation.entrySet()) {
+			int code = post(url, entry.getValue());
 			if (code == HttpURLConnection.HTTP_GONE) {
 				// Translation deleted on the server — stop broadcasting into it.
 				app.getSettings().LIVE_MONITORING_TRANSLATIONS.removeValue(entry.getKey());
@@ -105,6 +104,17 @@ class LiveSender extends AsyncTask<Void, Void, Void> {
 			}
 		}
 		queue.poll();
+	}
+
+	private int post(@NonNull String url, @NonNull Map<String, String> params) {
+		int[] code = {-1};
+		AndroidNetworkUtils.sendRequest(app, url, params, null, false, true,
+				(result, error, resultCode) -> {
+					if (resultCode != null) {
+						code[0] = resultCode;
+					}
+				});
+		return code[0];
 	}
 
 	private int sendToUrl(@NonNull String urlStr) {
@@ -206,18 +216,18 @@ class LiveSender extends AsyncTask<Void, Void, Void> {
 		return MessageFormat.format(baseUrl, prm.toArray());
 	}
 
-	private Map<String, String> getTranslationUrls(@NonNull String host, @NonNull LiveMonitoringData data,
+	private Map<String, Map<String, String>> getTranslationParams(@NonNull LiveMonitoringData data,
 			@Nullable List<String> translations) {
-		Map<String, String> urls = new LinkedHashMap<>();
+		Map<String, Map<String, String>> result = new LinkedHashMap<>();
 		if (translations == null || translations.isEmpty()) {
 			log.info("No live track translations set — skipping encrypted send");
-			return urls;
+			return result;
 		}
 		String deviceId = app.getSettings().BACKUP_DEVICE_ID.get();
 		String accessToken = app.getSettings().BACKUP_ACCESS_TOKEN.get();
 		if (Algorithms.isEmpty(deviceId) || Algorithms.isEmpty(accessToken)) {
 			log.info("Live track device is not registered (deviceId/accessToken missing) — skipping encrypted send");
-			return urls;
+			return result;
 		}
 		for (String translation : translations) {
 			int sep = translation.indexOf(':');
@@ -234,18 +244,14 @@ class LiveSender extends AsyncTask<Void, Void, Void> {
 				log.error("Failed to encrypt live track location");
 				continue;
 			}
-			urls.put(translation, "https://" + host + "/userdata/translation/msg?deviceid=" + encode(deviceId)
-					+ "&accessToken=" + encode(accessToken) + "&encryptedData=" + encode(encryptedData)
-					+ "&translationId=" + encode(tid));
-		}
-		return urls;
-	}
+			Map<String, String> params = new LinkedHashMap<>();
+			params.put("deviceid", deviceId);
+			params.put("accessToken", accessToken);
+			params.put("encryptedData", encryptedData);
+			params.put("translationId", tid);
 
-	private static String encode(@NonNull String value) {
-		try {
-			return URLEncoder.encode(value, "UTF-8");
-		} catch (UnsupportedEncodingException e) {
-			return value;
+			result.put(translation, params);
 		}
+		return result;
 	}
 }
