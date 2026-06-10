@@ -27,18 +27,36 @@ class LiveTrackCrypto {
 	static String encrypt(@NonNull String keyHex, @NonNull LiveMonitoringData data) {
 		try {
 			JSONObject point = new JSONObject();
-			point.put("lat", data.lat);
-			point.put("lon", data.lon);
+			point.put("lat", round(data.lat, 6));
+			point.put("lon", round(data.lon, 6));
 			point.put("time", data.time);
-			point.put("speed", data.speed);
-			point.put("ele", data.alt);
-			point.put("hdop", data.hdop);
-			point.put("bearing", data.bearing);
-			point.put("tta", data.timeToArrival);                  // time to arrival/finish (ms)
-			point.put("ttf", data.timeToIntermediateOrFinish);     // time to intermediate (ms)
-			point.put("dta", data.distanceToArrivalOrMarker);      // distance to arrival/marker (m)
-			point.put("dtf", data.distanceToIntermediateOrFinish); // distance to intermediate (m)
-			point.put("battery", data.battery);                    // battery %
+			if (data.speed > 0) {
+				point.put("speed", round(data.speed, 1));
+			}
+			if (data.alt != 0) {
+				point.put("ele", round(data.alt, 1));
+			}
+			if (data.hdop > 0) {
+				point.put("hdop", round(data.hdop, 1));
+			}
+			if (data.bearing > 0) {
+				point.put("bearing", round(data.bearing, 1));
+			}
+			if (data.timeToArrival > 0) {
+				point.put("tta", data.timeToArrival); // time to arrival/finish (ms)
+			}
+			if (data.timeToIntermediateOrFinish > 0) {
+				point.put("ttf", data.timeToIntermediateOrFinish); // time to intermediate (ms)
+			}
+			if (data.distanceToArrivalOrMarker > 0) {
+				point.put("dta", data.distanceToArrivalOrMarker); // distance to arrival/marker (m)
+			}
+			if (data.distanceToIntermediateOrFinish > 0) {
+				point.put("dtf", data.distanceToIntermediateOrFinish); // distance to intermediate (m)
+			}
+			if (data.battery > 0) {
+				point.put("battery", data.battery); // battery %
+			}
 			byte[] plaintext = point.toString().getBytes(StandardCharsets.UTF_8);
 
 			byte[] iv = new byte[IV_BYTES];
@@ -56,6 +74,11 @@ class LiveTrackCrypto {
 		} catch (Exception e) {
 			return null;
 		}
+	}
+
+	private static double round(double value, int decimals) {
+		double factor = Math.pow(10, decimals);
+		return Math.round(value * factor) / factor;
 	}
 
 	private static byte[] hexToBytes(@NonNull String hex) {
