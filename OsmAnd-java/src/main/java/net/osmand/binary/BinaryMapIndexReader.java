@@ -1447,21 +1447,23 @@ public class BinaryMapIndexReader {
 		return req.getSearchResults();
 	}
 	
-	public NameIndexInspector readFullNameIndex(PoiRegion p) throws IOException {
+	public NameIndexInspector readFullNameIndex(PoiRegion p, String prefix) throws IOException {
 		codedIS.seek(p.filePointer);
-		NameIndexInspector res = poiAdapter.readNameIndex();
+		NameIndexInspector res = poiAdapter.readNameIndex(prefix);
 		long old = codedIS.pushLimitLong((long) p.length);
 		codedIS.popLimit(old);
 		return res;
 	}
 	
-	public NameIndexInspector readFullNameIndex(AddressRegion p) throws IOException {
+	public NameIndexInspector readFullNameIndex(AddressRegion p, String prefix) throws IOException {
 		codedIS.seek(p.filePointer);
-		NameIndexInspector res = addressAdapter.readNameIndex();
+		NameIndexInspector res = addressAdapter.readNameIndex(prefix);
 		long old = codedIS.pushLimitLong((long) p.length);
 		codedIS.popLimit(old);
 		return res;
 	}
+	
+	
 
 	public Map<PoiCategory, List<String>> searchPoiCategoriesByName(String query, Map<PoiCategory, List<String>> map) throws IOException {
 		if (query == null || query.length() == 0) {
@@ -1561,7 +1563,7 @@ public class BinaryMapIndexReader {
 	}
 
 
-	protected List<AddressRegion> getAddressIndexes() {
+	public List<AddressRegion> getAddressIndexes() {
 		return addressIndexes;
 	}
 
@@ -2573,7 +2575,7 @@ public class BinaryMapIndexReader {
 						return false;
 					}
 				}, null, null);
-req.setSearchStat(stat);
+		req.setSearchStat(stat);
 		reader.searchPoi(req);
 		for (Amenity a : req.getSearchResults()) {
 			int distance = 0;
@@ -2676,8 +2678,9 @@ req.setSearchStat(stat);
 		return result;
 	}
 	
-	void readNameIndexInspector(String prefix, NameIndexInspector inspector) throws InvalidProtocolBufferException, IOException {
+	void readNameIndexInspector(String prefix, NameIndexInspector inspector, String filter) throws InvalidProtocolBufferException, IOException {
 		String key = null;
+		boolean match = true;
 		while (true) {
 			int t = codedIS.readTag();
 			int tag = WireFormat.getTagFieldNumber(t);
@@ -2689,15 +2692,22 @@ req.setSearchStat(stat);
 				if (prefix != null) {
 					key = prefix + key;
 				}
+				match = filter == null || filter.startsWith(key); 
 				break;
 			case OsmandOdb.IndexedStringTable.VAL_FIELD_NUMBER :
 				int val = (int) readInt(); // FIXME for 64 bit support
-				inspector.putKey(key, val, prefix);
+				if(match) {
+					inspector.putKey(key, val, prefix);
+				}
 				break;
 			case OsmandOdb.IndexedStringTable.SUBTABLES_FIELD_NUMBER :
 				long len = codedIS.readRawVarint32();
 				long oldLim = codedIS.pushLimitLong((long) len);
-				readNameIndexInspector(key, inspector);
+				if (match) {
+					readNameIndexInspector(key, inspector, filter);
+				} else {
+					codedIS.skipRawBytes(codedIS.getBytesUntilLimit());
+				}
 				codedIS.popLimit(oldLim);
 				break;
 			default:

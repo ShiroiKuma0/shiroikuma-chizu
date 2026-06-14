@@ -1,22 +1,40 @@
 package net.osmand.binary;
 
 
+import static net.osmand.binary.ObfConstants.isTagIndexedAsSearchRelated;
+import static net.osmand.binary.ObfConstants.isTagIndexedForSearchAsId;
+import static net.osmand.binary.ObfConstants.isTagIndexedForSearchAsName;
+import static net.osmand.util.SearchAlgorithms.EMPTY_SUFFIX_DICTIONARY_SENTINEL;
+import static net.osmand.util.SearchAlgorithms.nameIndexDecodeDictionarySuffix;
+import static net.osmand.util.SearchAlgorithms.splitAndNormalize;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import org.apache.commons.logging.Log;
+
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.WireFormat;
 
 import gnu.trove.list.array.TIntArrayList;
+import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.map.hash.TIntLongHashMap;
 import gnu.trove.set.hash.TLongHashSet;
-import net.osmand.*;
+import net.osmand.Collator;
+import net.osmand.CollatorStringMatcher;
 import net.osmand.CollatorStringMatcher.StringMatcherMode;
+import net.osmand.Location;
+import net.osmand.PlatformUtil;
 import net.osmand.binary.BinaryMapIndexReader.SearchRequest;
 import net.osmand.binary.BinaryMapIndexReader.TagValuePair;
-import net.osmand.binary.OsmandOdb.IndexedStringTable;
-import net.osmand.binary.OsmandOdb.OsmAndPoiBoxData;
-import net.osmand.binary.OsmandOdb.OsmAndPoiNameIndex;
-import net.osmand.binary.OsmandOdb.OsmAndPoiNameIndex.Builder;
 import net.osmand.binary.OsmandOdb.OsmAndPoiNameIndex.OsmAndPoiNameIndexData;
-import net.osmand.binary.OsmandOdb.OsmAndPoiNameIndexOrBuilder;
 import net.osmand.data.Amenity;
 import net.osmand.data.Amenity.AmenityRoutePoint;
 import net.osmand.data.LatLon;
@@ -26,15 +44,6 @@ import net.osmand.osm.MapPoiTypes;
 import net.osmand.osm.PoiCategory;
 import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
-import org.apache.commons.logging.Log;
-
-import static net.osmand.binary.ObfConstants.isTagIndexedForSearchAsId;
-import static net.osmand.binary.ObfConstants.isTagIndexedForSearchAsName;
-import static net.osmand.binary.ObfConstants.isTagIndexedAsSearchRelated;
-import static net.osmand.util.SearchAlgorithms.*;
-
-import java.io.IOException;
-import java.util.*;
 
 public class BinaryMapPoiReaderAdapter {
 	private static final Log LOG = PlatformUtil.getLog(BinaryMapPoiReaderAdapter.class);
@@ -351,8 +360,10 @@ public class BinaryMapPoiReaderAdapter {
 	}
 	
 	
-	protected OsmandOdb.IndexedStringTable readNameIndexInternal(NameIndexInspector pi) throws IOException {
+	protected OsmandOdb.IndexedStringTable readNameIndexInternal(NameIndexInspector pi, String prefix) throws IOException {
 		OsmandOdb.IndexedStringTable res = null;
+		TLongArrayList loffsets = prefix == null ? null : new TLongArrayList();
+		int ind = -1;
 		while (true) {
 			int t = codedIS.readTag();
 			int tag = WireFormat.getTagFieldNumber(t);
@@ -363,11 +374,26 @@ public class BinaryMapPoiReaderAdapter {
 				long length = readInt();
 				long oldLimit = codedIS.pushLimitLong((long) length);
 				pi.setInitialShift(codedIS.getTotalBytesRead());
-				map.readNameIndexInspector(null, pi);
+				map.readNameIndexInspector(null, pi, prefix);
 				codedIS.popLimit(oldLimit);
 				break;
 			case OsmandOdb.OsmAndPoiNameIndex.DATA_FIELD_NUMBER :
 				long shift = codedIS.getTotalBytesRead();
+				if (ind == -1 && loffsets != null) {
+					loffsets.addAll(pi.getIndexByRef().keySet());
+					loffsets.sort();
+					ind = 0;
+				}
+				if (loffsets != null) {
+					if (ind >= loffsets.size()) {
+						codedIS.skipRawBytes(codedIS.getBytesUntilLimit());
+						break;
+					} else if (loffsets.get(ind) != shift) {
+						codedIS.skipRawBytes(loffsets.get(ind) - shift);
+						shift = codedIS.getTotalBytesRead();
+					}
+					ind++;
+				}
 				int len = codedIS.readRawVarint32();
 				oldLimit = codedIS.pushLimitLong((long) len);
 				pi.addData(OsmAndPoiNameIndexData.parseFrom(codedIS), shift);
@@ -381,7 +407,7 @@ public class BinaryMapPoiReaderAdapter {
 		}
 	}
 
-	protected NameIndexInspector readNameIndex() throws IOException {
+	protected NameIndexInspector readNameIndex(String prefix) throws IOException {
 		NameIndexInspector nameIndexInspector = new NameIndexInspector();
 		while (true) {
 			int t = codedIS.readTag();
@@ -392,7 +418,7 @@ public class BinaryMapPoiReaderAdapter {
 			case OsmandOdb.OsmAndPoiIndex.NAMEINDEX_FIELD_NUMBER:
 				long length = readInt();
 				long oldLimit = codedIS.pushLimitLong((long) length);
-				readNameIndexInternal(nameIndexInspector);
+				readNameIndexInternal(nameIndexInspector, prefix);
 				codedIS.popLimit(oldLimit);
 				break;
 			default:

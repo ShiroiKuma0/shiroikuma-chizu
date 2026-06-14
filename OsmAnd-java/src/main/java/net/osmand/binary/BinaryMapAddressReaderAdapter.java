@@ -12,6 +12,7 @@ import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.WireFormat;
 
 import gnu.trove.list.array.TIntArrayList;
+import gnu.trove.list.array.TLongArrayList;
 import gnu.trove.set.TIntSet;
 import gnu.trove.set.hash.TIntHashSet;
 import net.osmand.CollatorStringMatcher;
@@ -895,7 +896,7 @@ public class BinaryMapAddressReaderAdapter {
 
 	}
 	
-	protected NameIndexInspector readNameIndex() throws IOException {
+	protected NameIndexInspector readNameIndex(String prefix) throws IOException {
 		NameIndexInspector nameIndexInspector = new NameIndexInspector();
 		while (true) {
 			int t = codedIS.readTag();
@@ -906,7 +907,7 @@ public class BinaryMapAddressReaderAdapter {
 			case OsmandOdb.OsmAndAddressIndex.NAMEINDEX_FIELD_NUMBER:
 				long length = readInt();
 				long oldLimit = codedIS.pushLimitLong((long) length);
-				readNameIndexInternal(nameIndexInspector);
+				readNameIndexInternal(nameIndexInspector, prefix);
 				codedIS.popLimit(oldLimit);
 				break;
 			default:
@@ -916,8 +917,10 @@ public class BinaryMapAddressReaderAdapter {
 		}
 	}
 	
-	protected OsmandOdb.IndexedStringTable readNameIndexInternal(NameIndexInspector pi) throws IOException {
+	protected OsmandOdb.IndexedStringTable readNameIndexInternal(NameIndexInspector pi, String prefix) throws IOException {
 		OsmandOdb.IndexedStringTable res = null;
+		TLongArrayList loffsets = prefix == null ? null : new TLongArrayList();
+		int ind = -1;
 		while (true) {
 			int t = codedIS.readTag();
 			int tag = WireFormat.getTagFieldNumber(t);
@@ -928,11 +931,26 @@ public class BinaryMapAddressReaderAdapter {
 				long length = readInt();
 				long oldLimit = codedIS.pushLimitLong((long) length);
 				pi.setInitialShift(codedIS.getTotalBytesRead());
-				map.readNameIndexInspector(null, pi);
+				map.readNameIndexInspector(null, pi, prefix);
 				codedIS.popLimit(oldLimit);
 				break;
 			case OsmAndAddressNameIndexData.ATOM_FIELD_NUMBER :
 				long shift = codedIS.getTotalBytesRead();
+				if (ind == -1 && loffsets != null) {
+					loffsets.addAll(pi.getIndexByRef().keySet());
+					loffsets.sort();
+					ind = 0;
+				}
+				if (loffsets != null) {
+					if (ind >= loffsets.size()) {
+						codedIS.skipRawBytes(codedIS.getBytesUntilLimit());
+						break;
+					} else if (loffsets.get(ind) != shift) {
+						codedIS.skipRawBytes(loffsets.get(ind) - shift);
+						shift = codedIS.getTotalBytesRead();
+					}
+					ind++;
+				}
 				int len = codedIS.readRawVarint32();
 				oldLimit = codedIS.pushLimitLong((long) len);
 				pi.addData(AddressNameIndexData.parseFrom(codedIS), shift);
