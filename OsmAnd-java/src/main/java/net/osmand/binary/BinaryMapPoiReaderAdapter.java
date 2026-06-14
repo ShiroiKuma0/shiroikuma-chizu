@@ -5,18 +5,23 @@ import static net.osmand.binary.ObfConstants.isTagIndexedAsSearchRelated;
 import static net.osmand.binary.ObfConstants.isTagIndexedForSearchAsId;
 import static net.osmand.binary.ObfConstants.isTagIndexedForSearchAsName;
 import static net.osmand.util.SearchAlgorithms.EMPTY_SUFFIX_DICTIONARY_SENTINEL;
+import static net.osmand.util.SearchAlgorithms.nameIndexPrepareComplexPrefixes;
 import static net.osmand.util.SearchAlgorithms.nameIndexDecodeDictionarySuffix;
+import static net.osmand.util.SearchAlgorithms.nameIndexIsSingleRawNumberValue;
 import static net.osmand.util.SearchAlgorithms.splitAndNormalize;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.logging.Log;
 
@@ -555,6 +560,7 @@ public class BinaryMapPoiReaderAdapter {
 		if (req.matcherMode == StringMatcherMode.CHECK_STARTS_FROM_SPACE && prefixSourceQueries.size() > 1) {
 			prefixSourceQueries.remove(prefixSourceQueries.size() - 1);
 		}
+		List<String> commonStatsValues = Collections.emptyList();
 		// Mirror writer prefix eligibility so standalone number-like POI names can be queried,
 		// while numbers mixed with text remain suffix-only in compact indexes.
 		List<String> prefixQueries = new ArrayList<>(nameIndexPrepareComplexPrefixes(prefixSourceQueries,
@@ -584,6 +590,9 @@ public class BinaryMapPoiReaderAdapter {
 						map.getFile().getName(), codedIS.getBytesCounter() - bytes);
 				break;
 			}
+			case OsmandOdb.OsmAndPoiNameIndex.COMMONSTATS_FIELD_NUMBER:
+				commonStatsValues = OsmandOdb.CommonIndexedStats.parseFrom(codedIS.readBytes()).getValueList();
+				break;
 			case OsmandOdb.OsmAndPoiNameIndex.DATA_FIELD_NUMBER: {
 				if (queryTokens != null) {
 					for (int tokenIndex = 0; tokenIndex < queryTokens.size(); tokenIndex++) {
@@ -596,7 +605,7 @@ public class BinaryMapPoiReaderAdapter {
 							codedIS.seek(prefix.offset() + offset);
 							int len = codedIS.readRawVarint32();
 							long oldLim = codedIS.pushLimitLong((long) len);
-							readPoiNameIndexData(offsetMap, poiIndexMap, req, region, nameIndexCoordinates, tokenMatch, prefix);
+							readPoiNameIndexData(offsetMap, poiIndexMap, req, region, nameIndexCoordinates, tokenMatch, prefix, commonStatsValues);
 							codedIS.popLimit(oldLim);
 							if (req.isCancelled()) {
 								codedIS.skipRawBytes(codedIS.getBytesUntilLimit());
@@ -672,7 +681,8 @@ public class BinaryMapPoiReaderAdapter {
 
 	private void readPoiNameIndexData(TIntLongHashMap offsets, Map<Integer, Set<Integer>> poiIndexesByOffset,
 			SearchRequest<Amenity> req, PoiRegion region,
-			List<Integer> nameIndexCoordinates, QueryToken token, QueryToken.Prefix prefix) throws IOException {
+			List<Integer> nameIndexCoordinates, QueryToken token, QueryToken.Prefix prefix,
+			List<String> commonStatsValues) throws IOException {
 		List<String> suffixDictionary = null;
 		QueryToken.SuffixMask mask = token == null || prefix == null ? null : token.new SuffixMask(prefix);
 		boolean suffixDictionaryInitialized = false;
@@ -694,6 +704,12 @@ public class BinaryMapPoiReaderAdapter {
 					String entry = nameIndexDecodeDictionarySuffix(prevSuffix, encodedSuffix);
 					suffixDictionary.add(entry);
 					break;
+				case OsmAndPoiNameIndexData.SUFFIXESCOMMONDICTIONARY_FIELD_NUMBER:
+					if (suffixDictionary == null) {
+						suffixDictionary = new ArrayList<>();
+					}
+					addCommonSuffixDictionaryEntry(suffixDictionary, commonStatsValues, prefix, codedIS.readUInt32());
+					break;
 				case OsmAndPoiNameIndexData.ATOMS_FIELD_NUMBER:
 					if (!suffixDictionaryInitialized && mask != null) {
 						mask.setDictionary(suffixDictionary);
@@ -709,6 +725,30 @@ public class BinaryMapPoiReaderAdapter {
 					skipUnknownField(t);
 				break;
 			}
+		}
+	}
+
+	private void addCommonSuffixDictionaryEntry(List<String> suffixDictionary, List<String> commonStatsValues,
+			QueryToken.Prefix prefix, int commonRef) {
+		if (commonStatsValues == null || prefix == null || prefix.key() == null) {
+			// Preserve united-dictionary positions even for malformed common refs.
+			suffixDictionary.add("\u0000");
+			return;
+		}
+		int commonIndex = commonRef >>> 1;
+		if (commonIndex < 0 || commonIndex >= commonStatsValues.size()) {
+			// Keep one slot per suffixesCommonDictionary entry.
+			suffixDictionary.add("\u0000");
+			return;
+		}
+		String token = commonStatsValues.get(commonIndex);
+		if ((commonRef & 1) == 1) {
+			suffixDictionary.add(" " + token);
+		} else if (token != null && token.startsWith(prefix.key())) {
+			suffixDictionary.add(token.substring(prefix.key().length()));
+		} else {
+			// Invalid partial refs must occupy their slot so later indexes stay aligned.
+			suffixDictionary.add("\u0000");
 		}
 	}
 

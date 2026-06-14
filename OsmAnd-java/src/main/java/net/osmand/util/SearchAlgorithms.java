@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.text.Normalizer;
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import com.google.protobuf.ByteString;
@@ -270,6 +271,14 @@ public class SearchAlgorithms {
     public static class CompactSuffixes {
         public final List<Integer> suffixesBitsetIndex = new ArrayList<>();
         public String extraSuffix;
+        public int nonCommonWords;
+    }
+
+    public static class CommonIndexedTokens {
+        public final List<String> values = new ArrayList<>();
+        public final List<Integer> matched = new ArrayList<>();
+        public final List<Integer> nonindexed = new ArrayList<>();
+        public final Map<String, Integer> tokenToIndex = new HashMap<>();
     }
 
     public static class CompactSuffixDictionary<T> {
@@ -372,9 +381,107 @@ public class SearchAlgorithms {
 
     public static class CombinedSuffixDictionary<T> {
         public final List<SuffixEntry> dictionaryEntries = new ArrayList<>();
+        public final List<Integer> commonDictionaryEntries = new ArrayList<>();
         public final Map<String, Integer> resolvedSuffixToIndex = new HashMap<>();
         public final Map<T, int[]> bitsets = new LinkedHashMap<>();
         public final Map<T, CompactSuffixes> compactSuffixes = new LinkedHashMap<>();
+    }
+
+    private record CommonSuffixCandidate(String suffix, String fullToken, int kind) {}
+
+    private static final int COMMON_SUFFIX_KIND_PARTIAL = 0;
+    private static final int COMMON_SUFFIX_KIND_SEPARATED = 1;
+
+    public static <T> CommonIndexedTokens nameIndexBuildCommonIndexedTokens(Map<String, ? extends Collection<T>> objectsByPrefix,
+            Function<T, Collection<String>> partialTokenSupplier, Function<T, Collection<String>> separatedTokenSupplier) {
+        return nameIndexBuildCommonIndexedTokens(objectsByPrefix,
+                (prefix, object) -> partialTokenSupplier.apply(object),
+                (prefix, object) -> separatedTokenSupplier.apply(object));
+    }
+
+    public static <T> CommonIndexedTokens nameIndexBuildCommonIndexedTokens(Map<String, ? extends Collection<T>> objectsByPrefix,
+            BiFunction<String, T, Collection<String>> partialTokenSupplier,
+            BiFunction<String, T, Collection<String>> separatedTokenSupplier) {
+        Map<String, Integer> matched = new HashMap<>();
+        for (Map.Entry<String, ? extends Collection<T>> entry : objectsByPrefix.entrySet()) {
+            String prefix = entry.getKey();
+            for (T object : entry.getValue()) {
+                Set<String> objectCommonTokens = new LinkedHashSet<>();
+                for (CommonSuffixCandidate candidate : collectCommonSuffixCandidates(prefix, object,
+                        partialTokenSupplier, separatedTokenSupplier)) {
+                    objectCommonTokens.add(candidate.fullToken());
+                }
+                for (String token : objectCommonTokens) {
+                    matched.merge(token, 1, Integer::sum);
+                }
+            }
+        }
+        List<String> values = new ArrayList<>(matched.keySet());
+        values.sort(SearchAlgorithms::compareCommonIndexedTokens);
+        CommonIndexedTokens data = new CommonIndexedTokens();
+        for (String value : values) {
+            data.tokenToIndex.put(value, data.values.size());
+            data.values.add(value);
+            data.matched.add(matched.get(value));
+            data.nonindexed.add(0);
+        }
+        return data;
+    }
+
+    private static int compareCommonIndexedTokens(String left, String right) {
+        int leftCommon = CommonWords.getCommon(left);
+        int rightCommon = CommonWords.getCommon(right);
+        boolean leftIsCommon = leftCommon != -1;
+        boolean rightIsCommon = rightCommon != -1;
+        if (leftIsCommon != rightIsCommon) {
+            return leftIsCommon ? -1 : 1;
+        }
+        if (leftIsCommon && leftCommon != rightCommon) {
+            return Integer.compare(leftCommon, rightCommon);
+        }
+        int leftFrequent = CommonWords.getFrequentlyUsed(left);
+        int rightFrequent = CommonWords.getFrequentlyUsed(right);
+        if (leftFrequent != rightFrequent) {
+            return Integer.compare(leftFrequent, rightFrequent);
+        }
+        return left.compareTo(right);
+    }
+
+    private static boolean isCommonIndexedToken(String token) {
+        return token != null && !isPureDecimalInteger(token)
+                && (CommonWords.getCommon(token) != -1 || CommonWords.getFrequentlyUsed(token) != -1);
+    }
+
+    private static <T> List<CommonSuffixCandidate> collectCommonSuffixCandidates(String prefix, T object,
+            BiFunction<String, T, Collection<String>> partialTokenSupplier,
+            BiFunction<String, T, Collection<String>> separatedTokenSupplier) {
+        List<CommonSuffixCandidate> candidates = new ArrayList<>();
+        for (String token : partialTokenSupplier.apply(prefix, object)) {
+            int suffixOffset = suffixOffsetAfterPrefix(token, prefix);
+            String suffix = null;
+            String fullToken = null;
+            if (suffixOffset < 0) {
+                if (Objects.equals(token, prefix)) {
+                    suffix = "";
+                    fullToken = prefix;
+                }
+            } else {
+                suffix = Normalizer.normalize(token.substring(suffixOffset), Normalizer.Form.NFC);
+                fullToken = prefix + suffix;
+            }
+            if (isCommonIndexedToken(fullToken)) {
+                candidates.add(new CommonSuffixCandidate(suffix, fullToken, COMMON_SUFFIX_KIND_PARTIAL));
+            }
+        }
+        for (String token : separatedTokenSupplier.apply(prefix, object)) {
+            if (Objects.equals(token, prefix) || Algorithms.isEmpty(token) || encodePureDecimalSuffix(token) != null) {
+                continue;
+            }
+            if (isCommonIndexedToken(token)) {
+                candidates.add(new CommonSuffixCandidate(" " + token, token, COMMON_SUFFIX_KIND_SEPARATED));
+            }
+        }
+        return candidates;
     }
 
     /**
@@ -386,35 +493,61 @@ public class SearchAlgorithms {
      */
     public static <T> CombinedSuffixDictionary<T> nameIndexBuildCombinedSuffixDictionary(String prefix, List<T> objects,
             Function<T, Collection<String>> partialTokenSupplier, Function<T, Collection<String>> separatedTokenSupplier) {
+        return nameIndexBuildCombinedSuffixDictionary(prefix, objects, partialTokenSupplier, separatedTokenSupplier, null);
+    }
+
+    public static <T> CombinedSuffixDictionary<T> nameIndexBuildCombinedSuffixDictionary(String prefix, List<T> objects,
+            Function<T, Collection<String>> partialTokenSupplier, Function<T, Collection<String>> separatedTokenSupplier,
+            CommonIndexedTokens commonTokens) {
         CombinedSuffixDictionary<T> data = new CombinedSuffixDictionary<>();
         Map<T, Set<String>> suffixesByObject = new LinkedHashMap<>();
+        Map<T, Set<Integer>> commonRefsByObject = new LinkedHashMap<>();
         Map<String, Integer> suffixFrequency = new HashMap<>();
+        Map<Integer, Integer> commonRefToIndex = new LinkedHashMap<>();
 
         for (T object : objects) {
             Set<String> objectSuffixes = new LinkedHashSet<>();
+            Set<Integer> objectCommonRefs = new LinkedHashSet<>();
             suffixesByObject.put(object, objectSuffixes);
+            commonRefsByObject.put(object, objectCommonRefs);
             for (String token : partialTokenSupplier.apply(object)) {
                 int suffixOffset = suffixOffsetAfterPrefix(token, prefix);
                 String suffix = null;
+                String fullToken = null;
                 if (suffixOffset < 0) {
                     if (Objects.equals(token, prefix)) {
                         suffix = "";
+                        fullToken = prefix;
                     }
                 } else {
                     suffix = Normalizer.normalize(token.substring(suffixOffset), Normalizer.Form.NFC);
+                    fullToken = prefix + suffix;
                 }
                 if (suffix != null) {
-                    objectSuffixes.add(suffix);
+                    Integer commonIndex = commonTokens == null ? null : commonTokens.tokenToIndex.get(fullToken);
+                    if (commonIndex == null) {
+                        objectSuffixes.add(suffix);
+                    } else {
+                        objectCommonRefs.add((commonIndex << 1) | COMMON_SUFFIX_KIND_PARTIAL);
+                    }
                 }
             }
             for (String token : separatedTokenSupplier.apply(object)) {
                 if (Objects.equals(token, prefix) || Algorithms.isEmpty(token) || encodePureDecimalSuffix(token) != null) {
                     continue;
                 }
-                objectSuffixes.add(" " + token);
+                Integer commonIndex = commonTokens == null ? null : commonTokens.tokenToIndex.get(token);
+                if (commonIndex == null) {
+                    objectSuffixes.add(" " + token);
+                } else {
+                    objectCommonRefs.add((commonIndex << 1) | COMMON_SUFFIX_KIND_SEPARATED);
+                }
             }
             for (String suffix : objectSuffixes) {
                 suffixFrequency.merge(suffix, 1, Integer::sum);
+            }
+            for (int commonRef : objectCommonRefs) {
+                commonRefToIndex.computeIfAbsent(commonRef, ignored -> commonRefToIndex.size());
             }
         }
         List<String> rankedSuffixes = new ArrayList<>(suffixFrequency.keySet());
@@ -434,6 +567,7 @@ public class SearchAlgorithms {
             data.dictionaryEntries.add(entry);
             previousSuffix = suffix;
         }
+        data.commonDictionaryEntries.addAll(commonRefToIndex.keySet());
 
         for (T object : objects) {
             CompactSuffixes objectSuffixes = new CompactSuffixes();
@@ -442,8 +576,20 @@ public class SearchAlgorithms {
                 Integer suffixIndex = dictionarySuffixSet.contains(suffix) ? data.resolvedSuffixToIndex.get(suffix) : null;
                 if (suffixIndex != null) {
                     objectSuffixes.suffixesBitsetIndex.add(suffixIndex << 1);
-                } else {
+                    // Empty suffix only confirms that prefix itself is a complete token.
+                    if (!suffix.isEmpty()) {
+                        objectSuffixes.nonCommonWords++;
+                    }
+                } else if (!suffix.isEmpty()) {
+                    // Empty suffix cannot be represented in space-delimited extraSuffix.
                     extraSuffixes.add(suffix);
+                    objectSuffixes.nonCommonWords++;
+                }
+            }
+            for (int commonRef : commonRefsByObject.getOrDefault(object, Collections.emptySet())) {
+                Integer commonDictionaryIndex = commonRefToIndex.get(commonRef);
+                if (commonDictionaryIndex != null) {
+                    objectSuffixes.suffixesBitsetIndex.add((data.dictionaryEntries.size() + commonDictionaryIndex) << 1);
                 }
             }
             for (String token : new LinkedHashSet<>(separatedTokenSupplier.apply(object))) {
@@ -451,6 +597,7 @@ public class SearchAlgorithms {
                     Integer encodedNumber = encodePureDecimalSuffix(token);
                     if (encodedNumber != null) {
                         objectSuffixes.suffixesBitsetIndex.add(encodedNumber);
+                        objectSuffixes.nonCommonWords++;
                     }
                 }
             }

@@ -684,6 +684,7 @@ public class BinaryMapAddressReaderAdapter {
 			}
 		};
 		long indexOffset = 0;
+		List<String> commonStatsValues = Collections.emptyList();
 		while (true) {
 			if (req.isCancelled()) {
 				return;
@@ -711,6 +712,9 @@ public class BinaryMapAddressReaderAdapter {
 				codedIS.popLimit(oldLimit);
 				req.endSubSearchStats(subStart, BinaryMapIndexReaderStats.BinaryMapIndexReaderApiName.ADDRESS_BY_NAME,
 						BinaryMapIndexReaderStats.BinaryMapIndexReaderSubApiName.ADDRESS_NAME_INDEX, map.getFile().getName(), codedIS.getBytesCounter() - bytes);
+				break;
+			case OsmAndAddressNameIndexData.COMMONSTATS_FIELD_NUMBER:
+				commonStatsValues = OsmandOdb.CommonIndexedStats.parseFrom(codedIS.readBytes()).getValueList();
 				break;
 			case OsmAndAddressNameIndexData.ATOM_FIELD_NUMBER:
 				PoiReadMetricSet metrics = req.searchStat == null ? null : new PoiReadMetricSet();
@@ -758,6 +762,11 @@ public class BinaryMapAddressReaderAdapter {
 							String previousSuffix = suffixDictionary.isEmpty() ? null : suffixDictionary.get(suffixDictionary.size() - 1);
 							String decodedSuffix = SearchAlgorithms.nameIndexDecodeDictionarySuffix(previousSuffix, encodedSuffix);
 							suffixDictionary.add(decodedSuffix);
+						} else if (stag == AddressNameIndexData.SUFFIXESCOMMONDICTIONARY_FIELD_NUMBER) {
+							if (suffixDictionary == null) {
+								suffixDictionary = new ArrayList<>();
+							}
+							addCommonSuffixDictionaryEntry(suffixDictionary, commonStatsValues, matchedPrefix, codedIS.readUInt32());
 						} else if (stag == AddressNameIndexData.ATOM_FIELD_NUMBER) {
 							if (!suffixDictionaryInitialized && suffixMask != null) {
 								suffixMask.setDictionary(suffixDictionary);
@@ -894,6 +903,30 @@ public class BinaryMapAddressReaderAdapter {
 			}
 		}
 
+	}
+
+	private void addCommonSuffixDictionaryEntry(List<String> suffixDictionary, List<String> commonStatsValues,
+			QueryToken.Prefix prefix, int commonRef) {
+		if (commonStatsValues == null || prefix == null || prefix.key() == null) {
+			// Preserve united-dictionary positions even for malformed common refs.
+			suffixDictionary.add("\u0000");
+			return;
+		}
+		int commonIndex = commonRef >>> 1;
+		if (commonIndex < 0 || commonIndex >= commonStatsValues.size()) {
+			// Keep one slot per suffixesCommonDictionary entry.
+			suffixDictionary.add("\u0000");
+			return;
+		}
+		String token = commonStatsValues.get(commonIndex);
+		if ((commonRef & 1) == 1) {
+			suffixDictionary.add(" " + token);
+		} else if (token != null && token.startsWith(prefix.key())) {
+			suffixDictionary.add(token.substring(prefix.key().length()));
+		} else {
+			// Invalid partial refs must occupy their slot so later indexes stay aligned.
+			suffixDictionary.add("\u0000");
+		}
 	}
 	
 	protected NameIndexInspector readNameIndex(String prefix) throws IOException {
