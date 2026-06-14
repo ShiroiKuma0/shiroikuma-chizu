@@ -20,6 +20,7 @@ import net.osmand.StringMatcher;
 import net.osmand.binary.BinaryMapIndexReader.SearchRequest;
 import net.osmand.binary.BinaryMapIndexReaderStats.PoiReadMetricSet;
 import net.osmand.binary.OsmandOdb.AddressNameIndexDataAtom;
+import net.osmand.binary.OsmandOdb.CommonIndexedStats;
 import net.osmand.binary.OsmandOdb.OsmAndAddressIndex.CitiesIndex;
 import net.osmand.binary.OsmandOdb.OsmAndAddressNameIndexData;
 import net.osmand.binary.OsmandOdb.OsmAndAddressNameIndexData.AddressNameIndexData;
@@ -931,6 +932,13 @@ public class BinaryMapAddressReaderAdapter {
 				long oldLimit = codedIS.pushLimitLong((long) length);
 				pi.setInitialShift(codedIS.getTotalBytesRead());
 				map.readNameIndexInspector(null, pi, prefix);
+				codedIS.popLimit(oldLimit);
+				break;
+			case OsmAndAddressNameIndexData.COMMONSTATS_FIELD_NUMBER:
+				int lent = codedIS.readRawVarint32();
+				oldLimit = codedIS.pushLimitLong((long) lent);
+				CommonIndexedStats indxStats = CommonIndexedStats.parseFrom(codedIS);
+				pi.setCommonIndexed(indxStats);
 				codedIS.popLimit(oldLimit);
 				break;
 			case OsmAndAddressNameIndexData.ATOM_FIELD_NUMBER :

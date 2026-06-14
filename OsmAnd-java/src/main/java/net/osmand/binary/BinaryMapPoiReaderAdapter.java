@@ -34,6 +34,8 @@ import net.osmand.Location;
 import net.osmand.PlatformUtil;
 import net.osmand.binary.BinaryMapIndexReader.SearchRequest;
 import net.osmand.binary.BinaryMapIndexReader.TagValuePair;
+import net.osmand.binary.OsmandOdb.CommonIndexedStats;
+import net.osmand.binary.OsmandOdb.OsmAndAddressNameIndexData;
 import net.osmand.binary.OsmandOdb.OsmAndPoiNameIndex.OsmAndPoiNameIndexData;
 import net.osmand.data.Amenity;
 import net.osmand.data.Amenity.AmenityRoutePoint;
@@ -374,6 +376,13 @@ public class BinaryMapPoiReaderAdapter {
 				long oldLimit = codedIS.pushLimitLong((long) length);
 				pi.setInitialShift(codedIS.getTotalBytesRead());
 				map.readNameIndexInspector(null, pi, prefix);
+				codedIS.popLimit(oldLimit);
+				break;
+			case OsmandOdb.OsmAndPoiNameIndex.COMMONSTATS_FIELD_NUMBER:
+				int lent = codedIS.readRawVarint32();
+				oldLimit = codedIS.pushLimitLong((long) lent);
+				CommonIndexedStats indxStats = CommonIndexedStats.parseFrom(codedIS);
+				pi.setCommonIndexed(indxStats);
 				codedIS.popLimit(oldLimit);
 				break;
 			case OsmandOdb.OsmAndPoiNameIndex.DATA_FIELD_NUMBER :

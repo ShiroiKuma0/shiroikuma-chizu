@@ -25,6 +25,8 @@ import net.osmand.util.SearchAlgorithms;
 
 
 
+
+// TODO Index creation 'vag' - not common for some countries
 // FIXME merge uniq references for POI to make id 
 
 // TODO Lazy load tokens from full name index !
@@ -34,12 +36,12 @@ import net.osmand.util.SearchAlgorithms;
 // TODO duplicate words
 // TODO collator +replace last dot as incomplete
 // TODO sort tokens by actual frequency
-// TODO Special split by -
-// special cases
-// 1. Abbrevations
+// TODO Special split by '-;
+// Special cases
+// 1. Abbrevations - addvartiations
 // 2. Street intersection match
+// 3. Sugggestion (?) -correction
 // -------------
-// - Sugggestion-correction
 // - Progress / cancel
 //////////////SEARCH ALGORITHM //////////////
 // 1. Split words
@@ -338,13 +340,15 @@ public class SpatialTextSearch {
 		query = "Germany Kelter. Kernen im Remstal";
 		
 		pattern = "Us_";
-		query = "Salt Lake City Pennsylvania Street";
-//		query = "USA Salt Lake City Pennsylvania Street 41";
+//		query = "Salt Lake City Pennsylvania Street";
+		query = "USA Salt Lake City Pennsylvania Street 41";
 		
-//		pattern = "Ukraine_";
-//		query = "бровари Сільпо";
+		pattern = "Ukraine_kyiv-city";
+		query = "vag";
+//		query = "ваг"; 
+//		query = "шевченковский нова пошта 53";
+		query = "пузата хата сакс.";
 //		query = "пузата хата mcdonal.";
-//		query = "kyiv нова пошта 53";
 		long t = System.nanoTime();
 		
 		List<BinaryMapIndexReader> ls = new ArrayList<BinaryMapIndexReader>();

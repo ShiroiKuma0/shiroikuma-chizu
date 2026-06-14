@@ -13,6 +13,7 @@ import java.util.TreeMap;
 import gnu.trove.map.hash.TLongObjectHashMap;
 import net.osmand.binary.BinaryMapAddressReaderAdapter.CityBlocks;
 import net.osmand.binary.OsmandOdb.AddressNameIndexDataAtom;
+import net.osmand.binary.OsmandOdb.CommonIndexedStats;
 import net.osmand.binary.OsmandOdb.OsmAndAddressNameIndexData.AddressNameIndexData;
 import net.osmand.binary.OsmandOdb.OsmAndPoiNameIndex.OsmAndPoiNameIndexData;
 import net.osmand.binary.OsmandOdb.OsmAndPoiNameIndexDataAtom;
@@ -28,6 +29,7 @@ public class NameIndexInspector {
 	private SuffixesStat suffixesStat = new SuffixesStat();
 	private StreetsIndexStat streetsStat = new StreetsIndexStat();
 	private BoundariesIndexStat bndsStat = new BoundariesIndexStat();
+	private CommonIndexedStats commonIndxStats;
 	
 
 	public void setInitialShift(long totalBytesRead) {
@@ -627,6 +629,15 @@ public class NameIndexInspector {
 	
 	public Collection<PrefixNameValue> getPrefixes() {
 		return indexByRef.values();
+	}
+
+	public CommonIndexedStats getCommonIndxStats() {
+		return commonIndxStats;
+	}
+
+	public void setCommonIndexed(CommonIndexedStats indxStats) {
+		this.commonIndxStats = indxStats;
+		
 	}
 
 

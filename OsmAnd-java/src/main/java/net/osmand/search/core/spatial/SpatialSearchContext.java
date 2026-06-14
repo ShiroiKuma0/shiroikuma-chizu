@@ -12,9 +12,11 @@ import net.osmand.binary.BinaryMapAddressReaderAdapter.AddressRegion;
 import net.osmand.binary.BinaryMapPoiReaderAdapter.PoiRegion;
 import net.osmand.binary.NameIndexInspector.PrefixNameValue;
 import net.osmand.binary.OsmandOdb.AddressNameIndexDataAtom;
+import net.osmand.binary.OsmandOdb.CommonIndexedStats;
 import net.osmand.binary.OsmandOdb.OsmAndPoiNameIndexDataAtom;
 import net.osmand.search.core.spatial.SpatialTextSearch.NameIndexAtom;
 import net.osmand.search.core.spatial.SpatialTextSearch.SpatialSearchToken;
+import net.osmand.util.MapUtils;
 import net.osmand.util.SearchAlgorithms;
 
 // 1. TODO evict cache files
@@ -112,7 +114,7 @@ public class SpatialSearchContext {
 			}
 			for (NameIndexInspector indx : nameIndexes) {
 				for (PrefixNameValue prefix : indx.getPrefixes()) {
-					parseAtomSuffixes(t, fileInd, prefix);
+					parseAtomSuffixes(indx.getCommonIndxStats(), t, fileInd, prefix);
 				}
 			}
 		}
@@ -127,8 +129,8 @@ public class SpatialSearchContext {
 	}
 	
 
-	private void parseAtomSuffixes(SpatialSearchToken t, int fileInd, PrefixNameValue prefix) {
-		int INT_BITS = 32;
+	private void parseAtomSuffixes(CommonIndexedStats commonIndexedStats, 
+			SpatialSearchToken t, int fileInd, PrefixNameValue prefix) {
 		String curSuffix = null;
 		List<String> suffixes = new ArrayList<>();
 		boolean addr = prefix.addr != null;
@@ -139,33 +141,81 @@ public class SpatialSearchContext {
 		}
 		if (addr) {
 			for (AddressNameIndexDataAtom a : prefix.addr.getAtomList()) {
-				for (int i = 0; i < a.getSuffixesBitsetCount(); i++) {
-					int suffBit = a.getSuffixesBitset(i);
-					for (int j = 0; j < INT_BITS && suffBit != 0; j++) {
-						if (suffBit % 2 == 1) {
-							int ind = i * INT_BITS + j;
-							String name = suffixes.get(ind);
-							long lid = makeId(fileInd, prefix.shift - a.getShiftToIndex(0));
-							t.addAtom(name, new NameIndexAtom(name, a, null, lid));
+//				String extraToken = a.getExtraSuffix() == null ? "" : a.getExtraSuffix();
+				String name = null;
+				for (int i = 0; i < a.getSuffixesBitsetIndexCount(); i++) {
+					int suffBit = a.getSuffixesBitsetIndex(i);
+					if(suffBit % 2 == 0) {
+						int ind = suffBit / 2;
+						if (ind >= suffixes.size()) {
+//							extraToken += " " + commonIndexedStats.getValue(ind - suffixes.size());
+						} else {
+							String suff = suffixes.get(ind);
+							if (suff.startsWith(" ")) {
+//								extraToken += suffixes.get(ind);
+							} else {
+								if (name != null) {
+									System.out.println(name + "???" + suff);
+//									throw new UnsupportedOperationException();
+								}
+								name = suff;
+							}
 						}
-						suffBit >>>= 1;
 					}
 				}
+				long lid = makeId(fileInd, prefix.shift - a.getShiftToIndex(0));
+				t.addAtom(name, new NameIndexAtom(name, a, null, lid));
 			}
 		} else if (SEARCH_POI) {
 			for (OsmAndPoiNameIndexDataAtom a : prefix.poi.getAtomsList()) {
-				for (int i = 0; i < a.getSuffixesBitsetCount(); i++) {
-					int suffBit = a.getSuffixesBitset(i);
-					for (int j = 0; j < INT_BITS && suffBit != 0; j++) {
-						if (suffBit % 2 == 1) {
-							int ind = i * INT_BITS + j;
-							String name = suffixes.get(ind);
-							long lid = makeId(fileInd, a.getShiftTo());
-							t.addAtom(name, new NameIndexAtom(name, null, a, lid));
+				boolean print = false;
+				String name = null;
+				String extraToken = a.getExtraSuffix() == null ? "" : a.getExtraSuffix();
+				for (int i = 0; i < a.getSuffixesBitsetIndexCount(); i++) {
+					int suffBit = a.getSuffixesBitsetIndex(i);
+					if(suffBit % 2 == 0) {
+						int ind = suffBit / 2;
+						if (ind >= suffixes.size()) {
+							extraToken += " " + commonIndexedStats.getValue(ind - suffixes.size());
+						} else {
+							String suff = suffixes.get(ind);
+							if (suff.startsWith(" ")) {
+								extraToken += suffixes.get(ind);
+							} else {
+								if (name != null) {
+									print = true;
+									System.out.println(name + "???" + suff);
+//									throw new UnsupportedOperationException();
+								}
+								name = suff;
+							}
 						}
-						suffBit >>>= 1;
+						
+					} else if (suffBit % 2 == 1) {
+						// TODO
+						extraToken += " " + suffBit / 2;
+//						System.out.println(suffBit / 2 + " ??? ");
+//						System.out.println(name  + " Number " + suffBit / 2 + " " + 
+//								MapUtils.getLatitudeFromTile(16, a.getY()) + " "+
+//								MapUtils.getLongitudeFromTile(16, a.getX()));
 					}
 				}
+				if (extraToken.length() > 0) {
+					print = true;
+					// TODO
+//					System.out.println(name  + " Extra " + extraToken + " " + 
+//							MapUtils.getLatitudeFromTile(16, a.getY()) + " "+
+//							MapUtils.getLongitudeFromTile(16, a.getX()));
+				}
+				long lid = makeId(fileInd, a.getShiftTo());
+//				System.out.println(name);
+				if (print) {
+//					System.out.println(a.getPoiIndInBlockList());
+					System.out.println(name + " extra-"+ extraToken);
+					System.out.println(MapUtils.getLatitudeFromTile(16, a.getY()) + " "
+							+ MapUtils.getLongitudeFromTile(16, a.getX()));
+				}
+				t.addAtom(name, new NameIndexAtom(name, null, a, lid));
 			}
 		}
 	}
