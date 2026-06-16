@@ -6166,4 +6166,21 @@
     <string name="no_media">Žiadne médiá</string>
     <string name="no_media_descr">Môžete pridávať fotografie, videá a audio poznámky z fotoaparátu alebo galérie.</string>
     <string name="auto_copy_media_to_osmand_storage">Automaticky kopírovať médiá do úložiska OsmAnd</string>
+    <string name="navigate_point_format_maidenhead">Maidenhead</string>
+    <string name="maidenhead_format_descr">Polohovací systém Maidenhead (QTH).</string>
+    <string name="navigate_point_east_coordinate">Východná súradnica</string>
+    <string name="navigate_point_north_coordinate">Severná súradnica</string>
+    <string name="drag_to_reorder_content_description">Ťahať pre preusporiadanie</string>
+    <string name="coordinate_format_add_title">Pridať formát</string>
+    <string name="coordinate_format_add_empty_body">Vyhľadať v databáze viac ako 5000 lokálnych a národných a kódov EPSG podľa krajiny, názvu a ID.</string>
+    <string name="coordinate_format_add_empty_title">Hľadáte konkrétny formát?</string>
+    <string name="coordinate_format_add_search_hint">Hľadať kód EPSG alebo názov formátu</string>
+    <string name="coordinate_format_cancel_changes_message">Zahodiť zmeny súradnicového formátu?</string>
+    <string name="coordinate_format_cancel_changes_title">Neuložené zmeny</string>
+    <string name="coordinate_format_description">Preferované formáty pre rýchly prístup z kontextového menu a vyhľadávania.</string>
+    <string name="coordinate_format_discard_changes">Zahodiť zmeny</string>
+    <string name="coordinate_format_last_item_warning">Vyžaduje sa aspoň jeden formát súradníc.</string>
+    <string name="coordinate_format_select_other">Zvoľte iný formát</string>
+    <string name="coordinate_format_recent">Naposledy použitý</string>
+    <string name="coordinate_format_primary">Hlavný</string>
 </resources>

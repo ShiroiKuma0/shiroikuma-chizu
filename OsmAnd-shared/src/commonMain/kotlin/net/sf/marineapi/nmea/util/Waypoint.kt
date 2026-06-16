@@ -55,7 +55,7 @@ class Waypoint : Position {
      *
      * @return Date
      */
-    val timeStamp = Date()
+    val timeStamp = NmeaDate()
 
     /**
      * Creates a new instance of `Waypoint` with default WGS84 datum.

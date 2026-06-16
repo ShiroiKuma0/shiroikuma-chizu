@@ -37,7 +37,7 @@ import kotlinx.datetime.toInstant
  *
  * @see net.sf.marineapi.nmea.util.Time
  */
-class Date {
+class NmeaDate {
     // day of month 1..31
     private var day = 0
 
@@ -86,7 +86,7 @@ class Date {
 
     override fun equals(other: Any?): Boolean {
         if (other === this) return true
-        return other is Date && other.getDay() == getDay() && other.getMonth() == getMonth() && other.getYear() == getYear()
+        return other is NmeaDate && other.getDay() == getDay() && other.getMonth() == getMonth() && other.getYear() == getYear()
     }
 
     /**

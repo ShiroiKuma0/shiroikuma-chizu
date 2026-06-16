@@ -38,7 +38,7 @@ import kotlin.math.roundToLong
  * @author Kimmo Tuukkanen
  * @see net.sf.marineapi.nmea.sentence.TimeSentence
  *
- * @see net.sf.marineapi.nmea.util.Date
+ * @see net.sf.marineapi.nmea.util.NmeaDate
  */
 class Time {
     // hour of day

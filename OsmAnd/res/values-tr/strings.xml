@@ -5867,7 +5867,7 @@
     <string name="requires_internet_connection">İnternet bağlantısı gerektirir</string>
     <string name="save_and_access_articles_offline">Verileri kaydedin ve makalelere çevrim dışı olarak her yerden erişin</string>
     <string name="app_profile">Uygulama profili</string>
-    <string name="favorite_folder_rename_conflict">Bu ada sahip bir klasör zaten var.</string>
+    <string name="favorite_folder_rename_conflict">Bu ada sahip bir dizin zaten var.</string>
     <string name="favorite_folder_invalid_name">Klasör adı / veya _%_ karakterlerini içeremez</string>
     <string name="favorite_folder_duplicate_message">Henüz kullanılmayan bir klasör adı kullanın.</string>
     <string name="favorite_folder_name">Klasör adı</string>
@@ -5927,4 +5927,7 @@
     <string name="unsupported_maps">Desteklenmeyen haritalar</string>
     <string name="show_list">Listeyi göster</string>
     <string name="weather_layers">Hava durumu katmanları</string>
+    <string name="shared_string_media">Ortam</string>
+    <string name="navigate_point_east_coordinate">Doğu Konaçı</string>
+    <string name="navigate_point_north_coordinate">Kuzey Konaçı</string>
 </resources>

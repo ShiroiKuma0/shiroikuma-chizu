@@ -6071,4 +6071,21 @@
     <string name="shared_string_media">Médias</string>
     <string name="no_media">Aucun média</string>
     <string name="auto_copy_media_to_osmand_storage">Copier automatiquement les fichiers multimédias vers le stockage d\'OsmAnd</string>
+    <string name="navigate_point_format_maidenhead">Maidenhead</string>
+    <string name="maidenhead_format_descr">Système de localisation de Maidenhead (QTH Locator).</string>
+    <string name="navigate_point_east_coordinate">Coordonnée Est</string>
+    <string name="navigate_point_north_coordinate">Coordonnée Nord</string>
+    <string name="drag_to_reorder_content_description">Faites glisser pour réorganiser</string>
+    <string name="coordinate_format_add_title">Ajouter un format</string>
+    <string name="coordinate_format_add_empty_body">Effectuez une recherche dans une base de données contenant plus de 5 000 codes EPSG locaux et nationaux par pays, nom ou identifiant.</string>
+    <string name="coordinate_format_add_empty_title">Vous recherchez un format particulier ?</string>
+    <string name="coordinate_format_add_search_hint">Rechercher un code EPSG ou un nom de format</string>
+    <string name="coordinate_format_cancel_changes_message">Ignorer les modifications apportées aux formats de coordonnées ?</string>
+    <string name="coordinate_format_cancel_changes_title">Modifications non enregistrées</string>
+    <string name="coordinate_format_description">Formats recommandés pour un accès rapide via le menu contextuel et la recherche.</string>
+    <string name="coordinate_format_discard_changes">Ignorer les modifications</string>
+    <string name="coordinate_format_last_item_warning">Au moins un format de coordonnées est requis.</string>
+    <string name="coordinate_format_select_other">Choisissez un autre format</string>
+    <string name="coordinate_format_recent">Récents</string>
+    <string name="coordinate_format_primary">Primaire</string>
 </resources>

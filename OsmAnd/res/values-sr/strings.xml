@@ -6148,4 +6148,21 @@
     <string name="no_media">Нема медија</string>
     <string name="no_media_descr">Можете додати слике, видеа или звучне белешке из своје камере или књижнице.</string>
     <string name="auto_copy_media_to_osmand_storage">Аутоматско копирање медија у ОсмАнд складиште</string>
+    <string name="navigate_point_format_maidenhead">Мејденхед</string>
+    <string name="maidenhead_format_descr">Систем локатора Мејденхеда (QTH локатор).</string>
+    <string name="navigate_point_east_coordinate">Источна координата</string>
+    <string name="navigate_point_north_coordinate">Северна координата</string>
+    <string name="drag_to_reorder_content_description">Превуците да бисте променили редослед</string>
+    <string name="coordinate_format_add_title">Додај формат</string>
+    <string name="coordinate_format_add_empty_body">Претражите базу података са преко 5.000 локалних и националних EPSG кодова по земљи, имену или ID-у.</string>
+    <string name="coordinate_format_add_empty_title">Тражите одређени формат?</string>
+    <string name="coordinate_format_add_search_hint">Претражите EPSG код или назив формата</string>
+    <string name="coordinate_format_cancel_changes_message">Одбацити измене формата координата?</string>
+    <string name="coordinate_format_cancel_changes_title">Несачуване измене</string>
+    <string name="coordinate_format_description">Преферирани формати за брзи приступ из контекстног менија и претраге.</string>
+    <string name="coordinate_format_discard_changes">Одбаци измене</string>
+    <string name="coordinate_format_last_item_warning">Потребан је барем један формат координата.</string>
+    <string name="coordinate_format_select_other">Изаберите други формат</string>
+    <string name="coordinate_format_recent">Недавно</string>
+    <string name="coordinate_format_primary">Примарни</string>
 </resources>

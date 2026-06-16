@@ -65,7 +65,7 @@ import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.chooseplan.ChoosePlanFragment;
 import net.osmand.plus.chooseplan.OsmAndFeature;
 import net.osmand.plus.gallery.attached.AttachedMediaRowController;
-import net.osmand.plus.gallery.contract.IGalleryRowController;
+import net.osmand.plus.gallery.controller.GalleryRowController;
 import net.osmand.plus.gallery.data.GalleryKey;
 import net.osmand.plus.helpers.LocaleHelper;
 import net.osmand.plus.mapcontextmenu.SearchAmenitiesTask.SearchAmenitiesListener;
@@ -149,7 +149,7 @@ public class MenuBuilder {
 	private final List<OsmandPlugin> menuPlugins = new ArrayList<>();
 
 	@Nullable
-	private IGalleryRowController onlinePhotosRowController;
+	private OnlinePhotosRowController onlinePhotosRowController;
 	@Nullable
 	private AttachedMediaRowController mediaRowController;
 
@@ -645,7 +645,7 @@ public class MenuBuilder {
 				app.getSettings().ATTACHED_MEDIA_ROW_COLLAPSED);
 	}
 
-	public void buildGalleryRow(@NonNull View view, @NonNull IGalleryRowController controller,
+	public void buildGalleryRow(@NonNull View view, @NonNull GalleryRowController controller,
 	                            @DrawableRes int iconId, @NonNull String title,
 	                            @NonNull OsmandPreference<Boolean> collapsePreference) {
 		GalleryRowBuilder galleryRowBuilder = new GalleryRowBuilder(this, controller);
@@ -673,7 +673,7 @@ public class MenuBuilder {
 	}
 
 	@NonNull
-	private IGalleryRowController resolveOnlinePhotosRowController(@NonNull GalleryKey.Location key) {
+	private OnlinePhotosRowController resolveOnlinePhotosRowController(@NonNull GalleryKey.Location key) {
 		if (onlinePhotosRowController != null && onlinePhotosRowController.matches(key)) {
 			return onlinePhotosRowController;
 		}

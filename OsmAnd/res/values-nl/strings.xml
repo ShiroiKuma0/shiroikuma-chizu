@@ -1308,7 +1308,7 @@
     <string name="routing_attr_no_new_routing_name">Gebruik v1.9-routeberekening niet</string>
     <string name="routing_attr_no_new_routing_description">Gebruik de routeregels van vóór versie 1.9.</string>
     <string name="traffic_warning_railways">Spoorwegovergang</string>
-    <string name="traffic_warning_pedestrian">Voetgangers oversteekplaats</string>
+    <string name="traffic_warning_pedestrian">Voetgangersoversteekplaats</string>
     <string name="show_railway_warnings">Spoorwegovergangen</string>
     <string name="show_pedestrian_warnings">Zebrapaden</string>
     <string name="speak_pedestrian">Zebrapaden</string>
