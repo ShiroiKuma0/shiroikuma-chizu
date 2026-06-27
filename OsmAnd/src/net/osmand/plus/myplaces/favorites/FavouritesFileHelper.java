@@ -62,7 +62,7 @@ public class FavouritesFileHelper {
 	// Lock object to synchronize access to the pending task state
 	private final Object taskLock = new Object();
 	@Nullable
-	private SaveFavoritesTask pendingSaveTask;
+	private SaveFavoritesTask runningSaveTask;
 
 	protected FavouritesFileHelper(@NonNull OsmandApplication app) {
 		this.app = app;
@@ -104,7 +104,6 @@ public class FavouritesFileHelper {
 	                                 @Nullable Collection<FavoriteGroup> groups) {
 		List<String> lines = new ArrayList<>();
 
-		// Serialize all points and groups into a single list in memory
 		if (points != null) {
 			for (FavouritePoint p : points) {
 				lines.add(PendingFavoriteDeletions.serializePoint(p.getKey()));
@@ -219,15 +218,14 @@ public class FavouritesFileHelper {
 	                                  @Nullable SaveFavoritesListener listener) {
 		SaveFavoritesParams newParams = new SaveFavoritesParams(groups, saveAllGroups, listener);
 
-		// Ensure the read-merge-cancel-write sequence is completely atomic
 		synchronized (taskLock) {
-			if (pendingSaveTask != null) {
-				newParams = pendingSaveTask.getParams().merge(newParams);
-				pendingSaveTask.cancel(false);
+			if (runningSaveTask != null) {
+				newParams = runningSaveTask.getParams().merge(newParams);
+				runningSaveTask.cancel(false);
 			}
 
 			SaveFavoritesTask task = new SaveFavoritesTask(this, newParams);
-			pendingSaveTask = task;
+			runningSaveTask = task;
 			OsmAndTaskManager.executeTask(task, singleThreadExecutor);
 		}
 	}
@@ -243,11 +241,13 @@ public class FavouritesFileHelper {
 		}
 	}
 
-	void onSaveTaskFinished(@NonNull SaveFavoritesTask task) {
-		// Synchronize to safely clear the task without race conditions
+	void onSaveTaskFinished(@NonNull SaveFavoritesTask task, boolean cancelled) {
 		synchronized (taskLock) {
-			if (pendingSaveTask == task) {
-				pendingSaveTask = null;
+			if (runningSaveTask == task) {
+				runningSaveTask = null;
+				if (!cancelled) {
+					clearPendingDeletions();
+				}
 			}
 		}
 	}
@@ -350,7 +350,6 @@ public class FavouritesFileHelper {
 
 	private void clearOldBackups(@NonNull List<File> files, int maxCount) {
 		if (files.size() >= maxCount) {
-			// sort in order from oldest to newest
 			Collections.sort(files, (f1, f2) -> {
 				return Long.compare(f2.lastModified(), f1.lastModified());
 			});

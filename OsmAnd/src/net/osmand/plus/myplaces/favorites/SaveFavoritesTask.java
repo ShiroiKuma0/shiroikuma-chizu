@@ -1,7 +1,6 @@
 package net.osmand.plus.myplaces.favorites;
 
 import static net.osmand.IndexConstants.ZIP_EXT;
-import static net.osmand.plus.myplaces.favorites.FavouritesHelper.getPointsFromGroups;
 
 import android.os.AsyncTask;
 
@@ -60,54 +59,25 @@ public class SaveFavoritesTask extends AsyncTask<Void, String, Void> {
 
 	private void saveAllGroups(@NonNull List<FavoriteGroup> groups) {
 		try {
-			Map<String, FavoriteGroup> deletedGroups = new LinkedHashMap<>();
-			Map<String, FavouritePoint> deletedPoints = new LinkedHashMap<>();
+			PendingFavoriteDeletions pendingDeletions = helper.loadPendingDeletions();
+			Set<String> deletedPointKeys = pendingDeletions.getPointKeys();
 
 			if (isCancelled()) {
 				return;
 			}
+			saveExternalFiles(groups, deletedPointKeys);
+
+			if (isCancelled()) {
+				return;
+			}
+			// Internal file is a monolithic snapshot of all groups
 			File internalFile = helper.getInternalFile();
-			GpxFile gpxFile = SharedUtil.loadGpxFile(internalFile);
-			if (gpxFile.getError() == null) {
-				helper.collectFavoriteGroups(gpxFile, deletedGroups);
-			}
-			// Get all points from internal file to filter later
-			for (FavoriteGroup group : deletedGroups.values()) {
-				for (FavouritePoint point : group.getPoints()) {
-					deletedPoints.put(point.getKey(), point);
-				}
-			}
-			// Hold only deleted points in map
-			for (FavouritePoint point : getPointsFromGroups(groups)) {
-				deletedPoints.remove(point.getKey());
-			}
-			// Hold only deleted groups in map
-			for (FavoriteGroup group : groups) {
-				deletedGroups.remove(group.getName());
-			}
-
-			if (isCancelled()) {
-				return;
-			}
-			// Save groups to internal file. The heaviest operation
 			helper.saveFile(groups, internalFile);
 
 			if (isCancelled()) {
 				return;
 			}
-			// Save groups to external files
-			saveExternalFiles(groups, deletedPoints.keySet());
-
-			// All writes succeeded — safe to clear tombstone.
-			// Backup is best-effort and doesn't affect data integrity.
-			helper.clearPendingDeletions();
-
-			if (isCancelled()) {
-				return;
-			}
-			// Save groups to backup file
-			// backup(groups, getBackupFile()); // creates new, but does not zip
-			backup(helper.getBackupFile(), internalFile); // simply backs up internal file, hence internal name is reflected in gpx <name> metadata
+			backup(helper.getBackupFile(), internalFile);
 
 		} catch (Exception e) {
 			log.error(e.getMessage(), e);
@@ -145,20 +115,19 @@ public class SaveFavoritesTask extends AsyncTask<Void, String, Void> {
 	}
 
 	private void saveExternalFiles(@NonNull List<FavoriteGroup> localGroups,
-	                               @NonNull Set<String> deleted) {
+	                               @NonNull Set<String> deletedPointKeys) {
 		Map<String, FavoriteGroup> fileGroups = new LinkedHashMap<>();
 		loadGPXFiles(fileGroups);
 		if (isCancelled()) {
 			return;
 		}
 		cleanupOrphanedGroupFiles(localGroups, fileGroups);
-		saveLocalGroups(localGroups, fileGroups, deleted);
+		saveLocalGroups(localGroups, fileGroups, deletedPointKeys);
 	}
 
 	private void cleanupOrphanedGroupFiles(@NonNull List<FavoriteGroup> localGroups,
 	                                       @NonNull Map<String, FavoriteGroup> fileGroups) {
 		for (FavoriteGroup fileGroup : fileGroups.values()) {
-			// Search corresponding group in memory
 			boolean hasLocalGroup = false;
 			for (FavoriteGroup group : localGroups) {
 				if (Algorithms.stringsEqual(group.getName(), fileGroup.getName())) {
@@ -166,7 +135,6 @@ public class SaveFavoritesTask extends AsyncTask<Void, String, Void> {
 					break;
 				}
 			}
-			// Delete external group file if it does not exist in local groups
 			if (!hasLocalGroup) {
 				helper.getExternalFile(fileGroup).delete();
 			}
@@ -181,7 +149,6 @@ public class SaveFavoritesTask extends AsyncTask<Void, String, Void> {
 				return;
 			}
 			FavoriteGroup fileGroup = fileGroups.get(localGroup.getName());
-			// Collect non deleted points from external group
 			Map<String, FavouritePoint> all = new LinkedHashMap<>();
 			if (fileGroup != null) {
 				for (FavouritePoint point : fileGroup.getPoints()) {
@@ -191,13 +158,12 @@ public class SaveFavoritesTask extends AsyncTask<Void, String, Void> {
 					}
 				}
 			}
-			// Build merged list without mutating localGroup.getPoints() mid-iteration
+			// Copy to avoid mutating localGroup.getPoints() while iterating
 			List<FavouritePoint> localPoints = new ArrayList<>(localGroup.getPoints());
 			for (FavouritePoint point : localPoints) {
 				all.remove(point.getKey());
 			}
 			if (!all.isEmpty()) {
-				// Only add extra points from file that aren't already in memory
 				localGroup.getPoints().addAll(all.values());
 			}
 			if (!localGroup.equals(fileGroup)) {
@@ -242,19 +208,15 @@ public class SaveFavoritesTask extends AsyncTask<Void, String, Void> {
 
 	@Override
 	protected void onPostExecute(Void result) {
-		helper.onSaveTaskFinished(this);
-		// Only the final non-cancelled task should trigger UI updates.
-		if (!isCancelled()) {
-			for (SaveFavoritesListener listener : params.getListeners()) {
-				listener.onSavingFavoritesFinished();
-			}
+		helper.onSaveTaskFinished(this, false);
+		for (SaveFavoritesListener listener : params.getListeners()) {
+			listener.onSavingFavoritesFinished();
 		}
 	}
 
 	@Override
 	protected void onCancelled() {
-		// Release the reference even for cancelled tasks.
-		helper.onSaveTaskFinished(this);
+		helper.onSaveTaskFinished(this, true);
 	}
 
 	public interface SaveFavoritesListener {
