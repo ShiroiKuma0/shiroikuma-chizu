@@ -1,20 +1,18 @@
 package net.osmand.plus.myplaces.favorites
 
-import net.osmand.plus.myplaces.favorites.SaveFavoritesTask.SaveFavoritesListener
-
 class SaveFavoritesParams(
 	val groups: List<FavoriteGroup>,
 	val saveAllGroups: Boolean,
-	listeners: Collection<SaveFavoritesListener?>
+	listeners: Collection<FavoritesListener?>
 ) {
 
 	constructor(
 		groups: List<FavoriteGroup>,
 		saveAllGroups: Boolean,
-		listener: SaveFavoritesListener?
+		listener: FavoritesListener?
 	) : this(groups, saveAllGroups, listOfNotNull(listener))
 
-	val listeners: LinkedHashSet<SaveFavoritesListener> = listeners
+	val listeners: LinkedHashSet<FavoritesListener> = listeners
 		.filterNotNullTo(LinkedHashSet())
 
 	fun merge(newer: SaveFavoritesParams): SaveFavoritesParams {
@@ -28,7 +26,7 @@ class SaveFavoritesParams(
 		for (g in newer.groups) seen[g.name] = g
 		val mergedGroups = seen.values.toList()
 
-		val mergedListeners = LinkedHashSet<SaveFavoritesListener>(listeners)
+		val mergedListeners = LinkedHashSet<FavoritesListener>(listeners)
 		mergedListeners.addAll(newer.listeners)
 
 		return SaveFavoritesParams(mergedGroups, mergedSaveAll, mergedListeners)

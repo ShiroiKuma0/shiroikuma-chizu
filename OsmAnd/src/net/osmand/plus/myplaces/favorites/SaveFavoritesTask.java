@@ -209,7 +209,7 @@ public class SaveFavoritesTask extends AsyncTask<Void, String, Void> {
 	@Override
 	protected void onPostExecute(Void result) {
 		helper.onSaveTaskFinished(this, false);
-		for (SaveFavoritesListener listener : params.getListeners()) {
+		for (FavoritesListener listener : params.getListeners()) {
 			listener.onSavingFavoritesFinished();
 		}
 	}
@@ -217,9 +217,5 @@ public class SaveFavoritesTask extends AsyncTask<Void, String, Void> {
 	@Override
 	protected void onCancelled() {
 		helper.onSaveTaskFinished(this, true);
-	}
-
-	public interface SaveFavoritesListener {
-		void onSavingFavoritesFinished();
 	}
 }

@@ -68,6 +68,12 @@ public class FavouritesHelper {
 	@Nullable
 	private FavoriteFolderSnapshot favoriteFolderSnapshot;
 
+	private final FavoritesListener saveFavoritesListener = new FavoritesListener() {
+		@Override
+		public void onSavingFavoritesFinished() {
+			notifySavingFavoritesFinished(null);
+		}
+	};
 	private List<FavoritesListener> listeners = new ArrayList<>();
 	private final Map<FavouritePoint, AddressLookupRequest> addressRequestMap = new ConcurrentHashMap<>();
 
@@ -791,7 +797,7 @@ public class FavouritesHelper {
 	                                @Nullable FavoritesListener listener) {
 		updateLastModifiedTime();
 
-		FavoritesListener saveListener = new FavoritesListener() {
+		FavoritesListener saveListener = listener == null ? saveFavoritesListener : new FavoritesListener() {
 			@Override
 			public void onSavingFavoritesFinished() {
 				notifySavingFavoritesFinished(listener);
