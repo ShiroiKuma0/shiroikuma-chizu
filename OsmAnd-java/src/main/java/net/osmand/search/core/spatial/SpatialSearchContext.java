@@ -95,7 +95,7 @@ public class SpatialSearchContext {
 	public SpatialSearchContext(SpatialTextSearchSettings settings, List<BinaryMapIndexReader> files, LatLon location) {
 		this.files = files;
 		this.location = location;
-		this.settings = new SpatialTextSearchSettings();
+		this.settings = settings;
 		limitLocationBboxes = new int[settings.OPTIM_LIMIT_RADIUS.length][];
 		LatLon loc = getLimitLocationFromFiles(files, location);
 		for (int k = 0; k < limitLocationBboxes.length; k++) {
