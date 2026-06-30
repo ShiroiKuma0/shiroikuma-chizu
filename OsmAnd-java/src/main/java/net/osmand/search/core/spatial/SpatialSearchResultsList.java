@@ -244,14 +244,16 @@ public class SpatialSearchResultsList implements Comparable<SpatialSearchResults
 				Building bldObj = null;
 				if (bldCheckCache.containsKey(cacheKey)) {
 					bldObj = bldCheckCache.get(cacheKey);
-				} else {
-					bldObj = checkBuilding((Street) str.object, bldName);
+				} else if (str.object instanceof Street street) {
+					bldObj = checkBuilding(street, bldName);
 					if (bldObj == null) {
 //						System.out.printf("No building '%s': %s\n", bldName, str.object);
 					} else {
 //						System.out.printf("Building found '%s' -'%s': %s\n", bldObj, bldName, str.object);
 					}
 					bldCheckCache.put(cacheKey, bldObj);
+				} else {
+					bldCheckCache.put(cacheKey, null);
 				}
 				if (bldObj == null) {
 					skipResults.put(indx, true);

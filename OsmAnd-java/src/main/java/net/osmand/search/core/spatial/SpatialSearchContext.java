@@ -419,12 +419,15 @@ public class SpatialSearchContext {
 			}
 			City city = null;
 			if (cache != null) {
-				city = (City) cache.get(opid);
+				MapObject cachedParent = cache.get(opid);
+				if (cachedParent instanceof City cachedCity) {
+					city = cachedCity;
+				}
 			}
 			if (city == null) {
 				city = files.get(c.fileInd).readCityObject(nameIndex.addressRegion, pshift);
 			}
-			obj = files.get(c.fileInd).readStreetObject(nameIndex.addressRegion, city, shift);
+			obj = city == null ? null : files.get(c.fileInd).readStreetObject(nameIndex.addressRegion, city, shift);
 		} else  {
 			obj = files.get(c.fileInd).readCityObject(nameIndex.addressRegion, shift);
 		}
