@@ -143,7 +143,7 @@ public class AlarmInfo implements LocationPoint {
 		if (time < 6 || distance < 75 || type == SPEED_LIMIT) {
 			return type.getPriority();
 		}
-		if ((type.isTrafficCamera()) && (time < 15 || distance < 150)) {
+		if ((type == SPEED_CAMERA || type == RED_LIGHT_CAMERA) && (time < 15 || distance < 150)) {
 			return type.getPriority();
 		}
 		if (type == TOLL_BOOTH && (time < 30 || distance < 500)) {
