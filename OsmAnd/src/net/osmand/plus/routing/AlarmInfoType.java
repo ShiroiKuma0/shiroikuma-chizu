@@ -19,7 +19,7 @@ public enum AlarmInfoType {
 	HAZARD(9, R.string.traffic_warning_hazard),
 	MAXIMUM(10, R.string.traffic_warning),
 	TUNNEL(11, R.string.tunnel_warning),
-	ENFORCEMENT_TRAFFIC_SIGNALS(12, R.string.traffic_warning_enforcement_traffic_signals);
+	RED_LIGHT_CAMERA(12, R.string.traffic_warning_red_light_camera);
 
 	private final int priority;
 	private final int titleId;
@@ -38,7 +38,7 @@ public enum AlarmInfoType {
 		return ctx.getString(titleId);
 	}
 
-	public boolean isSpeedCameraType() {
-		return this == SPEED_CAMERA || this == ENFORCEMENT_TRAFFIC_SIGNALS;
+	public boolean isTrafficCamera() {
+		return this == SPEED_CAMERA || this == RED_LIGHT_CAMERA;
 	}
 }

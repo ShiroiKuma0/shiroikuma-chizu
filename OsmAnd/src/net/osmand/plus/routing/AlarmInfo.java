@@ -11,7 +11,7 @@ import static net.osmand.plus.routing.AlarmInfoType.SPEED_LIMIT;
 import static net.osmand.plus.routing.AlarmInfoType.STOP;
 import static net.osmand.plus.routing.AlarmInfoType.TOLL_BOOTH;
 import static net.osmand.plus.routing.AlarmInfoType.TRAFFIC_CALMING;
-import static net.osmand.plus.routing.AlarmInfoType.ENFORCEMENT_TRAFFIC_SIGNALS;
+import static net.osmand.plus.routing.AlarmInfoType.RED_LIGHT_CAMERA;
 
 import android.content.Context;
 
@@ -106,7 +106,7 @@ public class AlarmInfo implements LocationPoint {
 			}
 		} else if ("enforcement".equals(ruleType.getTag())) {
 			if ("traffic_signals".equals(ruleType.getValue())) {
-				alarmInfo = new AlarmInfo(ENFORCEMENT_TRAFFIC_SIGNALS, locInd);
+				alarmInfo = new AlarmInfo(RED_LIGHT_CAMERA, locInd);
 			}
 		} else if ("barrier".equals(ruleType.getTag())) {
 			if ("toll_booth".equals(ruleType.getValue())) {
@@ -143,7 +143,7 @@ public class AlarmInfo implements LocationPoint {
 		if (time < 6 || distance < 75 || type == SPEED_LIMIT) {
 			return type.getPriority();
 		}
-		if ((type.isSpeedCameraType()) && (time < 15 || distance < 150)) {
+		if ((type.isTrafficCamera()) && (time < 15 || distance < 150)) {
 			return type.getPriority();
 		}
 		if (type == TOLL_BOOTH && (time < 30 || distance < 500)) {

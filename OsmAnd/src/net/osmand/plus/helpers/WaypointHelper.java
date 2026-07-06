@@ -1,9 +1,7 @@
 package net.osmand.plus.helpers;
 
-import static net.osmand.plus.routing.AlarmInfoType.ENFORCEMENT_TRAFFIC_SIGNALS;
 import static net.osmand.plus.routing.AlarmInfoType.PEDESTRIAN;
 import static net.osmand.plus.routing.AlarmInfoType.RAILWAY;
-import static net.osmand.plus.routing.AlarmInfoType.SPEED_CAMERA;
 import static net.osmand.plus.routing.AlarmInfoType.TUNNEL;
 import static net.osmand.plus.routing.data.AnnounceTimeDistances.STATE_LONG_ALARM_ANNOUNCE;
 import static net.osmand.plus.routing.data.AnnounceTimeDistances.STATE_LONG_PNT_APPROACH;
@@ -272,7 +270,7 @@ public class WaypointHelper {
 					}
 					float time = speed > 0 ? distanceByRoute / speed : Integer.MAX_VALUE;
 					int priority = inf.updateDistanceAndGetPriority(time, distanceByRoute);
-					if (priority < mostPriority && (showCameras || !inf.getType().isSpeedCameraType())) {
+					if (priority < mostPriority && (showCameras || !inf.getType().isTrafficCamera())) {
 						mostImportant = inf;
 						mostPriority = priority;
 					}
@@ -362,7 +360,7 @@ public class WaypointHelper {
 					RouteTypeRule typeRule = reg.quickGetEncodingRule(pointType);
 					AlarmInfo info = AlarmInfo.createAlarmInfo(typeRule, 0, loc);
 					if (info != null) {
-						if (!info.getType().isSpeedCameraType() || showCameras) {
+						if (!info.getType().isTrafficCamera() || showCameras) {
 							return info;
 						}
 					}
@@ -718,7 +716,7 @@ public class WaypointHelper {
 		AlarmInfo prevRailway = null;
 		for (AlarmInfo alarmInfo : route.getAlarmInfo()) {
 			AlarmInfoType type = alarmInfo.getType();
-			if (type.isSpeedCameraType()) {
+			if (type.isTrafficCamera()) {
 				if (settings.SHOW_CAMERAS.getModeValue(mode) || settings.SPEAK_SPEED_CAMERA.getModeValue(mode)) {
 					// ignore double speed cams
 					if (prevSpeedCam == null || MapUtils.getDistance(prevSpeedCam.getLatitude(), prevSpeedCam.getLongitude(),
