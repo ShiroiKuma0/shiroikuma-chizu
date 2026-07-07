@@ -68,6 +68,10 @@ public class BinaryMapPoiReaderAdapter {
 		//int estiatedSize;
 		public List<String> possibleValues = null;
 		public TIntArrayList possibleValuesFreqs = null;
+		
+		public boolean isTopIndex() {
+			return name.startsWith(MapPoiTypes.TOP_INDEX_ADDITIONAL_PREFIX);
+		}
 	}
 
 	public static class PoiRegion extends BinaryIndexPart {
