@@ -23,6 +23,7 @@ import java.util.Map;
 public class OutdatedIndexesCollector {
 
 	private static final Log LOG = PlatformUtil.getLog(OutdatedIndexesCollector.class);
+	private static final long TEST_OUTDATED_MAP_TIMESTAMP = 946684800000L; // 2000-01-01
 
 	private final OsmandApplication app;
 	private Map<String, String> indexFileNames = new LinkedHashMap<>();
@@ -186,6 +187,24 @@ public class OutdatedIndexesCollector {
 		}
 		item.setDownloaded(true);
 		String date = item.getDate(format);
+		if (item.getType() == DownloadActivityType.SRTM_COUNTRY_FILE
+				|| item.getType() == DownloadActivityType.GEOTIFF_FILE) {
+			File targetFile = item.getTargetFile(app);
+			LOG.info("TEST_OUTDATED_CHECK name " + item.getFileName()
+					+ " target " + sfName
+					+ " type " + item.getType().getTag()
+					+ " remoteDate " + date
+					+ " indexActivatedDate " + indexActivatedDate
+					+ " indexFilesDate " + indexFilesDate
+					+ " fileLastModified " + format.format(targetFile.lastModified())
+					+ " exists " + targetFile.exists());
+			if (item.getType() == DownloadActivityType.SRTM_COUNTRY_FILE
+					&& targetFile.lastModified() == TEST_OUTDATED_MAP_TIMESTAMP) {
+				item.setLocalTimestamp(TEST_OUTDATED_MAP_TIMESTAMP);
+				item.setOutdated(true);
+				return true;
+			}
+		}
 		boolean parsed = false;
 		if (indexActivatedDate != null) {
 			try {

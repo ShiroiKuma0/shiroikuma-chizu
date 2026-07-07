@@ -22,6 +22,7 @@ import java.io.OutputStream;
 public class FileSettingsItemReader extends SettingsItemReader<FileSettingsItem> {
 
 	private static final Log LOG = PlatformUtil.getLog(FileSettingsItemReader.class);
+	private static final long TEST_OUTDATED_MAP_TIMESTAMP = 946684800000L; // 2000-01-01
 
 	private File savedFile;
 
@@ -86,6 +87,9 @@ public class FileSettingsItemReader extends SettingsItemReader<FileSettingsItem>
 		long lastModifiedTime = item.getLastModifiedTime();
 		boolean replaced = FileUtils.replaceTargetFile(tempFile, targetFile);
 		if (replaced) {
+			if (isTestOutdatedTopographyItem(item)) {
+				lastModifiedTime = TEST_OUTDATED_MAP_TIMESTAMP;
+			}
 			if (lastModifiedTime > 0) {
 				targetFile.setLastModified(lastModifiedTime);
 			}
@@ -94,5 +98,10 @@ public class FileSettingsItemReader extends SettingsItemReader<FileSettingsItem>
 			LOG.debug(" target " + targetFile.getAbsolutePath() + " replaced " + replaced + " temp "
 					+ tempFile.getAbsolutePath() + " itemTime " + lastModifiedTime + " fileTime " + targetFile.lastModified());
 		}
+	}
+
+	private boolean isTestOutdatedTopographyItem(@NonNull FileSettingsItem item) {
+		return item.getSubtype() == FileSettingsItem.FileSubtype.TERRAIN_DATA
+				|| item.getSubtype() == FileSettingsItem.FileSubtype.SRTM_MAP;
 	}
 }
