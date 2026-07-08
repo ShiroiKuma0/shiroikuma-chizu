@@ -50,6 +50,9 @@ import net.osmand.util.SearchAlgorithms;
 public class SpatialTextSearch {
 
 	public static class SpatialTextSearchSettings {
+		
+		// lang to deduplicate results
+		public String LANG_DEDUPLICATE = ""; 
 
 		public boolean SEARCH_ADDR = true;
 		public boolean SEARCH_POI = true;

@@ -444,7 +444,14 @@ public class MapUtils {
 	public static String buildShortOsmUrl(double latitude, double longitude, int zoom) {
 		return BASE_SHORT_OSM_URL + createShortLinkString(latitude, longitude, zoom) + "?m";
 	}
-
+	
+	public static void main(String[] args) {
+		for(int z = -8; z < 18; z++) {
+			System.out.println(z + " " + createShortLinkString(0, 0, z));
+		}
+	}
+	// Zoom represents 1 pixel (256x256) in the tile of the given zoom
+	// 1 symbol - (z=-5), 2 symbols (z=-2), 3 symbols (z=1), 4 symbols (z=4), 5 symbols (z=7)
 	public static String createShortLinkString(double latitude, double longitude, int zoom) {
 		long lat = (long) (((latitude + 90d)/180d)*(1L << 32));
 		long lon = (long) (((longitude + 180d)/360d)*(1L << 32));

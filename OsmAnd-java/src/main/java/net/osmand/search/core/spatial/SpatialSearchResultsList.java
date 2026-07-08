@@ -473,19 +473,21 @@ public class SpatialSearchResultsList implements Comparable<SpatialSearchResults
 				long uniqueId = s.getIdDeduplication();
 				if (uniqueIdsResults.containsKey(uniqueId)) {
 					SpatialSearchResult unique = uniqueIdsResults.get(uniqueId);
-					unique.addExtraResult(s, ctx.lang);
+					unique.addExtraResult(s, ctx.settings.LANG_DEDUPLICATE);
 					isUniq = false;
 				} else if (uniqueId != -1) {
 					uniqueIdsResults.put(uniqueId, s);
 				}
 				List<String> extraDuplicateKeys = s.extraDeduplicateKeys();
-				for (String key : extraDuplicateKeys) {
-					if (extraIdsResults.containsKey(key)) {
-						SpatialSearchResult unique = extraIdsResults.get(key);
-						unique.addExtraResult(s, ctx.lang);
-						isUniq = false;
-					} else {
-						extraIdsResults.put(key, s);
+				if (extraDuplicateKeys != null) {
+					for (String key : extraDuplicateKeys) {
+						if (extraIdsResults.containsKey(key)) {
+							SpatialSearchResult unique = extraIdsResults.get(key);
+							unique.addExtraResult(s, ctx.settings.LANG_DEDUPLICATE);
+							isUniq = false;
+						} else {
+							extraIdsResults.put(key, s);
+						}
 					}
 				}
 				if (isUniq) {

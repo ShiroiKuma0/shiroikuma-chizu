@@ -436,7 +436,7 @@ public class SpatialSearchTestAndDocs {
 		String pattern = "Italy_";
 		String pattern2 = "World";		
 		String query = "Torrente Capraia"; // deduplicate by name and similarityRadius
-		String lang = "en";
+		settings.LANG_DEDUPLICATE = "en";
 		query = "Anello di Capraia e Montelupo"; // deduplicate by route_id 
 		
 		pattern = "Ukraine_";
@@ -457,7 +457,7 @@ public class SpatialSearchTestAndDocs {
 		SpatialTextSearch a = new SpatialTextSearch();
 		System.out.println(String.format("Index files %.1f ms", (System.nanoTime() - t) / 1e6));
 		SpatialPoiSearch poiSearch = new SpatialPoiSearch(MapPoiTypes.getDefault());
-		SpatialSearchContext searchContext = new SpatialSearchContext(settings, ls, location, poiSearch, lang);
+		SpatialSearchContext searchContext = new SpatialSearchContext(settings, ls, poiSearch, location);
 		SpatialSearchResults rs = a.searchTest(query, searchContext, 1000);
 		if (rs.mainResults != null) {
 			for (SpatialSearchResult s : rs.mainResults) {

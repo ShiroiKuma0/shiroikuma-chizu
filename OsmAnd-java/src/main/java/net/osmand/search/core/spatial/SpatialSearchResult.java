@@ -9,7 +9,9 @@ import net.osmand.data.LatLon;
 import net.osmand.data.MapObject;
 import net.osmand.search.core.HashQuadTree;
 import net.osmand.search.core.spatial.SpatialSearchToken.NameIndexAtom;
+import net.osmand.util.Algorithms;
 import net.osmand.util.MapUtils;
+import net.osmand.util.SearchAlgorithms;
 
 public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 
@@ -23,10 +25,9 @@ public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 	
 	private static final List<String> FILTER_DUPLICATE_POI_SUBTYPE = new ArrayList<String>(
 			Arrays.asList("building", "internet_access_yes"));
-	final int ZOOM_SIMILARITY_100_METERS = 10;
-	final int ZOOM_SIMILARITY_1000_meters = 7;
-	final int ZOOM_SIMILARITY_5000_meters = 4;
-	final int ZOOM_SIMILARITY_50_km = 1;
+	final int ZOOM_SIMILARITY_70_KM = 9 - 8; // 1 symbol - tile z=9 - 1 pixel of z=1
+	final int ZOOM_SIMILARITY_10_KM = 12 - 8; // 2 symbols - tile z=12
+	final int ZOOM_SIMILARITY_1_KM = 15 - 8; // 3 symbols
 	
 	SpatialSearchResult(SpatialSearchResultsList parentList, int parentInd, LatLon preciseLatlon) {
 		this.parentInd = parentInd;
@@ -127,30 +128,32 @@ public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 	}
 
 	public List<String> extraDeduplicateKeys() {
-		List<String> result = new ArrayList<>();
-		String wikidata = getWikidata();
-		String routeId = getRouteId();	
-		
-		if (wikidata != null) {
-			result.add(wikidata);
-		}
-		if (routeId != null) {
-			result.add(routeId);
-		}
-		
+		List<String> result = null;
+		result = addResult(result, getWikidata());
+		result = addResult(result, getRouteId());
 		MapObject mapObject = getMapObject();		
 		if (mapObject instanceof Amenity amenity) {
 			if (amenity.getType().getKeyName().equals("natural")) {
-				String name = getShortName();
-				String link = getShortLink(ZOOM_SIMILARITY_5000_meters);
+				String name = SearchAlgorithms.normalizeToken(SearchAlgorithms.alignChars(amenity.getName()));
+				String link = getShortLink(ZOOM_SIMILARITY_10_KM);
 				if (name != null && link != null) {
-					result.add(name + "_" + link);
+					result = addResult(result, name + "_" + link);
 				}
 			}
 		}
 		return result;
 	}
 	
+	private List<String> addResult(List<String> result, String value) {
+		if (Algorithms.isEmpty(value)) {
+			if (result == null) {
+				result = new ArrayList<String>();
+			}
+			result.add(value);
+		}
+		return result;
+	}
+
 	public void addExtraResult(SpatialSearchResult other, String lang) {
 		if (unitedObject == null) {
 			BaseDetailsObject baseDetails = new BaseDetailsObject(lang);
@@ -398,7 +401,7 @@ public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 	}
 
 	private String getWikidata() {
-		MapObject mapObject = getMapObject();
+		MapObject mapObject = getFirstObject();
 		if (mapObject != null) {
 			if (mapObject instanceof Amenity amenity) {
 				return amenity.getWikidata();
@@ -409,7 +412,7 @@ public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 	}
 
 	private String getRouteId() {
-		MapObject obj = getMapObject();
+		MapObject obj = getFirstObject();
 		if (obj instanceof Amenity amenity) {
 			return amenity.getRouteId();
 		}
@@ -417,40 +420,12 @@ public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 	}
 
 	private String getShortLink(int zoom) {
-		double lat = 0;
-		double lon = 0;
-		if (preciseLatlon != null) {
-			lat = preciseLatlon.getLatitude();
-			lon = preciseLatlon.getLongitude();
+		LatLon loc = getLatLon();
+		if (loc == null) {
+			return "";
 		}
-		MapObject obj = getMapObject();
-		if (obj != null) {
-			LatLon loc = obj.getLocation();
-			if (loc != null) {
-				lat = loc.getLatitude();
-				lon = loc.getLongitude();
-			}
-		}
-		if (lat == 0 && lon == 0) {
-			return null;
-		}
-		return MapUtils.createShortLinkString(lat, lon, zoom);
+		return MapUtils.createShortLinkString(loc.getLatitude(), loc.getLongitude(), zoom);
 	}
 
-	private String getShortName() {
-		MapObject obj = getMapObject();
-		if (obj != null && obj.getName().length() > 10) {
-			return obj.getName().substring(0, 10);
-		}
-		return null;
-	}
-
-	private MapObject getMapObject() {
-		if (!objs.isEmpty()) {
-			SpatialSearchResultRef first = objs.get(0);
-			return first.atom.object;
-		}
-		return null;
-	}
 }
 	
