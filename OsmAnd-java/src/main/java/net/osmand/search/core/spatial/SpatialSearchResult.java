@@ -1,9 +1,6 @@
 package net.osmand.search.core.spatial;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import net.osmand.binary.ObfConstants;
 import net.osmand.data.Amenity;
@@ -175,7 +172,9 @@ public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 					BaseDetailsObject baseDetails = new BaseDetailsObject(lang);
 					baseDetails.addObject(unitedObject);
 					baseDetails.addObject(amenity);
-					unitedObject = baseDetails.getSyntheticAmenity();
+					Amenity united = baseDetails.getSyntheticAmenity();
+					united.copyNames(unitedObject);
+					unitedObject = united;
 				} else {
 					unitedObject.copyNames(otherObj);
 					if (unitedObject.getLocation() == null) {
@@ -440,7 +439,7 @@ public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 
 	private String getShortName() {
 		MapObject obj = getMapObject();
-		if (obj != null) {
+		if (obj != null && obj.getName().length() > 10) {
 			return obj.getName().substring(0, 10);
 		}
 		return null;

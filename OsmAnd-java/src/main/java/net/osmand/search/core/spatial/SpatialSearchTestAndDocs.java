@@ -419,9 +419,10 @@ public class SpatialSearchTestAndDocs {
 		String lang = "en";
 		query = "Anello di Capraia e Montelupo"; // deduplicate by route_id 
 		
-//		pattern = "Ukraine_";
-//		pattern2 = "Ukraine_";
-//		query = "Софійський"; // deduplicate by osmId and wikidata
+		pattern = "Ukraine_";
+		pattern2 = "Ukraine_";
+		query = "Софійський"; // deduplicate by osmId and wikidata
+		query = "Ярославів Вал";
 
 		long t = System.nanoTime();
 
@@ -435,7 +436,8 @@ public class SpatialSearchTestAndDocs {
 		}
 		SpatialTextSearch a = new SpatialTextSearch();
 		System.out.println(String.format("Index files %.1f ms", (System.nanoTime() - t) / 1e6));
-		SpatialSearchContext searchContext = new SpatialSearchContext(settings, ls, location, lang);
+		SpatialPoiSearch poiSearch = new SpatialPoiSearch(MapPoiTypes.getDefault());
+		SpatialSearchContext searchContext = new SpatialSearchContext(settings, ls, location, poiSearch, lang);
 		SpatialSearchResults rs = a.searchTest(query, searchContext, 1000);
 		if (rs.mainResults != null) {
 			for (SpatialSearchResult s : rs.mainResults) {
