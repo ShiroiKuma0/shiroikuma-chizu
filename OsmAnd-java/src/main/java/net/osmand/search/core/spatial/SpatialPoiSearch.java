@@ -22,6 +22,7 @@ import net.osmand.binary.BinaryMapPoiReaderAdapter.PoiRegion;
 import net.osmand.binary.BinaryMapPoiReaderAdapter.PoiSubType;
 import net.osmand.data.Amenity;
 import net.osmand.data.LatLon;
+import net.osmand.data.QuadRect;
 import net.osmand.osm.AbstractPoiType;
 import net.osmand.osm.MapPoiTypes;
 import net.osmand.osm.PoiCategory;
@@ -32,6 +33,7 @@ import net.osmand.search.core.spatial.SpatialSearchToken.NameIndexAtom;
 import net.osmand.search.core.spatial.SpatialSearchToken.NameIndexAtomXY;
 import net.osmand.search.core.spatial.SpatialTextSearch.SpatialSearchFileCache;
 import net.osmand.search.core.spatial.SpatialTextSearch.SpatialSearchGlobalCache;
+import net.osmand.util.MapUtils;
 import net.osmand.util.SearchAlgorithms;
 
 public class SpatialPoiSearch {
@@ -264,14 +266,11 @@ public class SpatialPoiSearch {
 	}
 
 
-	public List<Amenity> loadPOIObjects(SpatialSearchContext ctx, long id, LatLon latLon, 
-			int lim) throws IOException {
+	public List<Amenity> loadPOIObjects(SpatialSearchContext ctx, long id, LatLon latLon, int radMeters, int limit)
+			throws IOException {
 		final SpatialPoiType spt = byId.get((int) id);
 		List<Amenity> results = new ArrayList<Amenity>();
-		// TODO not sorted 
-		// TODO slow on many maps...
-		int[] limit = new int[] { lim };
-		
+		int[] alimit = new int[] { limit };
 		if (spt != null && ctx.files != null) {
 			SearchPoiTypeFilter typeFilter = spt.poiAdditional != null ? null : new SearchPoiTypeFilter() {
 
@@ -326,8 +325,8 @@ public class SpatialPoiSearch {
 							return false;
 						}
 					}
-					if (limit[0] > 0) {
-						limit[0]--;
+					if (alimit[0] > 0) {
+						alimit[0]--;
 					}
 					results.add(object);
 					return false;
@@ -335,13 +334,23 @@ public class SpatialPoiSearch {
 
 				@Override
 				public boolean isCancelled() {
-					return limit[0] == 0;
+					return alimit[0] == 0;
 				}
 			};
-			SearchRequest<Amenity> req = BinaryMapIndexReader.buildSearchPoiRequest(0, Integer.MAX_VALUE, 0,
-					Integer.MAX_VALUE, -1, typeFilter, addFilter, matcher);
+			SearchRequest<Amenity> req = BinaryMapIndexReader.buildSearchPoiRequest(
+					0, Integer.MAX_VALUE, 0, Integer.MAX_VALUE, -1, typeFilter, addFilter, matcher);
+			if (latLon != null) {
+				QuadRect qr = MapUtils.calculateBbox(radMeters, latLon);
+				req = BinaryMapIndexReader.buildSearchPoiRequest((int) qr.left, (int) qr.right, (int) qr.top,
+						(int) qr.bottom, -1, typeFilter, addFilter, matcher);
+			}
 			for (BinaryMapIndexReader bir : ctx.files) {
+				ctx.stats.poiByTypeTime.start();
+				long br = bir.getBytesRead();
 				bir.searchPoi(req);
+				ctx.stats.poiByTypeBytes += (bir.getBytesRead() - br);
+				ctx.stats.poiByTypeTime.finish();
+				ctx.stats.poiByTypeBboxes += req.numberOfReadSubtrees;
 			}
 		}
 		return results;

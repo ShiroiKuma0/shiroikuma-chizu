@@ -37,16 +37,18 @@ import net.osmand.util.SearchAlgorithms;
 // TESTING delete default enlarge and enlarge data
 // TESTING Venezia city Street / Place  -  <City Street> ('<Salt Lake City>') with Street ('Pennsylvania street') 
 // TESTING find check that token is reused in parent - and ignore intersection for complete mattch
+// TESTING TODO !! POI Categories + top poi categories !! RZR
+// TESTING POI CATEGORY Specific Healthcare specialties (Vegan) - https://github.com/osmandapp/OsmAnd/issues/24941
 
 ////////// IN PROGRESS //////////
 
-// TESTING POI Categories + top poi categories
+// TODO numbers obj- filter cafe & rest (incorrect privat!)
+// TODO POI CATEGORY Sort maps poi categories API search
 
-// TODO API to return result
-// TODO accept intersection POI Category /\ POI - deduplicate?
-// TODO Specific Healthcare specialties (Vegan) - https://github.com/osmandapp/OsmAnd/issues/24941
-// TODO POI Categories translations / synonyms
-// TODO query = "Catedral-Basílica de Nuestra Señora del Pilar"; - poi category
+// TODO POI CATEGORY Improve slow on many maps (measure bytes)...
+
+// TODO POI Categories translations / synonyms (WEB) - Стоматол., Dentist, Stomatology 
+// TODO query = "Catedral-Basílica de Nuestra Señora del Pilar"; -  POI_TYPE /\ POI
 
 // TODO Analyze stats slow queries
 // TODO INSPECTOR stats index_words_dashboard.html
@@ -58,12 +60,14 @@ import net.osmand.util.SearchAlgorithms;
 // TODO DEDUPLICATE: review osm route id  combine by?
 // TODO DEDUPLICATE: Index place=state, county.. + wikidata id for boundaries (regions.ocbf) & display them - analyze
 // TODO DEDUPLICATE: Test wiki / travel maps, seamarks map
-// TODO DEDUPLICATE: same location (5-10m) 2 streets different cities 
+// TODO DEDUPLICATE: same location (5-10m) 2 streets different cities
+// TODO CHECK : too many wiki places
 // TODO UNIT TESTS: (duplicate words), Бульварно-Кудрявська, NC-42, 2-га Нова (2 Нова), M2...
 // TODO UNIT TESTS: Auto tests - Slow analysis (Auto test New york)
 // TODO UNIT TESTS: Analyze Abbrefvations / common skip (abbrevations 1st=first) 
 // TODO UNIT TESTS: Add test on show more '2 sokak' - Show more 1. 2 Sokak (house) 2. 2 Sokak (street) 3. 2 <WORD> Sokak (street) or 3381/2 Sokak. 4. '2.Kadriye' (city) .. Sokak
 // TODO INSPECTOR : doesn't show suffixes
+// TODO ANALYZE: Germany POI words - . (115,158, 115,158), und (97,839, 97,839), - not common? - bach (56,475, 56,475) - could be common?
 
 // TO DO - RZR
 // TODO WEB PRODUCTION: display results std way: house, interpolation results, poi...
@@ -165,6 +169,12 @@ public class SpatialSearchTestAndDocs {
 //		query = "1 W&W Platz Kornwestheim"; // duplicate word new maps needed
 //		query = "1/1 Salierstraße Waiblingen"; // duplicate in house number priority 1st
 		
+		// poi filter
+//		location = new LatLon(52.50805, 13.38176);
+//		settings.SEARCH_POI = false;
+//		settings.DEV_PRINT_POI_CAT_LIMIT = 100; 
+//		settings.DEV_PRINT_POI_CAT_RADIUS_KM = 10;
+//		query = "Gynae.";
 		
 		// Grainau Am Eibsee 1 36799292
 		// Grainau Seehäuser Eibsee 2 - 242903848 //  Seehäuser Grainau 2, Seehäuser Eibsee 2  
@@ -259,9 +269,19 @@ public class SpatialSearchTestAndDocs {
 		
 		pattern = "Ukraine_";
 //		pattern = "Ukraine_kyiv-";
-		query = "Caf.";
-//		query = "Veg.";
-//		query = "Mcdon.";
+//		pattern = "Germany_";
+//		pattern = "Us_";
+		// poi types
+		location = new LatLon(50.439, 30.516);
+		settings.SEARCH_POI = true;
+		settings.DEV_PRINT_POI_CAT_LIMIT = 100000; 
+		settings.DEV_PRINT_POI_CAT_RADIUS_KM = 1000;
+//		query = "Cafe";
+//		query = "Aquarium.";
+//		query = "Vegeterian";
+		query = "Mcdonald's";
+		query = "Stomat.";
+		
 //		query = "Kyiv Глушкова 1"; // vs 'Kyiv 1'
 //		query = "нова пошта Бульварно Кудрявська";
 //		query = "Бульварно-кудрявс.";
@@ -403,10 +423,10 @@ public class SpatialSearchTestAndDocs {
 				System.out.println("Suggest search other region - " + bbox);
 			}
 		}
-		settings.OPTIM_DELETE_POI_SAME_AS_CITY_STREET = false;
+//		settings.OPTIM_DELETE_POI_SAME_AS_CITY_STREET = false;
 //		settings.DEDUPLICATE_RES = true;
-		searchContext = new SpatialSearchContext(settings, ls, poiSearch, location);
-		a.searchTest(query, searchContext, 8000);
+//		searchContext = new SpatialSearchContext(settings, ls, poiSearch, location);
+//		a.searchTest(query, searchContext, 8000);
 	}
 
 	private static void testDeduplication(String[] args) throws IOException, InterruptedException {
