@@ -1822,7 +1822,9 @@ public class BinaryMapIndexReader {
 
 	public void close() throws IOException {
 		if (codedIS != null) {
-			raf.close();
+			if (raf != null) {
+				raf.close();
+			}
 			codedIS = null;
 			mapIndexes.clear();
 			addressIndexes.clear();
