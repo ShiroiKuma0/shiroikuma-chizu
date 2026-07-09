@@ -3,7 +3,9 @@ package net.osmand.search.core.spatial;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,6 +67,21 @@ public class SpatialPoiSearch {
 			this.key = key;
 			this.id = id;
 			this.poiAdditional = additional;
+		}
+
+		public boolean accept(Amenity a) {
+			if (key.equals(a.getType().getKeyName())) {
+				return true;
+			}
+			// contains for ';'
+			boolean multi = a.getSubType().indexOf(';') != -1;
+			if (key.equals(a.getSubType()) 
+					|| (multi && key.startsWith(a.getSubType() + ";"))
+					|| (multi && key.endsWith(";" + a.getSubType()))
+					|| (multi && key.contains(";" + a.getSubType() + ";"))) {
+				return true;
+			}
+			return false;
 		}
 		
 	}
@@ -149,7 +166,8 @@ public class SpatialPoiSearch {
 			fc.poiFrequencies.put(cats.get(i), f);
 			for (int j = 0; j < lst.size(); j++) {
 				int ft = subcatFreqs != null && i < subcatFreqs.size() && j < subcatFreqs.get(i).size() ? subcatFreqs.get(i).get(j) : 0;
-				fc.poiFrequencies.put(lst.get(j), ft);
+				String vkey = lst.get(j);
+				fc.poiFrequencies.put(vkey, ft);
 			}
 		}
 		
@@ -174,6 +192,10 @@ public class SpatialPoiSearch {
 						addToIndex(topValueName, topValue);
 					}
 					int freq = subType.possibleValuesFreqs != null && k < subType.possibleValuesFreqs.size() ? subType.possibleValuesFreqs.get(k) : 0;
+					Integer fit = fc.poiFrequencies.get(topValue.key);
+					if (fit != null) {
+						freq += fit;
+					}
 					fc.poiFrequencies.put(topValue.key, freq);
 				}
 			}
@@ -225,6 +247,23 @@ public class SpatialPoiSearch {
 							if (freq != null) {
 								total += freq;
 							}
+							if (a.singleType instanceof PoiFilter pf) {
+								for (PoiType p : pf.getPoiTypes()) {
+									freq = l.poiFrequencies.get(p.getKeyName());
+									if (freq != null) {
+										total += freq;
+									}
+								}
+							}
+							// additional could be on top
+//							if (a.parentTypes != null) {
+//								for (AbstractPoiType p : a.parentTypes) {
+//									freq = l.poiFrequencies.get(p.getKeyName());
+//									if (freq != null) {
+//										total += freq;
+//									}
+//								}
+//							}
 						}
 					}
 //					System.out.println(a.names + " " + a.key + " " + total);
@@ -263,6 +302,21 @@ public class SpatialPoiSearch {
 	
 	public SpatialPoiType getByKey(String key) {
 		return byKey.get(key);
+	}
+
+
+	private List<BinaryMapIndexReader> filterByRadius(LatLon l, int rad, List<BinaryMapIndexReader> oFiles,
+			List<BinaryMapIndexReader> res) {
+		QuadRect rect = MapUtils.calculateBbox(rad, l);
+		Iterator<BinaryMapIndexReader> it = oFiles.iterator();
+		while (it.hasNext()) {
+			BinaryMapIndexReader next = it.next();
+			if (next.containsPoiData((int) rect.left, (int) rect.top, (int) rect.right, (int) rect.bottom)) {
+				res.add(next);
+				it.remove();
+			}
+		}
+		return res;
 	}
 
 
@@ -334,7 +388,8 @@ public class SpatialPoiSearch {
 
 				@Override
 				public boolean isCancelled() {
-					return alimit[0] == 0;
+					return false; // allow to read all for proper sorting
+//					return alimit[0] == 0;
 				}
 			};
 			SearchRequest<Amenity> req = BinaryMapIndexReader.buildSearchPoiRequest(
@@ -344,16 +399,29 @@ public class SpatialPoiSearch {
 				req = BinaryMapIndexReader.buildSearchPoiRequest((int) qr.left, (int) qr.right, (int) qr.top,
 						(int) qr.bottom, -1, typeFilter, addFilter, matcher);
 			}
-			for (BinaryMapIndexReader bir : ctx.files) {
-				ctx.stats.poiByTypeTime.start();
-				long br = bir.getBytesRead();
-				bir.searchPoi(req);
-				ctx.stats.poiByTypeBytes += (bir.getBytesRead() - br);
-				ctx.stats.poiByTypeTime.finish();
-				ctx.stats.poiByTypeBboxes += req.numberOfReadSubtrees;
+			List<BinaryMapIndexReader> oFiles = new LinkedList<BinaryMapIndexReader>(ctx.files);
+			iterateSearch(ctx, req, filterByRadius(latLon, 5_000, oFiles, new ArrayList<BinaryMapIndexReader>()));
+			if (alimit[0] != 0 && radMeters > 5_000) {
+				iterateSearch(ctx, req, filterByRadius(latLon, 50_000, oFiles, new ArrayList<BinaryMapIndexReader>()));
+			}
+			if (alimit[0] != 0 && radMeters > 50_000) {
+				iterateSearch(ctx, req, oFiles);
 			}
 		}
 		return results;
+	}
+
+
+	private void iterateSearch(SpatialSearchContext ctx, SearchRequest<Amenity> req, List<BinaryMapIndexReader> res)
+			throws IOException {
+		for (BinaryMapIndexReader bir : res) {
+			ctx.stats.poiByTypeTime.start();
+			long br = bir.getBytesRead();
+			bir.searchPoi(req);
+			ctx.stats.poiByTypeBytes += (bir.getBytesRead() - br);
+			ctx.stats.poiByTypeTime.finish();
+			ctx.stats.poiByTypeBboxes += req.numberOfReadSubtrees;
+		}
 	}
 
 }

@@ -37,21 +37,16 @@ import net.osmand.util.SearchAlgorithms;
 // TESTING delete default enlarge and enlarge data
 // TESTING Venezia city Street / Place  -  <City Street> ('<Salt Lake City>') with Street ('Pennsylvania street') 
 // TESTING find check that token is reused in parent - and ignore intersection for complete mattch
-// TESTING TODO !! POI Categories + top poi categories !! RZR
 // TESTING POI CATEGORY Specific Healthcare specialties (Vegan) - https://github.com/osmandapp/OsmAnd/issues/24941
+// TESTING BUG: numbers obj- filter cafe & rest  + incorrect PrivatBank counts
+// TESTING check additional filter not stored old
+// TESTING Sort maps poi categories API search (sort bboxes?)
+// TESTING query = "Church Catedral-Basílica de Nuestra Señora del Pilar"; -  POI_TYPE /\ POI (SYNONYMS!)
+// TEST_ALLOW_HOUSE_POI_TYPE_INTERSECTION Review if poi doesn't have bbox don't intersect or add bbox! - Shell 2 Rožňavská (test)
 
 ////////// IN PROGRESS //////////
 
-// TODO numbers obj- filter cafe & rest (incorrect privat!)
-// TODO POI CATEGORY Sort maps poi categories API search
-
-// TODO POI CATEGORY Improve slow on many maps (measure bytes)...
-
-// TODO POI Categories translations / synonyms (WEB) - Стоматол., Dentist, Stomatology 
-// TODO query = "Catedral-Basílica de Nuestra Señora del Pilar"; -  POI_TYPE /\ POI
-
-// TODO Analyze stats slow queries
-// TODO INSPECTOR stats index_words_dashboard.html
+// INSPECTOR stats index_words_dashboard.html
 
 // TO DO Ivan / Gateway
 // TODO DEDUPLICATE: Review / implement similarity radius - similarityRadius = 50000 ... Route Id
@@ -59,25 +54,34 @@ import net.osmand.util.SearchAlgorithms;
 // TODO DEDUPLICATE: Venezia ? - No place=city in POI is it on purpose ? 2 Wikidataids! Rating not merged. POI - relation/44741 (Q641), CITY - way/64778090 (Q33723961).
 // TODO DEDUPLICATE: review osm route id  combine by?
 // TODO DEDUPLICATE: Index place=state, county.. + wikidata id for boundaries (regions.ocbf) & display them - analyze
-// TODO DEDUPLICATE: Test wiki / travel maps, seamarks map
+// TODO DEDUPLICATE: Test wiki / travel maps / seamarks map
 // TODO DEDUPLICATE: same location (5-10m) 2 streets different cities
-// TODO CHECK : too many wiki places
+// TODO DEDUPLICATE: brand langs - 'Поїхали з нами' / 'Поехали с нами'
 // TODO UNIT TESTS: (duplicate words), Бульварно-Кудрявська, NC-42, 2-га Нова (2 Нова), M2...
 // TODO UNIT TESTS: Auto tests - Slow analysis (Auto test New york)
 // TODO UNIT TESTS: Analyze Abbrefvations / common skip (abbrevations 1st=first) 
 // TODO UNIT TESTS: Add test on show more '2 sokak' - Show more 1. 2 Sokak (house) 2. 2 Sokak (street) 3. 2 <WORD> Sokak (street) or 3381/2 Sokak. 4. '2.Kadriye' (city) .. Sokak
 // TODO INSPECTOR : doesn't show suffixes
-// TODO ANALYZE: Germany POI words - . (115,158, 115,158), und (97,839, 97,839), - not common? - bach (56,475, 56,475) - could be common?
+
+// LARGE IMPORTANT TASKS
+// TODO INDEX: Speedup load after sorting - to limit objects (store elo in index)! 
+// TODO INDEX: Store Poi category index (effective intersection 'Church St. Miguel' - refactor checkAmenity)
+// TODO INDEX: Find POI Categories translations / synonyms (WEB) - Стоматол., Dentist, Stomatology, Basilica (?)
+// TODO ANALYZE: BUG - Germany POI words - . (115,158, 115,158), und (97,839, 97,839), - not common? - bach (56,475, 56,475) - could be common?
+// TODO ANALYZE: too many wiki places on streets?
+// TODO ANALYZE: find slow queries on Autotests
+// TODO ANALYZE: Large Geo atoms "Berlin" (Slow query)
 
 // TO DO - RZR
-// TODO WEB PRODUCTION: display results std way: house, interpolation results, poi...
-// TODO WEB Production: Multithread pool, Monitor / time & memory optimize memory?
+// TODO WEB: POI Categories + top poi categories
+// TODO WEB: display results std way: house, interpolation results, poi...
+// TODO WEB: Multithread pool, Monitor / time & memory optimize memory?
 // TODO ANDROID: Integrate (include regions.ocbf) on client
 // TODO ANDROID: Progress / cancel
 // TODO ANDROID: memory performance 
-// 
-
+ 
 /////////////// EXTRA FEATURES ///////////////
+// TODO OBF POI CATEGORY Bboxes too large - investigate size (introduce for categories OBF) - OsmAndPoiNameIndexDataAtom, quad tree (90% < 10K)
 // TODO Review Abbrevations (synonyms / direction words) other languages?
 // TODO Store and test conscription number for some cities - issue (RZR)
 // TODO Search in large parks, neighborhood same as in boundaries (index bbox POI), residential way/56238205
@@ -163,6 +167,7 @@ public class SpatialSearchTestAndDocs {
 //		pattern = "Map";
 		String pattern2 = ".....";
 		String query = "Berlin hauptstrasse"; // slow
+		query = "Berlin";
 //		query = "Kelterstraße Kernen im Remstal";
 //		query = "Germany Kelter. Kernen im Remstal";
 //		query = "3 Hofäckerstraße Kernen im Remstal";
@@ -267,18 +272,18 @@ public class SpatialSearchTestAndDocs {
 		
 //		pattern = "regions.ocbf" ;
 		
+//		pattern = "Ukraine_kyiv-city";
+//		pattern = "Test_Ukraine_kyiv-city_europe_12.obf";
 		pattern = "Ukraine_";
-//		pattern = "Ukraine_kyiv-";
-//		pattern = "Germany_";
-//		pattern = "Us_";
 		// poi types
 //		location = new LatLon(50.439, 30.516);
-//		settings.SEARCH_POI = true;
-//		settings.DEV_PRINT_POI_CAT_LIMIT = 100000; 
-//		settings.DEV_PRINT_POI_CAT_RADIUS_KM = 1000;
+//		settings.SEARCH_POI = false;
+//		settings.DEV_PRINT_POI_CAT_LIMIT = 1000; 
+//		settings.DEV_PRINT_POI_CAT_RADIUS_KM = 10;
+//		query = "при.";
 //		query = "Cafe";
 //		query = "Aquarium.";
-//		query = "Vegeterian";
+//		query = "Veget.";
 //		query = "Mcdonald's";
 //		query = "Stomat.";
 		
@@ -323,11 +328,11 @@ public class SpatialSearchTestAndDocs {
 //		query = "Holmby road 18 B"; // 'Holmby 18 B', 'Holmby 18-B', 'Holmby 18B'
 //		query = "Holmby Melbourne 18B";
 		
-		pattern = "Slovakia";
+//		pattern = "Slovakia";
 //		query = "Bratislava Billa";
 //		settings.DEDUPLICATE_RES = false;
-		query = "Shell einsteinova";
-//		query = "Shell einsteinova 3431/3";
+//		settings.TEST_ALLOW_HOUSE_POI_TYPE_INTERSECTION = false;
+//		query = "Shell 2 Rožňavská";
 		
 //		pattern = "Us_new-york_new"; // new-york, new-jersey
 //		pattern = "Us_new-"; 
@@ -384,9 +389,10 @@ public class SpatialSearchTestAndDocs {
 //		query = "Венец."; 
 
 //		pattern = "Spain_aragon_europe_";
-//		query = "Basílica de Nuestra Señora del Pilar";
+//		query = "Church Basílica de Nuestra Señora del Pilar"; // Church vs Roman Church
 //		query = "Catedral-Basílica de Nuestra Señora del Pilar"; // 7 words! 2^7 combinations
-		
+//		query = "Square de Nuestra Señora del Pilar";  // Church vs Square
+//		
 //		pattern = "Peru_";
 //		query ="Calle 20 188 San Isidro Lima"; // 1430799557
 //		query ="Lima Calle 20 San Isidro";
@@ -409,7 +415,7 @@ public class SpatialSearchTestAndDocs {
 //		settings.DEDUPLICATE_RES = false;
 		SpatialPoiSearch poiSearch = new SpatialPoiSearch(MapPoiTypes.getDefault());
 		SpatialSearchContext searchContext = new SpatialSearchContext(settings, ls, poiSearch, location);
-		SpatialSearchResults rs = a.searchTest(query, searchContext, 10);
+		SpatialSearchResults rs = a.searchTest(query, searchContext, 10000);
 		SpatialSearchResult mainResult = rs.getFirstResult();
 		if (mainResult != null && mainResult.matchedTokens() < rs.tokens.size() - 2) {
 			// another way to check to check to get mainResult - boundary object
