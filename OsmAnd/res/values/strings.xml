@@ -11,6 +11,11 @@
 	Strings for OsmAnd core
 	Thx - Hardy
 -->
+	<string name="duplicate_map">Duplicate map</string>
+	<string name="duplicate_map_standard_exists_desc">You already have the standard map for %1$s. Downloading the road-only map will duplicate data and may degrade performance.\n\nReplacing will remove address search and POI data included in the standard map.</string>
+	<string name="duplicate_map_road_only_exists_desc">You already have the road-only map for %1$s. Downloading the standard map will duplicate data and may degrade performance.</string>
+	<string name="duplicate_map_replace_with_standard">Replace with Standard</string>
+	<string name="duplicate_map_replace_with_road">Replace with Road-only</string>
 	<string name="android_auto_missing_maps_desc">Download missing maps for the route to continue.</string>
 	<string name="android_auto_possible_missing_maps_desc">Possible missing maps. Try using existing maps to continue.</string>
 	<string name="route_calculation_calculating_route">Calculating route...</string>
