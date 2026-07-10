@@ -7,11 +7,49 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import io.github.cosinekitty.astronomy.GlobalSolarEclipseInfo
+import io.github.cosinekitty.astronomy.GlobalSolarEclipseWindow
+import io.github.cosinekitty.astronomy.Observer
+import io.github.cosinekitty.astronomy.SolarEclipseShadowPoint
+import io.github.cosinekitty.astronomy.SolarEclipseState
 import io.github.cosinekitty.astronomy.Time
+import io.github.cosinekitty.astronomy.globalSolarEclipseWindow
+import io.github.cosinekitty.astronomy.nextGlobalSolarEclipse
+import io.github.cosinekitty.astronomy.previousGlobalSolarEclipse
+import io.github.cosinekitty.astronomy.searchGlobalSolarEclipse
+import io.github.cosinekitty.astronomy.solarEclipseShadowPoint
+import io.github.cosinekitty.astronomy.solarEclipseState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import net.osmand.PlatformUtil
 import java.util.Calendar
 import java.util.TimeZone
+
+enum class SolarEclipseNavigationDirection {
+	Initial,
+	Previous,
+	Next
+}
+
+data class SolarEclipseModeState(
+	val active: Boolean = false,
+	val requestId: Long = 0L,
+	val loading: Boolean = false,
+	val observer: Observer? = null,
+	val event: GlobalSolarEclipseInfo? = null,
+	val window: GlobalSolarEclipseWindow? = null,
+	val selectedTime: Time? = null,
+	val localState: SolarEclipseState? = null,
+	val error: Boolean = false,
+	val navigationDirection: SolarEclipseNavigationDirection = SolarEclipseNavigationDirection.Initial,
+	val mapRequestId: Long = 0L,
+	val mapLoading: Boolean = false,
+	val shadowPoint: SolarEclipseShadowPoint? = null,
+	val mapError: Boolean = false
+)
 
 class StarObjectsViewModel(
 	private val app: Application,
@@ -34,6 +72,16 @@ class StarObjectsViewModel(
 
 	private val _isTimeAutoUpdateEnabled = MutableLiveData(true)
 	val isTimeAutoUpdateEnabled: LiveData<Boolean> = _isTimeAutoUpdateEnabled
+
+	private val _solarEclipseModeState = MutableLiveData(SolarEclipseModeState())
+	val solarEclipseModeState: LiveData<SolarEclipseModeState> = _solarEclipseModeState
+
+	private var eclipseSearchJob: Job? = null
+	private var eclipseLocalStateJob: Job? = null
+	private var eclipseMapJob: Job? = null
+	private var eclipseRequestId = 0L
+	private var eclipseMapRequestId = 0L
+	private var eclipseLocalRequestId = 0L
 
 	class Factory(
 		private val application: Application,
@@ -113,7 +161,7 @@ class StarObjectsViewModel(
 	}
 
 	fun updateTime(calendar: Calendar) {
-		_currentCalendar.value = calendar
+		_currentCalendar.value = calendar.clone() as Calendar
 
 		// Convert to Astronomy Time (UTC)
 		val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
@@ -130,6 +178,13 @@ class StarObjectsViewModel(
 		_currentTime.value = t
 	}
 
+	fun updateTime(time: Time) {
+		_currentTime.value = time
+		_currentCalendar.value = Calendar.getInstance(TimeZone.getDefault()).apply {
+			timeInMillis = time.toMillisecondsSince1970()
+		}
+	}
+
 	fun resetTime() {
 		val now = Calendar.getInstance(TimeZone.getDefault())
 		updateTime(now)
@@ -139,8 +194,231 @@ class StarObjectsViewModel(
 		_isTimeAutoUpdateEnabled.value = enabled
 	}
 
+	fun enterSolarEclipseMode(observer: Observer, displayedTime: Time) {
+		searchSolarEclipse(
+			observer,
+			SolarEclipseNavigationDirection.Initial
+		) {
+			var event = searchGlobalSolarEclipse(displayedTime.addDays(-INITIAL_SEARCH_LOOKBACK_DAYS))
+			var window = globalSolarEclipseWindow(event)
+			if (displayedTime.ut > window.end.ut) {
+				event = nextGlobalSolarEclipse(event.peak)
+				window = globalSolarEclipseWindow(event)
+			}
+			val selectedTime = if (displayedTime.ut in window.start.ut..window.end.ut) {
+				displayedTime
+			} else {
+				event.peak
+			}
+			SearchResult(event, window, selectedTime)
+		}
+	}
+
+	fun loadPreviousSolarEclipse() {
+		val state = _solarEclipseModeState.value ?: return
+		if (state.loading) return
+		val current = state.event ?: return
+		val observer = state.observer ?: return
+		searchSolarEclipse(observer, SolarEclipseNavigationDirection.Previous) {
+			val event = previousGlobalSolarEclipse(current.peak)
+			SearchResult(event, globalSolarEclipseWindow(event), event.peak)
+		}
+	}
+
+	fun loadNextSolarEclipse() {
+		val state = _solarEclipseModeState.value ?: return
+		if (state.loading) return
+		val current = state.event ?: return
+		val observer = state.observer ?: return
+		searchSolarEclipse(observer, SolarEclipseNavigationDirection.Next) {
+			val event = nextGlobalSolarEclipse(current.peak)
+			SearchResult(event, globalSolarEclipseWindow(event), event.peak)
+		}
+	}
+
+	fun retrySolarEclipseSearch(displayedTime: Time) {
+		val state = _solarEclipseModeState.value ?: return
+		val observer = state.observer ?: return
+		when (state.navigationDirection) {
+			SolarEclipseNavigationDirection.Previous -> loadPreviousSolarEclipse()
+			SolarEclipseNavigationDirection.Next -> loadNextSolarEclipse()
+			SolarEclipseNavigationDirection.Initial -> enterSolarEclipseMode(observer, displayedTime)
+		}
+	}
+
+	fun selectSolarEclipseTime(time: Time) {
+		val state = _solarEclipseModeState.value ?: return
+		if (!state.active || state.window == null) return
+		eclipseMapRequestId++
+		eclipseMapJob?.cancel()
+		val clamped = Time(time.ut.coerceIn(state.window.start.ut, state.window.end.ut))
+		updateTime(clamped)
+		_solarEclipseModeState.value = state.copy(
+			selectedTime = clamped,
+			mapLoading = false,
+			shadowPoint = null,
+			mapError = false
+		)
+		calculateLocalEclipseState(state.observer, clamped)
+	}
+
+	fun updateSolarEclipseObserver(observer: Observer) {
+		val state = _solarEclipseModeState.value ?: return
+		if (!state.active || sameObserver(state.observer, observer)) return
+		_solarEclipseModeState.value = state.copy(observer = observer)
+		calculateLocalEclipseState(observer, state.selectedTime)
+	}
+
+	fun requestSolarEclipseShadowPoint() {
+		val state = _solarEclipseModeState.value ?: return
+		val time = state.selectedTime ?: return
+		val window = state.window ?: return
+		if (!state.active || state.mapLoading || time.ut !in window.start.ut..window.end.ut) return
+
+		val requestId = ++eclipseMapRequestId
+		eclipseMapJob?.cancel()
+		_solarEclipseModeState.value = state.copy(
+			mapRequestId = requestId,
+			mapLoading = true,
+			shadowPoint = null,
+			mapError = false
+		)
+		eclipseMapJob = viewModelScope.launch {
+			try {
+				val point = withContext(Dispatchers.Default) { solarEclipseShadowPoint(time) }
+				if (requestId != eclipseMapRequestId) return@launch
+				val latest = _solarEclipseModeState.value ?: return@launch
+				_solarEclipseModeState.value = latest.copy(
+					mapLoading = false,
+					shadowPoint = point,
+					mapError = point == null
+				)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				LOG.error("Unable to calculate a solar eclipse shadow point", e)
+				if (requestId == eclipseMapRequestId) {
+					val latest = _solarEclipseModeState.value ?: return@launch
+					_solarEclipseModeState.value = latest.copy(mapLoading = false, mapError = true)
+				}
+			}
+		}
+	}
+
+	fun consumeSolarEclipseShadowPoint(mapRequestId: Long) {
+		val state = _solarEclipseModeState.value ?: return
+		if (state.mapRequestId == mapRequestId && (state.shadowPoint != null || state.mapError)) {
+			_solarEclipseModeState.value = state.copy(shadowPoint = null, mapError = false)
+		}
+	}
+
+	fun exitSolarEclipseMode() {
+		eclipseRequestId++
+		eclipseMapRequestId++
+		eclipseLocalRequestId++
+		eclipseSearchJob?.cancel()
+		eclipseLocalStateJob?.cancel()
+		eclipseMapJob?.cancel()
+		_solarEclipseModeState.value = SolarEclipseModeState()
+	}
+
+	private fun searchSolarEclipse(
+		observer: Observer,
+		direction: SolarEclipseNavigationDirection,
+		searchBlock: () -> SearchResult
+	) {
+		val requestId = ++eclipseRequestId
+		eclipseSearchJob?.cancel()
+		eclipseLocalStateJob?.cancel()
+		eclipseMapRequestId++
+		eclipseMapJob?.cancel()
+		val previous = _solarEclipseModeState.value ?: SolarEclipseModeState()
+		_solarEclipseModeState.value = previous.copy(
+			active = true,
+			requestId = requestId,
+			loading = true,
+			observer = observer,
+			error = false,
+			navigationDirection = direction,
+			shadowPoint = null,
+			mapLoading = false,
+			mapError = false
+		)
+
+		eclipseSearchJob = viewModelScope.launch {
+			try {
+				val result = withContext(Dispatchers.Default) { searchBlock() }
+				if (requestId != eclipseRequestId) return@launch
+
+				_isTimeAutoUpdateEnabled.value = false
+				updateTime(result.selectedTime)
+				val currentObserver = _solarEclipseModeState.value?.observer ?: observer
+				_solarEclipseModeState.value = SolarEclipseModeState(
+					active = true,
+					requestId = requestId,
+					observer = currentObserver,
+					event = result.event,
+					window = result.window,
+					selectedTime = result.selectedTime,
+					navigationDirection = direction
+				)
+				calculateLocalEclipseState(currentObserver, result.selectedTime)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				LOG.error("Unable to calculate a global solar eclipse", e)
+				if (requestId == eclipseRequestId) {
+					val latest = _solarEclipseModeState.value ?: SolarEclipseModeState()
+					_solarEclipseModeState.value = latest.copy(
+						active = true,
+						loading = false,
+						error = true,
+						navigationDirection = direction
+					)
+				}
+			}
+		}
+	}
+
+	private fun calculateLocalEclipseState(observer: Observer?, time: Time?) {
+		if (observer == null || time == null) return
+		val requestId = ++eclipseLocalRequestId
+		eclipseLocalStateJob?.cancel()
+		eclipseLocalStateJob = viewModelScope.launch {
+			try {
+				val localState = withContext(Dispatchers.Default) { solarEclipseState(time, observer) }
+				if (requestId != eclipseLocalRequestId) return@launch
+				val latest = _solarEclipseModeState.value ?: return@launch
+				if (!latest.active || latest.selectedTime?.ut != time.ut ||
+					!sameObserver(latest.observer, observer)) return@launch
+				_solarEclipseModeState.value = latest.copy(localState = localState)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				LOG.error("Unable to calculate local solar eclipse state", e)
+			}
+		}
+	}
+
 	fun refreshSkyObjects() {
 		_skyObjects.value = _skyObjects.value
 		_constellations.value = _constellations.value
 	}
+
+	companion object {
+		private val LOG = PlatformUtil.getLog(StarObjectsViewModel::class.java)
+		private const val INITIAL_SEARCH_LOOKBACK_DAYS = 1.0
+	}
+
+	private data class SearchResult(
+		val event: GlobalSolarEclipseInfo,
+		val window: GlobalSolarEclipseWindow,
+		val selectedTime: Time
+	)
+
+	private fun sameObserver(first: Observer?, second: Observer?): Boolean =
+		first != null && second != null &&
+			first.latitude == second.latitude &&
+			first.longitude == second.longitude &&
+			first.height == second.height
 }

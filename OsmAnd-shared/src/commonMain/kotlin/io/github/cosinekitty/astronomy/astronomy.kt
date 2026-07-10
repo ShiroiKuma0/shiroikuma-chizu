@@ -2082,6 +2082,66 @@ class GlobalSolarEclipseInfo(
 
 
 /**
+ * Worldwide time bounds of a solar eclipse.
+ *
+ * [start] and [end] are the first and last instants when the Moon's penumbra
+ * touches the Earth's surface anywhere in the world.
+ */
+data class GlobalSolarEclipseWindow(
+    val event: GlobalSolarEclipseInfo,
+    val start: Time,
+    val end: Time
+)
+
+
+/**
+ * A useful map position inside the solar eclipse shadow at a selected time.
+ *
+ * [central] is true when the central shadow axis intersects the Earth. For a
+ * partial eclipse, the coordinates identify the point on the Earth's surface
+ * nearest to the penumbral axis.
+ */
+data class SolarEclipseShadowPoint(
+    val time: Time,
+    val latitude: Double,
+    val longitude: Double,
+    val central: Boolean
+)
+
+
+/** The instantaneous appearance of a solar eclipse for a local observer. */
+enum class SolarEclipsePhase {
+    None,
+    Partial,
+    Annular,
+    Total
+}
+
+
+/** Topocentric position and apparent angular radius of the Sun or Moon. */
+data class ApparentDisc(
+    val rightAscension: Double,
+    val declination: Double,
+    val azimuth: Double,
+    val altitude: Double,
+    val distanceAu: Double,
+    val angularRadius: Double
+)
+
+
+/** Instantaneous local solar eclipse geometry for an arbitrary time. */
+data class SolarEclipseState(
+    val time: Time,
+    val sun: ApparentDisc,
+    val moon: ApparentDisc,
+    val centerSeparation: Double,
+    val obscuration: Double,
+    val phase: SolarEclipsePhase,
+    val correctedSunAltitude: Double
+)
+
+
+/**
  * Holds a time and the observed altitude of the Sun at that time.
  *
  * When reporting a solar eclipse observed at a specific location on the Earth
@@ -2450,6 +2510,97 @@ internal fun discObscuration(a: Double, b: Double, c: Double): Double {
 }
 
 
+/**
+ * Calculates the apparent angular radius of the Sun or Moon at a given distance.
+ *
+ * @param body The [Body.Sun] or [Body.Moon]. Other bodies return `null`.
+ * @param distanceAu Topocentric distance to the body's center, in astronomical units.
+ * @return The apparent angular radius in degrees, or `null` for unsupported bodies.
+ */
+fun apparentAngularRadius(body: Body, distanceAu: Double): Double? {
+    if (!distanceAu.isFinite() || distanceAu <= 0.0)
+        throw IllegalArgumentException("distanceAu must be finite and positive.")
+
+    val radiusAu = when (body) {
+        Body.Sun -> SUN_RADIUS_AU
+        Body.Moon -> MOON_POLAR_RADIUS_AU
+        else -> return null
+    }
+    if (distanceAu <= radiusAu)
+        throw IllegalArgumentException("distanceAu must be greater than the body's radius.")
+    return asin(radiusAu / distanceAu).radiansToDegrees()
+}
+
+
+/**
+ * Calculates the apparent Sun/Moon discs and their eclipse state for an observer.
+ *
+ * Disc positions deliberately exclude atmospheric refraction so their angular
+ * separation stays consistent with eclipse contact geometry. The corrected Sun
+ * altitude is returned separately for visibility messaging.
+ */
+fun solarEclipseState(time: Time, observer: Observer): SolarEclipseState {
+    fun apparentDisc(body: Body): Pair<ApparentDisc, Equatorial> {
+        val equatorial = equator(body, time, observer, EquatorEpoch.OfDate, Aberration.Corrected)
+        val horizontal = horizon(
+            time,
+            observer,
+            equatorial.ra,
+            equatorial.dec,
+            Refraction.None
+        )
+        val radius = apparentAngularRadius(body, equatorial.dist)
+            ?: throw InternalError("Unsupported eclipse disc body: $body")
+        return ApparentDisc(
+            rightAscension = equatorial.ra,
+            declination = equatorial.dec,
+            azimuth = horizontal.azimuth,
+            altitude = horizontal.altitude,
+            distanceAu = equatorial.dist,
+            angularRadius = radius
+        ) to equatorial
+    }
+
+    val (sun, sunEquatorial) = apparentDisc(Body.Sun)
+    val (moon, moonEquatorial) = apparentDisc(Body.Moon)
+    val separation = sunEquatorial.vec.angleWith(moonEquatorial.vec)
+    val overlap = separation < sun.angularRadius + moon.angularRadius
+    val phase = when {
+        !overlap -> SolarEclipsePhase.None
+        moon.angularRadius >= sun.angularRadius &&
+            separation <= moon.angularRadius - sun.angularRadius -> SolarEclipsePhase.Total
+        sun.angularRadius > moon.angularRadius &&
+            separation <= sun.angularRadius - moon.angularRadius -> SolarEclipsePhase.Annular
+        else -> SolarEclipsePhase.Partial
+    }
+    val obscuration = if (phase == SolarEclipsePhase.None) {
+        0.0
+    } else {
+        discObscuration(
+            sun.angularRadius,
+            moon.angularRadius,
+            separation
+        ).coerceIn(0.0, 1.0)
+    }
+    val correctedSun = horizon(
+        time,
+        observer,
+        sunEquatorial.ra,
+        sunEquatorial.dec,
+        Refraction.Normal
+    )
+    return SolarEclipseState(
+        time = time,
+        sun = sun,
+        moon = moon,
+        centerSeparation = separation,
+        obscuration = obscuration,
+        phase = phase,
+        correctedSunAltitude = correctedSun.altitude
+    )
+}
+
+
 internal fun solarEclipseObscuration(hm: Vector, lo: Vector): Double {
     // Find heliocentric observer.
     val ho = hm + lo
@@ -2735,6 +2886,100 @@ fun searchGlobalSolarEclipse(startTime: Time): GlobalSolarEclipseInfo {
  */
 fun nextGlobalSolarEclipse(prevEclipseTime: Time) =
     searchGlobalSolarEclipse(prevEclipseTime.addDays(10.0))
+
+
+/**
+ * Searches backward for the global solar eclipse preceding [beforeTime].
+ */
+fun previousGlobalSolarEclipse(beforeTime: Time): GlobalSolarEclipseInfo {
+    val pruneLatitude = 1.8
+    var nmtime = beforeTime.addDays(-10.0)
+    for (nmcount in 0..11) {
+        val newmoon = searchMoonPhase(0.0, nmtime, -40.0)
+            ?: throw InternalError("Failed to find previous new moon.")
+        val eclipLat = moonEclipticLatitudeDegrees(newmoon)
+        if (abs(eclipLat) < pruneLatitude) {
+            val shadow = peakMoonShadow(newmoon)
+            if (shadow.r < shadow.p + EARTH_MEAN_RADIUS_KM)
+                return geoidIntersect(shadow)
+        }
+        nmtime = newmoon.addDays(-10.0)
+    }
+    throw InternalError("Failure to find previous global solar eclipse.")
+}
+
+
+/**
+ * Finds the worldwide first and last penumbral contact for [event].
+ */
+fun globalSolarEclipseWindow(event: GlobalSolarEclipseInfo): GlobalSolarEclipseWindow {
+    val searchSpanDays = 0.5
+    val contactFunction = { time: Time ->
+        val shadow = moonShadow(time)
+        shadow.p + EARTH_MEAN_RADIUS_KM - shadow.r
+    }
+    val start = search(
+        event.peak.addDays(-searchSpanDays),
+        event.peak,
+        1.0,
+        SearchContext { time -> contactFunction(time) }
+    ) ?: throw InternalError("Failed to find global solar eclipse start.")
+    val end = search(
+        event.peak,
+        event.peak.addDays(searchSpanDays),
+        1.0,
+        SearchContext { time -> -contactFunction(time) }
+    ) ?: throw InternalError("Failed to find global solar eclipse end.")
+    return GlobalSolarEclipseWindow(event, start, end)
+}
+
+
+/**
+ * Returns a representative point in the Moon's shadow at [time], or `null`
+ * when the penumbra does not touch the Earth.
+ */
+fun solarEclipseShadowPoint(time: Time): SolarEclipseShadowPoint? {
+    val shadow = moonShadow(time)
+    if (shadow.r >= shadow.p + EARTH_MEAN_RADIUS_KM)
+        return null
+
+    val central = geoidIntersect(shadow)
+    if (central.latitude.isFinite() && central.longitude.isFinite()) {
+        return SolarEclipseShadowPoint(
+            time,
+            central.latitude,
+            central.longitude,
+            true
+        )
+    }
+
+    // Work in the same equator-of-date, dilated-Earth coordinate system used
+    // by geoidIntersect. The closest point on the spherical geoid to the shadow
+    // axis gives a stable and useful map target for a partial eclipse.
+    val rot = rotationEqjEqd(time)
+    val axis = kmSpherical(rot.rotate(shadow.dir))
+    val earth = kmSpherical(rot.rotate(shadow.target))
+    val u = (axis dot earth) / (axis dot axis)
+    val nearest = (u * axis) - earth
+    val length = nearest.length()
+    if (!length.isFinite() || length <= 0.0)
+        return null
+
+    val scale = EARTH_EQUATORIAL_RADIUS_KM / length
+    val px = nearest.x * scale
+    val py = nearest.y * scale
+    val pz = nearest.z * scale * EARTH_FLATTENING
+    val proj = hypot(px, py) * EARTH_FLATTENING_SQUARED
+    val latitude = if (proj == 0.0) {
+        if (pz > 0.0) 90.0 else -90.0
+    } else {
+        datan(pz / proj)
+    }
+    val longitude = (
+        (datan2(py, px) - 15.0 * siderealTime(time)) % 360.0
+    ).withMaxDegreeValue(180.0)
+    return SolarEclipseShadowPoint(time, latitude, longitude, false)
+}
 
 
 /**

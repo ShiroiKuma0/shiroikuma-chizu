@@ -77,15 +77,15 @@
 
 				</LinearLayout>
 
-				<LinearLayout
+				<androidx.gridlayout.widget.GridLayout
 					android:id="@+id/topButtonsRow"
 					android:layout_width="match_parent"
 					android:layout_height="wrap_content"
-					android:baselineAligned="false"
-					android:orientation="horizontal"
 					android:paddingHorizontal="10dp"
 					android:paddingTop="9dp"
-					android:paddingBottom="16dp">
+					android:paddingBottom="4dp"
+					app:columnCount="2"
+					app:useDefaultMargins="false">
 
 					<include
 						android:id="@+id/button_3d"
@@ -93,7 +93,8 @@
 						android:layout_width="0dp"
 						android:layout_height="66dp"
 						android:layout_marginHorizontal="6dp"
-						android:layout_weight="1" />
+						android:layout_marginBottom="12dp"
+						app:layout_columnWeight="1" />
 
 					<include
 						android:id="@+id/button_map"
@@ -101,7 +102,8 @@
 						android:layout_width="0dp"
 						android:layout_height="66dp"
 						android:layout_marginHorizontal="6dp"
-						android:layout_weight="1" />
+						android:layout_marginBottom="12dp"
+						app:layout_columnWeight="1" />
 
 					<include
 						android:id="@+id/button_red_filter"
@@ -109,9 +111,19 @@
 						android:layout_width="0dp"
 						android:layout_height="66dp"
 						android:layout_marginHorizontal="6dp"
-						android:layout_weight="1" />
+						android:layout_marginBottom="12dp"
+						app:layout_columnWeight="1" />
 
-				</LinearLayout>
+					<include
+						android:id="@+id/button_solar_eclipse"
+						layout="@layout/action_tile_card"
+						android:layout_width="0dp"
+						android:layout_height="66dp"
+						android:layout_marginHorizontal="6dp"
+						android:layout_marginBottom="12dp"
+						app:layout_columnWeight="1" />
+
+				</androidx.gridlayout.widget.GridLayout>
 
 				<View
 					android:id="@+id/dividerTop"
