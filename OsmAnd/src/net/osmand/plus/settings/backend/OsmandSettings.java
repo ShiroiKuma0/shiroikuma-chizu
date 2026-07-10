@@ -3391,9 +3391,12 @@ public class OsmandSettings {
 			new IntPreference(this, "live_updates_retryes", 2).makeGlobal();
 
 	// UI boxes
+	@Deprecated
 	private final CommonPreference<Boolean> TRANSPARENT_MAP_THEME =
 			new BooleanPreference(this, "transparent_map_theme", false).makeProfile();
 
+
+	@Deprecated
 	public CommonPreference<Boolean> getTransparentMapThemePreference(@Nullable ScreenLayoutMode layoutMode){
 		return getLayoutPreference(TRANSPARENT_MAP_THEME, layoutMode);
 	}
