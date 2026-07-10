@@ -1231,7 +1231,6 @@
     <string name="activate_srtm_plugin">Favor ativar o complemento \"Topologia\"</string>
     <string name="later">Depois</string>
     <string name="downloads">Transferências</string>
-    <string name="confirm_download_roadmaps">O mapa somente de estradas não é necessário, pois você tem o mapa padrão (completo). Baixar mesmo assim\?</string>
     <string name="value_downloaded_of_max">%1$.1f de %2$.1f MB</string>
     <string name="file_size_in_mb">%.1f MB</string>
     <string name="update_all">Atualizar tudo (%1$s MB)</string>

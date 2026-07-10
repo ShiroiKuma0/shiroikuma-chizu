@@ -1232,7 +1232,6 @@
     <string name="show_free_version_banner">Banner der kostenlosen Version anzeigen</string>
     <string name="activate_seamarks_plugin">Bitte die Erweiterung „Seekarte“ aktivieren</string>
     <string name="activate_srtm_plugin">Bitte die Erweiterung „Topografie“ aktivieren</string>
-    <string name="confirm_download_roadmaps">Die reine Straßenkarte wird nicht benötigt, da Sie die Standardkarte haben. Trotzdem herunterladen?</string>
     <string name="value_downloaded_of_max">%1$.1f von %2$.1f MB</string>
     <string name="update_all">Alles aktualisieren (%1$s MB)</string>
     <string name="save_poi_without_poi_type_message">POI wirklich ohne Typ speichern\?</string>

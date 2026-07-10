@@ -5545,7 +5545,6 @@ Download tile maps directly, or copy them as SQLite database files to OsmAnd\'s 
     <string name="activate_srtm_plugin">Please activate the \'Topography\' plugin</string>
     <string name="later">Later</string>
     <string name="downloads">Downloads</string>
-    <string name="confirm_download_roadmaps">The roads-only map is not needed, since you have the standard (full) map. Download it anyway?</string>
     <string name="value_downloaded_of_max">%1$.1f of %2$.1f MB</string>
     <string name="file_size_in_mb">%.1f MB</string>
     <string name="update_all">Update all (%1$s MB)</string>
