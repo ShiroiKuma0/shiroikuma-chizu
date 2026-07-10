@@ -219,8 +219,8 @@ public class SpatialSearchResult implements Comparable<SpatialSearchResult> {
 	
 	public static class SpatialSearchResultRef {
 		static final int MAX_TYPE_ORDER = 5;
-		NameIndexAtom atom;
-		List<SpatialSearchToken> tokens = new ArrayList<>();
+		public NameIndexAtom atom;
+		public final List<SpatialSearchToken> tokens = new ArrayList<>();
 		
 		public SpatialSearchResultRef(NameIndexAtom atom) {
 			this.atom = atom;

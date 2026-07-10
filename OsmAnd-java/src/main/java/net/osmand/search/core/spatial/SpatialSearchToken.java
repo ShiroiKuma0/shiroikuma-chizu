@@ -460,11 +460,11 @@ public class SpatialSearchToken {
 		final long id; // used to read object
 		final long parentid; // used to read object
 		
-		MapObject object; // same for all
-		MapObject bldObject; // same for all
+		public MapObject object; // same for all
+		public MapObject bldObject; // same for all
 		
 		int otherWordsCnt; // added before intersection
-		int otherFoundCnt;
+		public int otherFoundCnt;
 		
 		int indexInToken;
 		final boolean cityAsStreet;
@@ -540,7 +540,7 @@ public class SpatialSearchToken {
 			return type == POI_TYPE;
 		}
 
-		String typeStr() {
+		public String typeStr() {
 			String typeS = "";
 			if (isPoiCategory()) {
 				typeS = "POI_TYPE";
