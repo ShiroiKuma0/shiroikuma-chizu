@@ -7,9 +7,12 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import io.github.cosinekitty.astronomy.EclipseKind
 import io.github.cosinekitty.astronomy.GlobalSolarEclipseInfo
 import io.github.cosinekitty.astronomy.GlobalSolarEclipseWindow
 import io.github.cosinekitty.astronomy.Observer
+import io.github.cosinekitty.astronomy.SolarEclipseMapFrame
+import io.github.cosinekitty.astronomy.SolarEclipseMapTrack
 import io.github.cosinekitty.astronomy.SolarEclipseShadowPoint
 import io.github.cosinekitty.astronomy.SolarEclipseState
 import io.github.cosinekitty.astronomy.Time
@@ -17,7 +20,8 @@ import io.github.cosinekitty.astronomy.globalSolarEclipseWindow
 import io.github.cosinekitty.astronomy.nextGlobalSolarEclipse
 import io.github.cosinekitty.astronomy.previousGlobalSolarEclipse
 import io.github.cosinekitty.astronomy.searchGlobalSolarEclipse
-import io.github.cosinekitty.astronomy.solarEclipseShadowPoint
+import io.github.cosinekitty.astronomy.solarEclipseMapFrame
+import io.github.cosinekitty.astronomy.solarEclipseMapTrack
 import io.github.cosinekitty.astronomy.solarEclipseState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +49,10 @@ data class SolarEclipseModeState(
 	val localState: SolarEclipseState? = null,
 	val error: Boolean = false,
 	val navigationDirection: SolarEclipseNavigationDirection = SolarEclipseNavigationDirection.Initial,
+	val trackLoading: Boolean = false,
+	val track: SolarEclipseMapTrack? = null,
+	val trackError: Boolean = false,
+	val mapFrame: SolarEclipseMapFrame? = null,
 	val mapRequestId: Long = 0L,
 	val mapLoading: Boolean = false,
 	val shadowPoint: SolarEclipseShadowPoint? = null,
@@ -79,9 +87,13 @@ class StarObjectsViewModel(
 	private var eclipseSearchJob: Job? = null
 	private var eclipseLocalStateJob: Job? = null
 	private var eclipseMapJob: Job? = null
+	private var eclipseTrackJob: Job? = null
+	private var eclipseFrameJob: Job? = null
 	private var eclipseRequestId = 0L
 	private var eclipseMapRequestId = 0L
 	private var eclipseLocalRequestId = 0L
+	private var eclipseFrameRequestId = 0L
+	private val eclipseTrackCache = mutableMapOf<Double, SolarEclipseMapTrack>()
 
 	class Factory(
 		private val application: Application,
@@ -260,6 +272,7 @@ class StarObjectsViewModel(
 			mapError = false
 		)
 		calculateLocalEclipseState(state.observer, clamped)
+		calculateSolarEclipseMapFrame(clamped)
 	}
 
 	fun updateSolarEclipseObserver(observer: Observer) {
@@ -276,6 +289,18 @@ class StarObjectsViewModel(
 		if (!state.active || state.mapLoading || time.ut !in window.start.ut..window.end.ut) return
 
 		val requestId = ++eclipseMapRequestId
+		val readyPoint = state.mapFrame
+			?.takeIf { it.time.ut == time.ut }
+			?.shadowPoint
+		if (readyPoint != null) {
+			_solarEclipseModeState.value = state.copy(
+				mapRequestId = requestId,
+				mapLoading = false,
+				shadowPoint = readyPoint,
+				mapError = false
+			)
+			return
+		}
 		eclipseMapJob?.cancel()
 		_solarEclipseModeState.value = state.copy(
 			mapRequestId = requestId,
@@ -285,13 +310,18 @@ class StarObjectsViewModel(
 		)
 		eclipseMapJob = viewModelScope.launch {
 			try {
-				val point = withContext(Dispatchers.Default) { solarEclipseShadowPoint(time) }
+				val includeFootprint = state.event?.kind == EclipseKind.Partial
+				val frame = withContext(Dispatchers.Default) {
+					solarEclipseMapFrame(time, includeFootprint)
+				}
+				val point = frame.shadowPoint
 				if (requestId != eclipseMapRequestId) return@launch
 				val latest = _solarEclipseModeState.value ?: return@launch
 				_solarEclipseModeState.value = latest.copy(
 					mapLoading = false,
 					shadowPoint = point,
-					mapError = point == null
+					mapError = point == null,
+					mapFrame = frame
 				)
 			} catch (e: CancellationException) {
 				throw e
@@ -316,9 +346,12 @@ class StarObjectsViewModel(
 		eclipseRequestId++
 		eclipseMapRequestId++
 		eclipseLocalRequestId++
+		eclipseFrameRequestId++
 		eclipseSearchJob?.cancel()
 		eclipseLocalStateJob?.cancel()
 		eclipseMapJob?.cancel()
+		eclipseTrackJob?.cancel()
+		eclipseFrameJob?.cancel()
 		_solarEclipseModeState.value = SolarEclipseModeState()
 	}
 
@@ -330,6 +363,9 @@ class StarObjectsViewModel(
 		val requestId = ++eclipseRequestId
 		eclipseSearchJob?.cancel()
 		eclipseLocalStateJob?.cancel()
+		eclipseFrameRequestId++
+		eclipseTrackJob?.cancel()
+		eclipseFrameJob?.cancel()
 		eclipseMapRequestId++
 		eclipseMapJob?.cancel()
 		val previous = _solarEclipseModeState.value ?: SolarEclipseModeState()
@@ -342,7 +378,11 @@ class StarObjectsViewModel(
 			navigationDirection = direction,
 			shadowPoint = null,
 			mapLoading = false,
-			mapError = false
+			mapError = false,
+			trackLoading = false,
+			track = null,
+			trackError = false,
+			mapFrame = null
 		)
 
 		eclipseSearchJob = viewModelScope.launch {
@@ -360,9 +400,12 @@ class StarObjectsViewModel(
 					event = result.event,
 					window = result.window,
 					selectedTime = result.selectedTime,
-					navigationDirection = direction
+					navigationDirection = direction,
+					trackLoading = true
 				)
 				calculateLocalEclipseState(currentObserver, result.selectedTime)
+				calculateSolarEclipseTrack(requestId, result.window)
+				calculateSolarEclipseMapFrame(result.selectedTime)
 			} catch (e: CancellationException) {
 				throw e
 			} catch (e: Exception) {
@@ -376,6 +419,69 @@ class StarObjectsViewModel(
 						navigationDirection = direction
 					)
 				}
+			}
+		}
+	}
+
+	private fun calculateSolarEclipseTrack(requestId: Long, window: GlobalSolarEclipseWindow) {
+		val cached = eclipseTrackCache[window.event.peak.ut]
+		if (cached != null) {
+			val state = _solarEclipseModeState.value ?: return
+			if (state.requestId == requestId && state.event?.peak?.ut == window.event.peak.ut) {
+				_solarEclipseModeState.value = state.copy(
+					trackLoading = false,
+					track = cached,
+					trackError = false
+				)
+			}
+			return
+		}
+		eclipseTrackJob?.cancel()
+		eclipseTrackJob = viewModelScope.launch {
+			try {
+				val track = withContext(Dispatchers.Default) { solarEclipseMapTrack(window) }
+				val latest = _solarEclipseModeState.value ?: return@launch
+				if (latest.requestId != requestId || latest.event?.peak?.ut != window.event.peak.ut) {
+					return@launch
+				}
+				eclipseTrackCache[window.event.peak.ut] = track
+				_solarEclipseModeState.value = latest.copy(
+					trackLoading = false,
+					track = track,
+					trackError = false
+				)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				LOG.error("Unable to calculate a solar eclipse map track", e)
+				val latest = _solarEclipseModeState.value ?: return@launch
+				if (latest.requestId == requestId) {
+					_solarEclipseModeState.value = latest.copy(
+						trackLoading = false,
+						trackError = true
+					)
+				}
+			}
+		}
+	}
+
+	private fun calculateSolarEclipseMapFrame(time: Time) {
+		val requestId = ++eclipseFrameRequestId
+		val includeFootprint = _solarEclipseModeState.value?.event?.kind == EclipseKind.Partial
+		eclipseFrameJob?.cancel()
+		eclipseFrameJob = viewModelScope.launch {
+			try {
+				val frame = withContext(Dispatchers.Default) {
+					solarEclipseMapFrame(time, includeFootprint)
+				}
+				if (requestId != eclipseFrameRequestId) return@launch
+				val latest = _solarEclipseModeState.value ?: return@launch
+				if (!latest.active || latest.selectedTime?.ut != time.ut) return@launch
+				_solarEclipseModeState.value = latest.copy(mapFrame = frame)
+			} catch (e: CancellationException) {
+				throw e
+			} catch (e: Exception) {
+				LOG.error("Unable to calculate a solar eclipse map frame", e)
 			}
 		}
 	}
