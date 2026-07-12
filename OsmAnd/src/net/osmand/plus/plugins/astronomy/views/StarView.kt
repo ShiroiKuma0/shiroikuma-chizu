@@ -387,7 +387,9 @@ class StarView @JvmOverloads constructor(
 		azimuth: Double,
 		altitude: Double,
 		targetViewAngle: Double? = null,
-		resetPan: Boolean = false
+		resetPan: Boolean = false,
+		targetPanX: Float? = null,
+		targetPanY: Float? = null
 	) {
 		val startAz = azimuthCenter
 		val startAlt = altitudeCenter
@@ -395,6 +397,8 @@ class StarView @JvmOverloads constructor(
 		val finalAngle = targetViewAngle?.let { clampViewAngle(it) }
 		val startPanX = panX
 		val startPanY = panY
+		val finalPanX = targetPanX ?: if (resetPan) 0f else startPanX
+		val finalPanY = targetPanY ?: if (resetPan) 0f else startPanY
 		val targetAlt = max(-90.0, min(90.0, altitude))
 
 		visualAnimator?.cancel()
@@ -408,9 +412,9 @@ class StarView @JvmOverloads constructor(
 				if (finalAngle != null) {
 					setViewAngleDirect(startAngle + (finalAngle - startAngle) * fraction)
 				}
-				if (resetPan) {
-					panX = startPanX * (1f - fraction)
-					panY = startPanY * (1f - fraction)
+				if (resetPan || targetPanX != null || targetPanY != null) {
+					panX = startPanX + (finalPanX - startPanX) * fraction
+					panY = startPanY + (finalPanY - startPanY) * fraction
 				}
 				invalidate()
 			}
@@ -450,25 +454,43 @@ class StarView @JvmOverloads constructor(
 	fun showTimeAndFocusObject(
 		time: Time,
 		obj: SkyObject,
-		targetViewAngle: Double = SOLAR_ECLIPSE_VIEW_ANGLE
+		targetViewAngle: Double = SOLAR_ECLIPSE_VIEW_ANGLE,
+		targetX: Float = width / 2f,
+		targetY: Float = height / 2f
 	) {
 		visualAnimator?.cancel()
 		setDateTime(time, animate = false)
 		calculatePosition(obj, time, updateTargets = false, force = true)
-		animateTo(obj.azimuth, obj.altitude, targetViewAngle, resetPan = true)
+		animateTo(
+			obj.azimuth,
+			obj.altitude,
+			targetViewAngle,
+			resetPan = true,
+			targetPanX = targetX - width / 2f,
+			targetPanY = targetY - height / 2f
+		)
 	}
 
-	fun showTimeAndCenterObject(time: Time, obj: SkyObject) {
+	fun showTimeAndCenterObject(
+		time: Time,
+		obj: SkyObject,
+		targetX: Float = width / 2f,
+		targetY: Float = height / 2f
+	) {
 		visualAnimator?.cancel()
 		setDateTime(time, animate = false)
-		centerObject(obj)
+		centerObject(obj, targetX, targetY)
 	}
 
-	fun centerObject(obj: SkyObject) {
+	fun centerObject(
+		obj: SkyObject,
+		targetX: Float = width / 2f,
+		targetY: Float = height / 2f
+	) {
 		visualAnimator?.cancel()
 		calculatePosition(obj, currentTime, updateTargets = false, force = true)
-		panX = 0f
-		panY = 0f
+		panX = targetX - width / 2f
+		panY = targetY - height / 2f
 		azimuthCenter = obj.azimuth
 		altitudeCenter = obj.altitude.coerceIn(-90.0, 90.0)
 		invalidate()

@@ -2126,7 +2126,11 @@ data class SolarEclipseMapBounds(
 )
 
 
-/** The full central path of a total or annular solar eclipse. */
+/**
+ * Map track of a total or annular eclipse. The filled corridor is limited to
+ * the central phase; the center line follows the representative shadow point
+ * throughout the complete global eclipse window.
+ */
 data class SolarEclipseMapTrack(
     val corridorPolygons: List<List<SolarEclipseMapCoordinate>>,
     val centerLineSegments: List<List<SolarEclipseMapCoordinate>>,
@@ -3218,6 +3222,15 @@ private fun eclipseTrackSample(time: Time): EclipseTrackSample? {
 }
 
 
+private fun eclipseShadowTrackSample(time: Time): EclipseTrackSample? {
+    val shadowPoint = solarEclipseShadowPoint(time) ?: return null
+    return EclipseTrackSample(
+        time,
+        SolarEclipseMapCoordinate(shadowPoint.latitude, shadowPoint.longitude)
+    )
+}
+
+
 private fun refineEclipseContact(outside: Time, inside: Time): Time {
     var outer = outside
     var inner = inside
@@ -3280,6 +3293,34 @@ private fun appendAdaptiveTrackSamples(
     if (seconds > 30.0 || directDistance > 50.0 || pathDistance - directDistance > 1.0) {
         appendAdaptiveTrackSamples(start, middle, output, depth + 1)
         appendAdaptiveTrackSamples(middle, end, output, depth + 1)
+    } else {
+        output.add(end)
+    }
+}
+
+
+private fun appendAdaptiveShadowTrackSamples(
+    start: EclipseTrackSample,
+    end: EclipseTrackSample,
+    output: MutableList<EclipseTrackSample>,
+    depth: Int = 0
+) {
+    val seconds = (end.time.ut - start.time.ut) * SECONDS_PER_DAY
+    if (seconds <= 5.0 || depth >= 16) {
+        output.add(end)
+        return
+    }
+    val middle = eclipseShadowTrackSample(Time((start.time.ut + end.time.ut) / 2.0))
+    if (middle == null) {
+        output.add(end)
+        return
+    }
+    val directDistance = eclipseDistanceKm(start.center, end.center)
+    val pathDistance = eclipseDistanceKm(start.center, middle.center) +
+        eclipseDistanceKm(middle.center, end.center)
+    if (seconds > 30.0 || directDistance > 50.0 || pathDistance - directDistance > 1.0) {
+        appendAdaptiveShadowTrackSamples(start, middle, output, depth + 1)
+        appendAdaptiveShadowTrackSamples(middle, end, output, depth + 1)
     } else {
         output.add(end)
     }
@@ -3420,7 +3461,7 @@ private fun eclipseMapBounds(points: List<SolarEclipseMapCoordinate>): SolarEcli
 
 
 /**
- * Calculates the full central path of a total or annular solar eclipse.
+ * Calculates the map track of a total or annular solar eclipse.
  * Partial eclipses return an empty track because they have no umbral/antumbral corridor.
  */
 fun solarEclipseMapTrack(window: GlobalSolarEclipseWindow): SolarEclipseMapTrack {
@@ -3437,6 +3478,14 @@ fun solarEclipseMapTrack(window: GlobalSolarEclipseWindow): SolarEclipseMapTrack
     if (samples.size < 2)
         return SolarEclipseMapTrack(emptyList(), emptyList(), null)
 
+    val contactInsetDays = 1.0 / SECONDS_PER_DAY
+    val shadowStartTime = Time(min(window.end.ut, window.start.ut + contactInsetDays))
+    val shadowEndTime = Time(max(window.start.ut, window.end.ut - contactInsetDays))
+    val shadowFirst = eclipseShadowTrackSample(shadowStartTime) ?: first
+    val shadowLast = eclipseShadowTrackSample(shadowEndTime) ?: last
+    val shadowSamples = mutableListOf(shadowFirst)
+    appendAdaptiveShadowTrackSamples(shadowFirst, shadowLast, shadowSamples)
+
     val left = mutableListOf<SolarEclipseMapCoordinate>()
     val right = mutableListOf<SolarEclipseMapCoordinate>()
     samples.forEachIndexed { index, sample ->
@@ -3450,11 +3499,11 @@ fun solarEclipseMapTrack(window: GlobalSolarEclipseWindow): SolarEclipseMapTrack
         right.add(eclipseConeBoundary(sample.center, bearing + 90.0, cone))
     }
     val corridor = left + right.asReversed()
-    val allPoints = corridor + samples.map { it.center }
+    val centerLine = shadowSamples.map { it.center }
     return SolarEclipseMapTrack(
         corridorPolygons = splitEclipsePolygonAtAntimeridian(corridor),
-        centerLineSegments = splitEclipseLineAtAntimeridian(samples.map { it.center }),
-        bounds = eclipseMapBounds(allPoints)
+        centerLineSegments = splitEclipseLineAtAntimeridian(centerLine),
+        bounds = eclipseMapBounds(corridor)
     )
 }
 

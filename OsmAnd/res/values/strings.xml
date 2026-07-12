@@ -11,6 +11,10 @@
 	Strings for OsmAnd core
 	Thx - Hardy
 -->
+	<string name="astro_fit_eclipse_path">Fit eclipse path</string>
+	<string name="astro_show_map">Show map</string>
+	<string name="astro_hide_map">Hide map</string>
+	<string name="astro_map_center_location">Map center: %1$s</string>
 	<string name="astro_solar_eclipse">Solar eclipse</string>
 	<string name="astro_previous_solar_eclipse">Previous solar eclipse</string>
 	<string name="astro_next_solar_eclipse">Next solar eclipse</string>
@@ -32,8 +36,6 @@
 	<string name="astro_eclipse_start">Start</string>
 	<string name="astro_eclipse_maximum">Maximum</string>
 	<string name="astro_eclipse_end">End</string>
-	<string name="astro_show_eclipse_on_map">Show eclipse on map</string>
-	<string name="astro_hide_eclipse_map">Hide eclipse map</string>
 	<string name="astro_show_eclipse_on_map_loading">Finding eclipse shadow…</string>
 	<string name="astro_eclipse_map_error">The eclipse shadow is unavailable at this time.</string>
 	<string name="astro_eclipse_safety_warning">Never look directly at the Sun without appropriate solar-viewing protection. Eclipse times are estimates.</string>
