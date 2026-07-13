@@ -450,6 +450,11 @@ public class DataStorageFragment extends BaseSettingsFragment implements FilesCo
 
 	private boolean checkWritable(@NonNull File dir, boolean testWrite) {
 		String error = FileUtils.getWriteError(dir, testWrite);
+		// shiroikuma fork: usually a missing "All files access" grant — open the toggle
+		if (error != null && net.osmand.plus.chizu.ChizuStorage.requestAllFilesAccessIfNeeded(app)) {
+			app.showToastMessage(R.string.chizu_grant_all_files_access);
+			return false;
+		}
 		if (error != null) {
 			Context ctx = getContext();
 			if (ctx != null) {
