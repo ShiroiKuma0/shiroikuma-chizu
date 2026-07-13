@@ -22,6 +22,16 @@ apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 //        </unzip>
 // Less important
 
+// --- shiroikuma fork: signing from gitignored keystore.properties + per-build version tail ---
+// forkVersionName = "<upstreamBase>+N", forkVersionCode = <upstreamCode>*10000 + N,
+// where N = BUILD_NUMBER from the root gradle.properties (bumped by buildApk, reset to 1 on upstream sync).
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+	keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+def forkBuildNumber = (project.findProperty("BUILD_NUMBER") ?: "1").toString().trim().toInteger()
+
 android {
 	signingConfigs {
 		development {
@@ -36,6 +46,16 @@ android {
 			storePassword System.getenv("OSMAND_APK_PASSWORD")
 			keyAlias "osmand"
 			keyPassword System.getenv("OSMAND_APK_PASSWORD")
+		}
+
+		// shiroikuma fork release signing (keystore.properties -> ~/.android-keystores/shiroikuma-chizu.jks)
+		fork {
+			if (keystorePropertiesFile.exists()) {
+				storeFile file(keystoreProperties.getProperty("storeFile"))
+				storePassword keystoreProperties.getProperty("storePassword")
+				keyAlias keystoreProperties.getProperty("keyAlias")
+				keyPassword keystoreProperties.getProperty("keyPassword")
+			}
 		}
 	}
 
@@ -56,6 +76,10 @@ android {
 		versionName "5.4.0"
 		versionName System.getenv("APK_VERSION")? System.getenv("APK_VERSION").toString(): versionName
 		versionName System.getenv("APK_VERSION_SUFFIX")? versionName + System.getenv("APK_VERSION_SUFFIX").toString(): versionName
+		// shiroikuma fork: per-build version tail (keep AFTER the upstream lines above so their
+		// literals track upstream on rebase; ours just multiply/append)
+		versionCode versionCode * 10000 + forkBuildNumber
+		versionName versionName + "+" + forkBuildNumber
 	}
 
 	lintOptions {
@@ -126,8 +150,9 @@ android {
 		}
 		androidFull {
 			dimension "version"
-			applicationId "net.osmand.plus"
-			resValue "string", "app_name", "OsmAnd~"
+			// shiroikuma fork: side-by-side install identity (namespace stays net.osmand.plus)
+			applicationId "shiroikuma.chizu"
+			resValue "string", "app_name", "白い熊 地図"
 			resValue "string", "app_edition", System.getenv("APP_EDITION") ? System.getenv("APP_EDITION") : ""
 		}
 		gplayFree {
@@ -164,7 +189,8 @@ android {
 			signingConfig signingConfigs.development
 		}
 		release {
-			signingConfig signingConfigs.publishing
+			// shiroikuma fork: sign with our keystore when keystore.properties exists
+			signingConfig keystorePropertiesFile.exists() ? signingConfigs.fork : signingConfigs.publishing
 			minifyEnabled true
 			shrinkResources false
 			proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -269,5 +295,35 @@ afterEvaluate {
 		dependencies.add("openglImplementation", "net.osmand:OsmAndCore_android:${remoteAarSnapshot}@aar")
 		dependencies.add("opengldebugImplementation", "net.osmand:OsmAndCore_androidNativeDebug:${remoteAarSnapshot}@aar")
 		dependencies.add("opengldebugImplementation", "net.osmand:OsmAndCore_android:${remoteAarSnapshot}@aar")
+	}
+}
+
+// --- shiroikuma fork: build entry point ---
+// Builds the signed release APK (androidFull + opengl + arm64), copies it to
+// ~/tmp/shiroikuma-chizu_<versionName>_arm64-v8a.apk, and bumps BUILD_NUMBER in the
+// root gradle.properties so the next build is the next +N. See .claude/skills/build-apk.
+tasks.register('buildApk') {
+	group = 'build'
+	description = 'Build the signed release APK, copy it to ~/tmp, and bump BUILD_NUMBER for next time.'
+	dependsOn 'assembleAndroidFullOpenglArm64Release'
+	doLast {
+		def versionNameNow = android.defaultConfig.versionName
+		def versionCodeNow = android.defaultConfig.versionCode
+		def apkName = "shiroikuma-chizu_${versionNameNow}_arm64-v8a.apk"
+		def outputDir = layout.buildDirectory.dir("outputs/apk/androidFullOpenglArm64/release").get().asFile
+		def targetDir = new File(System.getProperty("user.home"), "tmp")
+		targetDir.mkdirs()
+		def apk = outputDir.listFiles({ File dir, String name -> name.endsWith(".apk") } as FilenameFilter)?.find { true }
+		if (apk == null) {
+			throw new GradleException("No APK found in ${outputDir}")
+		}
+		def targetFile = new File(targetDir, apkName)
+		java.nio.file.Files.copy(apk.toPath(), targetFile.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+		println("\033[1;36m>>> ${targetFile.absolutePath}\033[0m")
+		println("\033[1;36m>>> versionCode ${versionCodeNow}\033[0m")
+		// Auto-increment BUILD_NUMBER for the next build.
+		def propsFile = rootProject.file("gradle.properties")
+		def currentBuildNumber = forkBuildNumber
+		propsFile.text = propsFile.text.replace("BUILD_NUMBER=${currentBuildNumber}", "BUILD_NUMBER=${currentBuildNumber + 1}")
 	}
 }
