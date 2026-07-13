@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+	android:id="@+id/chizu_root"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:orientation="vertical"
+	android:clickable="true"
+	android:focusable="true">
+
+	<LinearLayout
+		android:id="@+id/chizu_toolbar"
+		android:layout_width="match_parent"
+		android:layout_height="52dp"
+		android:orientation="horizontal"
+		android:gravity="center_vertical">
+
+		<ImageView
+			android:id="@+id/chizu_back"
+			android:layout_width="48dp"
+			android:layout_height="48dp"
+			android:padding="12dp"
+			android:src="@drawable/ic_arrow_back"
+			android:background="?attr/selectableItemBackgroundBorderless"
+			android:contentDescription="@string/shared_string_back" />
+
+		<TextView
+			android:id="@+id/chizu_title"
+			android:layout_width="0dp"
+			android:layout_height="wrap_content"
+			android:layout_weight="1"
+			android:textSize="19sp"
+			android:textStyle="bold"
+			android:text="@string/chizu_ui_title" />
+	</LinearLayout>
+
+	<View
+		android:id="@+id/chizu_toolbar_rule"
+		android:layout_width="match_parent"
+		android:layout_height="2dp" />
+
+	<ScrollView
+		android:id="@+id/scroll_view"
+		android:layout_width="match_parent"
+		android:layout_height="match_parent"
+		android:fillViewport="true">
+
+		<LinearLayout
+			android:id="@+id/chizu_holder"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:orientation="vertical"
+			android:paddingBottom="24dp" />
+	</ScrollView>
+</LinearLayout>

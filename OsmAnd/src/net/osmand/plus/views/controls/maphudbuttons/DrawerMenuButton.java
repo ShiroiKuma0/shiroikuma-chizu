@@ -37,6 +37,11 @@ public class DrawerMenuButton extends MapButton {
 				mapActivity.openDrawer();
 			}
 		});
+		// shiroikuma fork: long-press opens the 白い熊 地図 UI page directly
+		setOnLongClickListener(v -> {
+			net.osmand.plus.chizu.ChizuUiFragment.showInstance(mapActivity);
+			return true;
+		});
 	}
 
 	@Nullable

@@ -4,6 +4,20 @@
 	xmlns:tools="http://schemas.android.com/tools"
 	android:title="@string/shared_string_settings">
 
+	<!-- shiroikuma fork: the 白い熊 地図 UI page -->
+	<Preference
+		android:key="chizu_ui"
+		android:layout="@layout/preference_with_descr"
+		android:persistent="false"
+		android:summary="@string/chizu_ui_descr"
+		android:title="@string/chizu_ui_title"
+		android:icon="@drawable/ic_action_appearance"
+		app:fragment="net.osmand.plus.chizu.ChizuUiFragment" />
+
+	<Preference
+		android:layout="@layout/divider_half_item_with_background"
+		android:selectable="false" />
+
 	<Preference
 		android:key="global_settings"
 		android:layout="@layout/preference_with_descr"
