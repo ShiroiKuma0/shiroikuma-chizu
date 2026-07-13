@@ -442,7 +442,12 @@ public class DataStorageFragment extends BaseSettingsFragment implements FilesCo
 				((StorageSelectionListener) target).onStorageSelected(newStorageDirectory);
 			}
 		} else {
-			app.showToastMessage(R.string.specified_directiory_not_writeable);
+			// shiroikuma fork: usually a missing "All files access" grant — open the toggle
+			if (net.osmand.plus.chizu.ChizuStorage.requestAllFilesAccessIfNeeded(app)) {
+				app.showToastMessage(R.string.chizu_grant_all_files_access);
+			} else {
+				app.showToastMessage(R.string.specified_directiory_not_writeable);
+			}
 		}
 		refreshDataInfo();
 		updateAllSettings();
