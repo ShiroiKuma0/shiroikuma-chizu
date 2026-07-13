@@ -1658,7 +1658,7 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		starView.setObserverLocation(location.latitude, location.longitude, 0.0)
 		viewModel.updateSolarEclipseObserver(Observer(location.latitude, location.longitude, 0.0))
 		updateEclipseMapCenterLocation(location.latitude, location.longitude)
-		if (keepSunCenteredForMapMove) centerSunAtSelectedEclipseTime()
+		if (isSolarEclipseModeActive()) centerSunAtSelectedEclipseTime()
 		if (updateAzimuth && !arModeHelper.isArModeEnabled && !starView.is2DMode) {
 			setAzimuth(-tileBox.rotate.toDouble())
 		}
