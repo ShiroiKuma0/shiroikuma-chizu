@@ -3417,8 +3417,9 @@ public class OsmandSettings {
 	public static final int OSMAND_LIGHT_THEME = 1;
 	public static final int SYSTEM_DEFAULT_THEME = 2;
 
+	// shiroikuma fork: dark (black-yellow) theme by default
 	public final CommonPreference<Integer> OSMAND_THEME =
-			new IntPreference(this, "osmand_theme", isSupportSystemTheme() ? SYSTEM_DEFAULT_THEME : OSMAND_LIGHT_THEME) {
+			new IntPreference(this, "osmand_theme", OSMAND_DARK_THEME) {
 				@Override
 				public void readFromJson(JSONObject json, ApplicationMode appMode) throws JSONException {
 					Integer theme = parseString(json.getString(getId()));

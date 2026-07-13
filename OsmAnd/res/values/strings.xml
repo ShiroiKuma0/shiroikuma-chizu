@@ -5515,7 +5515,7 @@ Download tile maps directly, or copy them as SQLite database files to OsmAnd\'s 
     <string name="shared_string_card_was_hidden">Card was hidden</string>
     <string name="shared_string_undo">Undo</string>
     <string name="shared_string_skip">Skip</string>
-    <string name="app_name_osmand">OsmAnd</string>
+    <string name="app_name_osmand">白い熊 地図</string>
     <string name="tab_title_basic">Basic</string>
     <string name="tab_title_advanced">Advanced</string>
     <string name="building_number">Building Number</string>
