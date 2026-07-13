@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- shiroikuma fork: strings for the 白い熊 地図 UI page (kept in a separate file to rebase cleanly) -->
+<resources>
+	<string name="chizu_ui_title">白い熊 地図 UI</string>
+	<string name="chizu_ui_descr">Colors, fonts, sizes — the black-yellow UI</string>
+
+	<string name="chizu_section_foundation">Foundation</string>
+	<string name="chizu_section_fonts">Text &amp; fonts</string>
+	<string name="chizu_section_top_bar">Top bar</string>
+	<string name="chizu_section_map_buttons">Map buttons</string>
+	<string name="chizu_section_maintenance">Maintenance</string>
+
+	<string name="chizu_subgroup_app_font">App font</string>
+	<string name="chizu_subgroup_sizes">Sizes</string>
+	<string name="chizu_subgroup_colors">Colors</string>
+	<string name="chizu_subgroup_shape">Shape &amp; size</string>
+
+	<string name="chizu_slot_background">Background</string>
+	<string name="chizu_slot_card_background">Cards &amp; lists background</string>
+	<string name="chizu_slot_text">Text</string>
+	<string name="chizu_slot_text_secondary">Secondary text</string>
+	<string name="chizu_slot_accent">Accent</string>
+	<string name="chizu_slot_icon">Icons</string>
+	<string name="chizu_slot_divider">Borders &amp; dividers</string>
+	<string name="chizu_slot_toolbar_background">Top bar background</string>
+	<string name="chizu_slot_map_button_background">Button background</string>
+	<string name="chizu_slot_map_button_icon">Button icons</string>
+
+	<string name="chizu_font_family">Font</string>
+	<string name="chizu_font_weight">Weight</string>
+	<string name="chizu_font_system_default">System default</string>
+	<string name="chizu_font_monospace">Monospace</string>
+	<string name="chizu_font_serif">Serif</string>
+	<string name="chizu_font_add">＋ Add font (.ttf / .otf)…</string>
+	<string name="chizu_font_sample">白い熊 地図 AaGgQq 012 áčž</string>
+	<string name="chizu_font_import_failed">Could not import that font (needs .ttf or .otf)</string>
+	<string name="chizu_weight_default">Default</string>
+
+	<string name="chizu_map_text_size">Map text size</string>
+	<string name="chizu_map_button_size">Button size</string>
+	<string name="chizu_map_button_roundness">Corner roundness</string>
+	<string name="chizu_map_button_opacity">Background opacity</string>
+
+	<string name="chizu_default">Default</string>
+	<string name="chizu_reset_all">Reset everything to the black-yellow defaults</string>
+	<string name="chizu_reset_all_confirm">Reset all 白い熊 地図 UI settings?</string>
+	<string name="chizu_grant_all_files_access">Grant 白い熊 地図 “All files access”, then set the storage folder again.</string>
+	<string name="chizu_restart_note">Changes apply to screens as they are (re)opened; a few deep surfaces pick them up after an app restart.</string>
+</resources>
