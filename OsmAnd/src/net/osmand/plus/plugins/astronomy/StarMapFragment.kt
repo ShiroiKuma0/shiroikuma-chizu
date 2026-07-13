@@ -201,7 +201,10 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		val mapLatitude: Double,
 		val mapLongitude: Double,
 		val mapZoom: Int,
-		val mapZoomFloatPart: Float
+		val mapZoomFloatPart: Float,
+		val mapRatioCustom: Boolean,
+		val mapRatioX: Float,
+		val mapRatioY: Float
 	)
 
 	private val backPressedCallback = object : OnBackPressedCallback(false) {
@@ -267,6 +270,9 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		private const val STATE_ECLIPSE_MAP_LON = "eclipse_map_lon"
 		private const val STATE_ECLIPSE_MAP_ZOOM = "eclipse_map_zoom"
 		private const val STATE_ECLIPSE_MAP_ZOOM_PART = "eclipse_map_zoom_part"
+		private const val STATE_ECLIPSE_MAP_RATIO_CUSTOM = "eclipse_map_ratio_custom"
+		private const val STATE_ECLIPSE_MAP_RATIO_X = "eclipse_map_ratio_x"
+		private const val STATE_ECLIPSE_MAP_RATIO_Y = "eclipse_map_ratio_y"
 		private const val STATE_ECLIPSE_ACTIVE_CAMERA_AZ = "eclipse_active_camera_az"
 		private const val STATE_ECLIPSE_ACTIVE_CAMERA_ALT = "eclipse_active_camera_alt"
 		private const val STATE_ECLIPSE_ACTIVE_CAMERA_FOV = "eclipse_active_camera_fov"
@@ -321,7 +327,10 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 				mapLatitude = savedInstanceState.getDouble(STATE_ECLIPSE_MAP_LAT),
 				mapLongitude = savedInstanceState.getDouble(STATE_ECLIPSE_MAP_LON),
 				mapZoom = savedInstanceState.getInt(STATE_ECLIPSE_MAP_ZOOM),
-				mapZoomFloatPart = savedInstanceState.getFloat(STATE_ECLIPSE_MAP_ZOOM_PART)
+				mapZoomFloatPart = savedInstanceState.getFloat(STATE_ECLIPSE_MAP_ZOOM_PART),
+				mapRatioCustom = savedInstanceState.getBoolean(STATE_ECLIPSE_MAP_RATIO_CUSTOM),
+				mapRatioX = savedInstanceState.getFloat(STATE_ECLIPSE_MAP_RATIO_X, 0.5f),
+				mapRatioY = savedInstanceState.getFloat(STATE_ECLIPSE_MAP_RATIO_Y, 0.5f)
 			)
 			regularMapVisible = savedInstanceState.getBoolean(STATE_ECLIPSE_CURRENT_MAP_VISIBLE)
 			eclipseMapShown = savedInstanceState.getBoolean(STATE_ECLIPSE_MAP_SHOWN)
@@ -367,6 +376,9 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		outState.putDouble(STATE_ECLIPSE_MAP_LON, restore.mapLongitude)
 		outState.putInt(STATE_ECLIPSE_MAP_ZOOM, restore.mapZoom)
 		outState.putFloat(STATE_ECLIPSE_MAP_ZOOM_PART, restore.mapZoomFloatPart)
+		outState.putBoolean(STATE_ECLIPSE_MAP_RATIO_CUSTOM, restore.mapRatioCustom)
+		outState.putFloat(STATE_ECLIPSE_MAP_RATIO_X, restore.mapRatioX)
+		outState.putFloat(STATE_ECLIPSE_MAP_RATIO_Y, restore.mapRatioY)
 		val activeCamera = if (::starView.isInitialized) {
 			starView.captureCameraState()
 		} else {
@@ -757,6 +769,7 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		val mapActivity = requireMapActivity()
 		mapActivity.disableDrawer()
 		updateWidgetsVisibility(mapActivity, View.GONE)
+		if (regularMapVisible) updateRegularMapVisibility(true)
 		mapActivity.refreshMap()
 		updateBackPressedCallback()
 		updateMapControlsVisibility()
@@ -805,6 +818,7 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		arModeHelper.onPause(); cameraHelper.onPause()
 		val mapActivity = requireMapActivity()
 		mapActivity.resetMapViewPaddings()
+		eclipseRestoreState?.let { restoreEclipseMapDisplayRatio(it) }
 		mapActivity.enableDrawer()
 		updateWidgetsVisibility(mapActivity, View.VISIBLE)
 		mapActivity.refreshMap()
@@ -821,6 +835,7 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		if (::viewModel.isInitialized) {
 			astronomyPlugin.setSolarEclipseMapData(false, null, null, null, null)
 		}
+		eclipseRestoreState?.let { restoreEclipseMapDisplayRatio(it) }
 		super.onDestroyView()
 	}
 
@@ -915,6 +930,7 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 			val screenDimensions = Point(0, 0)
 			display.getSize(screenDimensions)
 			mapActivity.setMapViewPaddings(0, screenDimensions.y - bottomPadding, 0, 0)
+			applyEclipseMapDisplayRatio(bottomPadding)
 			mapActivity.refreshMap()
 		} else {
 			mainLayout.setPadding(0, 0, 0, 0)
@@ -923,6 +939,25 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		applyBottomInsets()
 		if (isSolarEclipseModeActive() && ::eclipseCard.isInitialized) {
 			eclipseCard.post { centerSunAtSelectedEclipseTime() }
+		}
+	}
+
+	private fun applyEclipseMapDisplayRatio(mapHeightPx: Int) {
+		if (!isSolarEclipseModeActive()) return
+		val tileBox = app.osmandMap.mapView.rotatedTileBox
+		if (tileBox.pixHeight <= 0) return
+		val visibleCenterY = tileBox.pixHeight - mapHeightPx / 2f
+		val ratioY = (visibleCenterY / tileBox.pixHeight).coerceIn(0f, 1f)
+		app.mapViewTrackingUtilities.mapDisplayPositionManager
+			.setCustomMapRatio(0.5f, ratioY)
+	}
+
+	private fun restoreEclipseMapDisplayRatio(restore: EclipseRestoreState) {
+		val manager = app.mapViewTrackingUtilities.mapDisplayPositionManager
+		if (restore.mapRatioCustom) {
+			manager.setCustomMapRatio(restore.mapRatioX, restore.mapRatioY)
+		} else {
+			manager.restoreMapRatio()
 		}
 	}
 
@@ -1149,6 +1184,8 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 	private fun enterSolarEclipseMode() {
 		if (eclipseRestoreState != null) return
 		val mapView = app.osmandMap.mapView
+		val displayPositionManager = app.mapViewTrackingUtilities.mapDisplayPositionManager
+		val mapRatio = displayPositionManager.mapRatio
 		val center = mapView.rotatedTileBox.centerLatLon
 		val displayedTime = viewModel.currentTime.value ?: starView.currentTime
 		eclipseRestoreState = EclipseRestoreState(
@@ -1163,7 +1200,10 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 			mapLatitude = center.latitude,
 			mapLongitude = center.longitude,
 			mapZoom = mapView.zoom,
-			mapZoomFloatPart = mapView.zoomFloatPart
+			mapZoomFloatPart = mapView.zoomFloatPart,
+			mapRatioCustom = displayPositionManager.hasCustomMapRatio(),
+			mapRatioX = mapRatio.x,
+			mapRatioY = mapRatio.y
 		)
 		if (cameraHelper.isCameraOverlayEnabled) cameraHelper.toggleCameraOverlay()
 		if (arModeHelper.isArModeEnabled) arModeHelper.toggleArMode(false)
@@ -1176,6 +1216,7 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		setTimeAutoUpdateEnabled(false)
 		eclipseCard.isVisible = true
 		timeControlCard.isVisible = false
+		if (regularMapVisible) updateRegularMapVisibility(true)
 		lastFocusedEclipseRequestId = -1L
 		updateBackPressedCallback()
 		eclipseCard.post { applyBottomInsets() }
@@ -1203,6 +1244,7 @@ class StarMapFragment : BaseFullScreenFragment(), IMapLocationListener, OsmAndLo
 		timeSelectionView.isVisible = restore.timeEditorVisible
 		updateTimeControlTheme(timeControlCard, timeControlBtn, resetTimeButton)
 		updateRegularMapVisibility(restore.regularMapVisible)
+		restoreEclipseMapDisplayRatio(restore)
 		saveCommonSettings()
 		app.osmandMap.mapView.animatedDraggingThread.startMoving(
 			restore.mapLatitude,

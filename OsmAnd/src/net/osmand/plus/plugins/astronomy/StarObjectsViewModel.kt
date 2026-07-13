@@ -93,6 +93,7 @@ class StarObjectsViewModel(
 	private var eclipseMapRequestId = 0L
 	private var eclipseLocalRequestId = 0L
 	private var eclipseFrameRequestId = 0L
+	private var pendingEclipseFrameTime: Time? = null
 	private val eclipseTrackCache = mutableMapOf<Double, SolarEclipseMapTrack>()
 
 	class Factory(
@@ -347,6 +348,7 @@ class StarObjectsViewModel(
 		eclipseMapRequestId++
 		eclipseLocalRequestId++
 		eclipseFrameRequestId++
+		pendingEclipseFrameTime = null
 		eclipseSearchJob?.cancel()
 		eclipseLocalStateJob?.cancel()
 		eclipseMapJob?.cancel()
@@ -364,6 +366,7 @@ class StarObjectsViewModel(
 		eclipseSearchJob?.cancel()
 		eclipseLocalStateJob?.cancel()
 		eclipseFrameRequestId++
+		pendingEclipseFrameTime = null
 		eclipseTrackJob?.cancel()
 		eclipseFrameJob?.cancel()
 		eclipseMapRequestId++
@@ -466,22 +469,29 @@ class StarObjectsViewModel(
 	}
 
 	private fun calculateSolarEclipseMapFrame(time: Time) {
-		val requestId = ++eclipseFrameRequestId
-		val includeFootprint = _solarEclipseModeState.value?.event?.kind == EclipseKind.Partial
-		eclipseFrameJob?.cancel()
+		++eclipseFrameRequestId
+		pendingEclipseFrameTime = time
+		if (eclipseFrameJob?.isActive == true) return
 		eclipseFrameJob = viewModelScope.launch {
-			try {
-				val frame = withContext(Dispatchers.Default) {
-					solarEclipseMapFrame(time, includeFootprint)
+			while (true) {
+				val requestedTime = pendingEclipseFrameTime ?: break
+				pendingEclipseFrameTime = null
+				val requestId = eclipseFrameRequestId
+				val includeFootprint =
+					_solarEclipseModeState.value?.event?.kind == EclipseKind.Partial
+				try {
+					val frame = withContext(Dispatchers.Default) {
+						solarEclipseMapFrame(requestedTime, includeFootprint)
+					}
+					if (requestId != eclipseFrameRequestId) continue
+					val latest = _solarEclipseModeState.value ?: continue
+					if (!latest.active || latest.selectedTime?.ut != requestedTime.ut) continue
+					_solarEclipseModeState.value = latest.copy(mapFrame = frame)
+				} catch (e: CancellationException) {
+					throw e
+				} catch (e: Exception) {
+					LOG.error("Unable to calculate a solar eclipse map frame", e)
 				}
-				if (requestId != eclipseFrameRequestId) return@launch
-				val latest = _solarEclipseModeState.value ?: return@launch
-				if (!latest.active || latest.selectedTime?.ut != time.ut) return@launch
-				_solarEclipseModeState.value = latest.copy(mapFrame = frame)
-			} catch (e: CancellationException) {
-				throw e
-			} catch (e: Exception) {
-				LOG.error("Unable to calculate a solar eclipse map frame", e)
 			}
 		}
 	}

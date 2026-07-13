@@ -69,8 +69,7 @@ class SolarEclipseMapLayer(context: Context) : OsmandMapLayer(context) {
 		val previous = state
 		state = LayerState(active, eventKey, eventKind, track, frame)
 		val staticChanged = previous.active != active || previous.eventKey != eventKey ||
-			previous.eventKind != eventKind || previous.track !== track ||
-			(eventKind == EclipseKind.Partial && previous.frame !== frame)
+			previous.eventKind != eventKind || previous.track !== track
 		if (staticChanged) nativeGeometryKey = null
 		if (!active) clearNativeCollections()
 		view?.refreshMap()
@@ -117,17 +116,7 @@ class SolarEclipseMapLayer(context: Context) : OsmandMapLayer(context) {
 	}
 
 	private fun drawCanvas(canvas: Canvas, tileBox: RotatedTileBox, current: LayerState) {
-		geometryPolygons(current).forEach { polygon ->
-			if (polygon.size < 3) return@forEach
-			val path = Path()
-			polygon.forEachIndexed { index, coordinate ->
-				val x = tileBox.getPixXFromLatLon(coordinate.latitude, coordinate.longitude)
-				val y = tileBox.getPixYFromLatLon(coordinate.latitude, coordinate.longitude)
-				if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-			}
-			path.close()
-			canvas.drawPath(path, corridorPaint)
-		}
+		drawCanvasPolygons(canvas, tileBox, current)
 		current.track?.centerLineSegments.orEmpty().forEach { line ->
 			if (line.size < 2) return@forEach
 			val path = Path()
@@ -148,6 +137,20 @@ class SolarEclipseMapLayer(context: Context) : OsmandMapLayer(context) {
 		}
 	}
 
+	private fun drawCanvasPolygons(canvas: Canvas, tileBox: RotatedTileBox, current: LayerState) {
+		geometryPolygons(current).forEach { polygon ->
+			if (polygon.size < 3) return@forEach
+			val path = Path()
+			polygon.forEachIndexed { index, coordinate ->
+				val x = tileBox.getPixXFromLatLon(coordinate.latitude, coordinate.longitude)
+				val y = tileBox.getPixYFromLatLon(coordinate.latitude, coordinate.longitude)
+				if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+			}
+			path.close()
+			canvas.drawPath(path, corridorPaint)
+		}
+	}
+
 	private fun geometryPolygons(current: LayerState): List<List<SolarEclipseMapCoordinate>> =
 		if (current.eventKind == EclipseKind.Partial) {
 			current.frame?.penumbralFootprintPolygons.orEmpty()
@@ -163,10 +166,6 @@ class SolarEclipseMapLayer(context: Context) : OsmandMapLayer(context) {
 			append(current.eventKind)
 			append(':')
 			append(current.track?.hashCode())
-			if (current.eventKind == EclipseKind.Partial) {
-				append(':')
-				append(current.frame?.time?.ut)
-			}
 		}
 		if (nativeGeometryKey != geometryKey) {
 			clearGeometryCollections()
@@ -181,6 +180,7 @@ class SolarEclipseMapLayer(context: Context) : OsmandMapLayer(context) {
 	}
 
 	private fun createPolygonCollection(current: LayerState) {
+		if (current.eventKind == EclipseKind.Partial) return
 		val polygons = geometryPolygons(current)
 		if (polygons.isEmpty()) return
 		val collection = PolygonsCollection(ZoomLevel.ZoomLevel1, ZoomLevel.ZoomLevel20)
@@ -302,7 +302,12 @@ class SolarEclipseMapLayer(context: Context) : OsmandMapLayer(context) {
 		eclipseMarker = null
 	}
 
-	override fun onDraw(canvas: Canvas, tileBox: RotatedTileBox, settings: DrawSettings) = Unit
+	override fun onDraw(canvas: Canvas, tileBox: RotatedTileBox, settings: DrawSettings) {
+		val current = state
+		if (current.active && current.eventKind == EclipseKind.Partial && mapRenderer != null) {
+			drawCanvasPolygons(canvas, tileBox, current)
+		}
+	}
 
 	override fun drawInScreenPixels(): Boolean = false
 }

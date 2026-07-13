@@ -3192,7 +3192,8 @@ private fun eclipseBearingDegrees(
 private fun eclipseConeBoundary(
     center: SolarEclipseMapCoordinate,
     bearing: Double,
-    cone: EclipseShadowConeGeometry
+    cone: EclipseShadowConeGeometry,
+    refinementIterations: Int = 20
 ): SolarEclipseMapCoordinate {
     if (!cone.contains(center))
         return center
@@ -3202,7 +3203,7 @@ private fun eclipseConeBoundary(
         low = high
         high = min(20_000.0, high * 2.0)
     }
-    repeat(20) {
+    repeat(refinementIterations) {
         val middle = (low + high) / 2.0
         if (cone.contains(eclipseDestinationPoint(center, middle, bearing))) low = middle
         else high = middle
@@ -3525,7 +3526,7 @@ fun solarEclipseMapFrame(
     }
     val footprint = if (penumbralCone?.contains(center) == true) {
         (0 until 360 step 5).map { bearing ->
-            eclipseConeBoundary(center, bearing.toDouble(), penumbralCone)
+            eclipseConeBoundary(center, bearing.toDouble(), penumbralCone, 14)
         }
     } else {
         emptyList()
