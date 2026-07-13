@@ -129,7 +129,9 @@ public class ColorUtilities {
 
 	@ColorInt
 	public static int getColor(@NonNull Context ctx, @ColorRes int colorId, float alpha) {
-		int color = ContextCompat.getColor(ctx, colorId);
+		// shiroikuma fork: 白い熊 地図 UI runtime color overrides win over the static resource
+		Integer override = net.osmand.plus.chizu.ChizuTheme.overrideFor(colorId);
+		int color = override != null ? override : ContextCompat.getColor(ctx, colorId);
 		return alpha < 1.0f ? getColorWithAlpha(color, alpha) : color;
 	}
 
