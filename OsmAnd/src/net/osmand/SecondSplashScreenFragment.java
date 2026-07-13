@@ -131,14 +131,13 @@ public class SecondSplashScreenFragment extends BaseFullScreenFragment {
 		logo.setPadding(elementsPaddingLeft, 0, elementsPaddingRight, 0);
 		logo.setLayoutParams(logoLayoutParams);
 		view.addView(logo);
+		// shiroikuma fork: no OsmAnd/OpenStreetMap wordmarks on the splash — logo only
 		textLayoutParams.setMargins(0, 0, 0, textMarginBottom);
 		text.setPadding(elementsPaddingLeft, 0, elementsPaddingRight, 0);
 		text.setLayoutParams(textLayoutParams);
-		view.addView(text);
 		osmTextLayoutParams.setMargins(0, 0, 0, osmTextMarginBottom);
 		osmText.setPadding(elementsPaddingLeft, 0, elementsPaddingRight, 0);
 		osmText.setLayoutParams(osmTextLayoutParams);
-		view.addView(osmText);
 
 		return view;
 	}
