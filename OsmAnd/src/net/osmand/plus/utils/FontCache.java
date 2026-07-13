@@ -43,6 +43,11 @@ public class FontCache {
 
 	@NonNull
 	public static Typeface getFont(@Nullable Typeface original, int weight) {
+		// shiroikuma fork: the 白い熊 地図 UI global font replaces the stock system faces
+		Typeface chizuFont = net.osmand.plus.chizu.ChizuFonts.getGlobalTypeface();
+		if (chizuFont != null && net.osmand.plus.chizu.ChizuFonts.isSystemDefault(original)) {
+			original = chizuFont;
+		}
 		Pair<Typeface, Integer> pair = Pair.create(original, weight);
 
 		Typeface typeface = FONT_MAP.get(pair);
