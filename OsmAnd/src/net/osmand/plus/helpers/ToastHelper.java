@@ -5,6 +5,9 @@ import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.view.Display;
 import android.view.WindowManager;
+import android.graphics.drawable.GradientDrawable;
+import android.view.Gravity;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -14,7 +17,10 @@ import androidx.car.app.CarToast;
 
 import net.osmand.PlatformUtil;
 import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.R;
 import net.osmand.plus.auto.NavigationSession;
+import net.osmand.plus.utils.AndroidUtils;
+import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.util.Algorithms;
 
 import org.apache.commons.logging.Log;
@@ -80,9 +86,33 @@ public class ToastHelper {
 	@NonNull
 	private ToastDisplayHandler getDefaultToastHandler() {
 		return new ToastDisplayHandler() {
+			// shiroikuma fork: the system toast pill is unthemable (white on Android 12+);
+			// replace it with a foreground custom view following the black-yellow theme and
+			// the 白い熊 地図 UI runtime color overrides
+			@SuppressWarnings("deprecation")
 			@Override
 			public void showSimpleToast(@NonNull String text, boolean isLong) {
-				Toast.makeText(getVisualContext(app), text, isLong ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT).show();
+				Context ctx = getVisualContext(app);
+				TextView view = new TextView(ctx);
+				view.setText(text);
+				view.setTextSize(16);
+				view.setTextColor(ColorUtilities.getColor(app, R.color.text_color_primary_dark, 1.0f));
+				view.setMaxWidth(AndroidUtils.dpToPx(app, 340));
+				int padH = AndroidUtils.dpToPx(app, 20);
+				int padV = AndroidUtils.dpToPx(app, 14);
+				view.setPadding(padH, padV, padH, padV);
+				GradientDrawable background = new GradientDrawable();
+				background.setColor(ColorUtilities.getColor(app, R.color.card_and_list_background_dark, 1.0f));
+				background.setCornerRadius(AndroidUtils.dpToPx(app, 22));
+				background.setStroke(AndroidUtils.dpToPx(app, 2),
+						ColorUtilities.getColor(app, R.color.stroked_buttons_and_links_outline_dark, 1.0f));
+				view.setBackground(background);
+
+				Toast toast = new Toast(ctx);
+				toast.setDuration(isLong ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT);
+				toast.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, AndroidUtils.dpToPx(app, 96));
+				toast.setView(view);
+				toast.show();
 			}
 
 			@Override
