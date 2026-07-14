@@ -10,6 +10,7 @@ import static net.osmand.util.MapUtils.HIGH_LATLON_PRECISION;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Paint.Style;
 import android.graphics.PointF;
@@ -836,6 +837,10 @@ public class PointLocationLayer extends OsmandMapLayer
 				navigationIcon = (LayerDrawable) AppCompatResources.getDrawable(ctx, navigationIconId);
 				if (navigationIcon != null) {
 					DrawableCompat.setTint(navigationIcon.getDrawable(1), profileColor);
+					// shiroikuma fork: black marker border (the stock top layer is white)
+					if (navigationIcon.getNumberOfLayers() > 2) {
+						DrawableCompat.setTint(DrawableCompat.wrap(navigationIcon.getDrawable(2)), Color.BLACK);
+					}
 				}
 				navigationModel = null;
 			}
@@ -849,6 +854,10 @@ public class PointLocationLayer extends OsmandMapLayer
 				locationIcon = (LayerDrawable) AppCompatResources.getDrawable(ctx, locationIconType.getIconId());
 				if (locationIcon != null) {
 					DrawableCompat.setTint(DrawableCompat.wrap(locationIcon.getDrawable(1)), profileColor);
+					// shiroikuma fork: black marker border (the stock top layer is white)
+					if (locationIcon.getNumberOfLayers() > 2) {
+						DrawableCompat.setTint(DrawableCompat.wrap(locationIcon.getDrawable(2)), Color.BLACK);
+					}
 				}
 				locationModel = null;
 			}
@@ -915,9 +924,8 @@ public class PointLocationLayer extends OsmandMapLayer
 	private String getLocationIconName(@NonNull ApplicationMode appMode) {
 		boolean hasMapRenderer = hasMapRenderer();
 		String locationIconName = appMode.getLocationIcon();
-		if (hasMapRenderer && LocationIcon.isModelRepresented(locationIconName)) {
-			locationIconName = LocationIcon.fromName(locationIconName).getRepresented3DModelKey();
-		}
+		// shiroikuma fork: keep built-in icons on the 2D bitmap path — never promote them to
+		// 3D models, whose rendering depends on storage models/ and the core snapshot
 		boolean forceUseDefault = LocationIcon.isModel(locationIconName)
 				&& (!hasMapRenderer || brokenLocationModel && locationIconName.equals(this.locationIconName));
 		return forceUseDefault
@@ -929,9 +937,7 @@ public class PointLocationLayer extends OsmandMapLayer
 	private String getNavigationIconName(@NonNull ApplicationMode appMode) {
 		boolean hasMapRenderer = hasMapRenderer();
 		String navigationIconName = appMode.getNavigationIcon();
-		if (hasMapRenderer && LocationIcon.isModelRepresented(navigationIconName)) {
-			navigationIconName = LocationIcon.fromName(navigationIconName).getRepresented3DModelKey();
-		}
+		// shiroikuma fork: same as getLocationIconName — built-in icons stay 2D bitmaps
 		boolean forceUseDefault = LocationIcon.isModel(navigationIconName)
 				&& (!hasMapRenderer || brokenNavigationModel && navigationIconName.equals(this.navigationIconName));
 		return forceUseDefault
