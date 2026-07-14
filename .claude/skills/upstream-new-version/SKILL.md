@@ -46,6 +46,15 @@ echo "base $OLD_VN, upstream $NEW_VN, $AHEAD new commits"
 
 - `NEW_VN != OLD_VN` → **release bump**. `AHEAD > 0` with same version → **master-tip refresh**.
 - `AHEAD = 0` → report "already current (base `<OLD_VN>`)" and STOP.
+- Scope the conflict surface up front — only files BOTH sides touched can conflict:
+
+  ```bash
+  comm -12 <(git diff --name-only $OLD_BASE..custom | sort) \
+           <(git diff --name-only $OLD_BASE upstream/master | sort)
+  ```
+
+  Feed this list into the step-2 table's conflict flags; an empty intersection predicts a clean
+  rebase.
 - Also refresh the sibling resources checkout: `git -C ~/git/resources pull` (the build reads
   `../../resources`; a stale checkout breaks asset collection on new bases).
 
