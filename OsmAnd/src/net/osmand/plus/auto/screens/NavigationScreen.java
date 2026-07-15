@@ -35,6 +35,7 @@ import net.osmand.plus.auto.NavigationListener;
 import net.osmand.plus.auto.NavigationSession;
 import net.osmand.plus.auto.SurfaceRenderer;
 import net.osmand.plus.auto.SurfaceRenderer.SurfaceRendererCallback;
+import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.routing.IRouteInformationListener;
 import net.osmand.plus.routing.RoutingHelper;
 import net.osmand.plus.settings.backend.OsmandSettings;
@@ -239,23 +240,21 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 		SurfaceRenderer surfaceRenderer = getSurfaceRenderer();
 		ActionStrip.Builder actionStripBuilder = new ActionStrip.Builder();
 		updateCompass();
+		// shiroikuma fork: all car actions go through ChizuCar (black background, yellow glyph)
 		if (!navigating) {
 			actionStripBuilder.addAction(
-					new Action.Builder()
-							.setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.ic_action_list_flat)).build())
+					ChizuCar.action(getCarContext(), R.drawable.ic_action_list_flat)
 							.setOnClickListener(this::goBack)
 							.build());
 		}
 		actionStripBuilder.addAction(
-				new Action.Builder()
-						.setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), compassResId)).build())
+				ChizuCar.action(getCarContext(), compassResId)
 						.setOnClickListener(this::compassClick)
 						.build());
 		if (getApp().useOpenGlRenderer()) {
 			int dButtonResource = use3DButton ? R.drawable.ic_action_3d : R.drawable.ic_action_2d;
 			actionStripBuilder.addAction(
-					new Action.Builder()
-							.setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), dButtonResource)).build())
+					ChizuCar.action(getCarContext(), dButtonResource)
 							.setOnClickListener(() -> {
 								if (surfaceRenderer != null) {
 									surfaceRenderer.handleTilt();
@@ -274,22 +273,15 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 		}
 		builder.setActionStrip(actionStripBuilder.build());
 
-		CarIcon.Builder panIconBuilder = new CarIcon.Builder(
-				IconCompat.createWithResource(getCarContext(), panMode ? R.drawable.ic_action_close : R.drawable.ic_action_map_pan));
-
 		ActionStrip.Builder mapActionStripBuilder = new ActionStrip.Builder();
 		builder.setMapActionStrip(
 				mapActionStripBuilder
 						.addAction(new Action.Builder(Action.PAN)
-								.setIcon(panIconBuilder.build())
+								.setIcon(ChizuCar.icon(getCarContext(),
+										panMode ? R.drawable.ic_action_close : R.drawable.ic_action_map_pan))
+								.setBackgroundColor(ChizuCar.background(getCarContext()))
 								.build())
-						.addAction(new Action.Builder()
-								.setIcon(
-										new CarIcon.Builder(
-												IconCompat.createWithResource(
-														getCarContext(),
-														R.drawable.ic_my_location))
-												.build())
+						.addAction(ChizuCar.action(getCarContext(), R.drawable.ic_my_location)
 								.setOnClickListener(() -> {
 									if (!listener.requestLocationNavigation()) {
 										if (surfaceRenderer != null) {
@@ -298,13 +290,7 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 									}
 								})
 								.build())
-						.addAction(new Action.Builder()
-								.setIcon(
-										new CarIcon.Builder(
-												IconCompat.createWithResource(
-														getCarContext(),
-														R.drawable.ic_zoom_in))
-												.build())
+						.addAction(ChizuCar.action(getCarContext(), R.drawable.ic_zoom_in)
 								.setOnClickListener(
 										() -> {
 											if (surfaceRenderer != null) {
@@ -314,13 +300,7 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 											}
 										})
 								.build())
-						.addAction(new Action.Builder()
-								.setIcon(
-										new CarIcon.Builder(
-												IconCompat.createWithResource(
-														getCarContext(),
-														R.drawable.ic_zoom_out))
-												.build())
+						.addAction(ChizuCar.action(getCarContext(), R.drawable.ic_zoom_out)
 								.setOnClickListener(
 										() -> {
 											if (surfaceRenderer != null) {
