@@ -288,10 +288,9 @@ public class NavigationSession extends Session implements NavigationListener, Os
 	public Screen onCreateScreen(@NonNull Intent intent) {
 		Log.i(TAG, "In onCreateScreen()");
 		navigationCarSurface = new SurfaceRenderer(getCarContext(), getLifecycle());
-		settingsAction = new Action.Builder()
-				.setIcon(new CarIcon.Builder(
-						IconCompat.createWithResource(getCarContext(), R.drawable.ic_action_settings_outlined))
-						.build())
+		// shiroikuma fork: black-yellow car action (this Action is reused by every screen)
+		settingsAction = net.osmand.plus.chizu.ChizuCar
+				.action(getCarContext(), R.drawable.ic_action_settings_outlined)
 				.setOnClickListener(() -> getScreenManager()
 						.push(new SettingsScreen(getCarContext())))
 				.build();
