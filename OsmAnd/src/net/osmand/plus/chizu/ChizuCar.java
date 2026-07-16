@@ -14,19 +14,15 @@ import net.osmand.plus.R;
 import net.osmand.plus.utils.ColorUtilities;
 
 /**
- * 白い熊 地図 Android Auto look: black button backgrounds, yellow glyphs. Colors resolve
+ * 白い熊 地図 Android Auto look: yellow glyphs on the host's buttons. Colors resolve
  * through {@link ColorUtilities}, so the in-app theming page overrides apply on the car
- * screen too. Hosts that don't honor custom action colors fall back to their own chrome.
+ * screen too. Icon tint only — the car API forbids a background color on non-primary
+ * actions (ActionsConstraints restricts it to primary actions and template validation
+ * throws, crashing the car session).
  */
 public class ChizuCar {
 
 	private ChizuCar() {
-	}
-
-	@NonNull
-	public static CarColor background(@NonNull Context ctx) {
-		int color = ColorUtilities.getColor(ctx, R.color.map_button_background_color_dark, 1.0f);
-		return CarColor.createCustom(color, color);
 	}
 
 	@NonNull
@@ -45,7 +41,6 @@ public class ChizuCar {
 	@NonNull
 	public static Action.Builder action(@NonNull CarContext carContext, @DrawableRes int iconRes) {
 		return new Action.Builder()
-				.setIcon(icon(carContext, iconRes))
-				.setBackgroundColor(background(carContext));
+				.setIcon(icon(carContext, iconRes));
 	}
 }
