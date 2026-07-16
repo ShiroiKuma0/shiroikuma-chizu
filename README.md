@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, an always-visible position marker, shared main storage, and themed in-app flashes.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, an always-visible position marker, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+6`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+8`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -38,6 +38,11 @@ Declares All-files access (as stock builds do), so the main storage can point at
 
 ## 🔔 Themed flashes
 In-app toasts are no longer the unthemable white system pill: they render as black rounded cards with yellow text and a yellow border, following the theming page's color overrides.
+
+---
+
+## 🚗 Android Auto, in the same colors
+The launcher icon renders full-bleed on the car screen (no white rim), every map button glyph is yellow, and car flashes appear as dark navigation alerts instead of white toast pills. The map keeps the full OpenGL 3D renderer, with a self-healing guard that re-enables it after a crash-loop auto-disable.
 
 ---
 
