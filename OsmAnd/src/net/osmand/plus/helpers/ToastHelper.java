@@ -1,8 +1,6 @@
 package net.osmand.plus.helpers;
 
 import android.graphics.drawable.GradientDrawable;
-import android.text.SpannableString;
-import android.text.Spanned;
 import android.view.Gravity;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -14,12 +12,10 @@ import androidx.car.app.AppManager;
 import androidx.car.app.CarToast;
 import androidx.car.app.model.Alert;
 import androidx.car.app.model.CarText;
-import androidx.car.app.model.ForegroundCarColorSpan;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.auto.NavigationSession;
-import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.util.Algorithms;
@@ -117,13 +113,11 @@ public class ToastHelper {
 				NavigationSession navigationSession = app.getCarNavigationSession();
 				if (navigationSession != null && navigationSession.hasStarted()) {
 					// shiroikuma fork: CarToast is host-styled (black on white); show a
-					// navigation Alert with our yellow text instead, toast as fallback
+					// navigation Alert (host-dark card, no spans — the host may reject
+					// custom color spans) instead, toast as fallback
 					try {
-						SpannableString spannable = new SpannableString(text);
-						spannable.setSpan(ForegroundCarColorSpan.create(ChizuCar.accent(app)),
-								0, spannable.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 						Alert alert = new Alert.Builder(CAR_FLASH_ALERT_ID,
-								CarText.create(spannable), isLong ? 5000 : 2500).build();
+								CarText.create(text), isLong ? 5000 : 2500).build();
 						navigationSession.getCarContext().getCarService(AppManager.class).showAlert(alert);
 					} catch (RuntimeException e) {
 						int duration = isLong ? CarToast.LENGTH_LONG : CarToast.LENGTH_SHORT;
