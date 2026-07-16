@@ -279,7 +279,6 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 						.addAction(new Action.Builder(Action.PAN)
 								.setIcon(ChizuCar.icon(getCarContext(),
 										panMode ? R.drawable.ic_action_close : R.drawable.ic_action_map_pan))
-								.setBackgroundColor(ChizuCar.background(getCarContext()))
 								.build())
 						.addAction(ChizuCar.action(getCarContext(), R.drawable.ic_my_location)
 								.setOnClickListener(() -> {

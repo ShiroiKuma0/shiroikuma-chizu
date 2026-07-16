@@ -652,6 +652,15 @@ public class AppInitializer implements IProgress {
 	private void initOpenGl() {
 		OsmandSettings settings = app.getSettings();
 
+		// shiroikuma fork: an app update retries the OpenGL core after an auto-disable —
+		// crash loops elsewhere in the app (e.g. a template validation crash on the car
+		// screen) can push the failure counter past the threshold and silently switch the
+		// map to the legacy renderer even though OpenGL itself never failed
+		if (isAppVersionChanged() && settings.OPENGL_RENDER_FAILED.get() > MAX_OPENGL_DISABLE) {
+			settings.OPENGL_RENDER_FAILED.set(0);
+			settings.USE_OPENGL_RENDER.set(true);
+		}
+
 		if (!settings.USE_OPENGL_RENDER.get()) {
 			return;
 		}
