@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="OsmAnd/res/mipmap-xxxhdpi/icon.png" width="120" alt="白い熊 地図 icon" />
+<img src="graphics/icon.png" width="120" alt="白い熊 地図 icon" />
 
 # 白い熊 地図
 
