@@ -3,6 +3,18 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+9 — 2026-07-17
+
+Base unchanged (OsmAnd `master` at `52d8e08df1`).
+
+### Android Auto
+- **Launcher icon now full-bleed on car screens** — black disc, yellow pin, no white.
+  Car hosts prefer the legacy square mipmap PNG when one exists and inset it with
+  padding on a white circular plate; the fork now ships the launcher icon
+  **adaptive-only** (the five legacy `mipmap-*/icon.png` removed, like
+  shiroikuma-denwa), so every host masks the adaptive icon edge to edge. On
+  API 24–25 devices the launcher would show a generic icon — none in use here.
+
 ## 5.4.0+8 — 2026-07-16
 
 Base unchanged (OsmAnd `master` at `52d8e08df1`). Android Auto release; includes
