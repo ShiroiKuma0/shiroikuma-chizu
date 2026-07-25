@@ -3,6 +3,53 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+15 — 2026-07-25
+
+Base unchanged (OsmAnd `master` at `d328a7693c`).
+
+### 保存復元 — headless, token-gated state export (new)
+- **Two exported broadcast actions**, `shiroikuma.chizu.action.EXPORT_STATE` and
+  `shiroikuma.chizu.action.LIST_CATEGORIES`, carried by one receiver with no
+  `android:permission` — the automation token is the gate. A sister automation app
+  (白い熊 自由作業盤) can now back this app up in its one-run batch over every sister app.
+- **`LIST_CATEGORIES`** answers `OK:` plus one `id⇥label[⇥parent]` line per category: the
+  groups `maps`, `settings`, `my_places`, `resources` with every stock export type as an
+  indented part (`maps.standard_maps`, `settings.profile`, `my_places.favorites`, …), plus
+  `settings.chizu_ui` for the 白い熊 地図 theming. The caller renders it as a checkbox picker.
+- **`EXPORT_STATE`** runs the very same export headlessly — no Activity, no interaction.
+  `items` selects categories (absent = everything; a group id expands to all of its parts),
+  `path` overrides the configured backup directory (created if missing). Directory
+  precedence: `path` → the configured backup directory → `ERROR:no-directory`.
+- **The reply is a fresh broadcast** with `FLAG_INCLUDE_STOPPED_PACKAGES` — EMUI will not
+  reliably carry a live binder between third-party apps, so no `ResultReceiver`,
+  `PendingIntent` or `Messenger`; the ordered result is set too but never relied upon.
+  Exactly one terminal reply per request, guarded by an `AtomicBoolean`:
+  `OK:<path>|<bytes>|<human size>|<n> categories`, or `ERROR:<reason>` —
+  `automation disabled` and `bad token` reported distinctly.
+- **Progress broadcasts in real numbers**, never a percentage: a display line
+  (`1.20 GB / 4.20 GB`), plus structured `current`/`total`/`unit` extras and the app label,
+  throttled to at most one every 500 ms with a final one at completion.
+- **Automation gate in the UI**, inside the Export / Import section right under
+  「Export / Import…」: an **Automation export** switch (**off by default**) and a token row
+  showing `80922d8c…4c49a87c`, copying the full token to the clipboard on tap, with a
+  **Regenerate** action that warns pasted copies must be updated. Token = 24 `SecureRandom`
+  bytes, hex, generated lazily on first read, compared constant-time; switch and token live
+  in the device-local prefs file that is never part of any export.
+- **A cold-started process waits for app initialization** before collecting, so a backup
+  triggered while the app is not running exports complete data.
+
+### Export / Import (changed)
+- **Family file-name convention**: every backup — from the panel as well as the automation
+  path — is now `shiroikuma-chizu_<yyyy-MM-dd_HH-mm-ss>.zip`, one ZIP per run, with no
+  version and no `-export` infix, so all sister apps' backups sort and read uniformly in one
+  directory. The "Last export:" query still recognises the older `.osf` names.
+- **One export core** (`ChizuBackup`): the category catalogue, `items` resolution, plain-file
+  and SAF destinations, byte-counting progress and the 白い熊 地図 sidecar now live in one
+  headless class that the panel and the receiver both call — no duplicated export logic.
+- **Export progress** shows real byte counts (`1.20 GB / 4.20 GB`) through both phases,
+  collection and writing, in place of the item counter; Cancel still aborts the stock task
+  and removes partial files.
+
 ## 5.4.0+14 — 2026-07-25
 
 Base refreshed: OsmAnd `master` at `d328a7693c` (328 commits ahead of the previous base —
