@@ -1,7 +1,6 @@
 package net.osmand.plus.settings.fragments;
 
 import static net.osmand.plus.backup.ui.BackupUiUtils.getLastBackupTimeDescription;
-import static net.osmand.plus.importfiles.ImportType.SETTINGS;
 import static net.osmand.plus.profiles.SelectProfileBottomSheet.PROFILES_LIST_UPDATED_ARG;
 import static net.osmand.plus.profiles.SelectProfileBottomSheet.PROFILE_KEY_ARG;
 
@@ -9,7 +8,6 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.TextView;
 
 import androidx.annotation.ColorRes;
 import androidx.annotation.NonNull;
@@ -51,9 +49,6 @@ public class MainSettingsFragment extends BaseSettingsFragment implements OnSele
 	private static final String SELECTED_PROFILE = "selected_profile";
 	private static final String CREATE_PROFILE = "create_profile";
 	private static final String REORDER_PROFILES = "reorder_profiles";
-	private static final String LOCAL_BACKUP = "local_backup";
-	private static final String EXPORT_TO_FILE = "export_to_file";
-	private static final String IMPORT_FROM_FILE = "import_from_file";
 
 	private List<ApplicationMode> allAppModes;
 	private Set<ApplicationMode> availableAppModes;
@@ -68,6 +63,9 @@ public class MainSettingsFragment extends BaseSettingsFragment implements OnSele
 	protected void setupPreferences() {
 		allAppModes = new ArrayList<>(ApplicationMode.allPossibleValues());
 		availableAppModes = new LinkedHashSet<>(ApplicationMode.values(app));
+		// shiroikuma fork: the 白い熊 地図 UI row gets a yellow (active-color) icon
+		Preference chizuUi = requirePreference("chizu_ui");
+		chizuUi.setIcon(getIcon(R.drawable.ic_action_appearance, getActiveColorRes()));
 		Preference globalSettings = requirePreference("global_settings");
 		globalSettings.setIcon(getContentIcon(R.drawable.ic_action_settings));
 		setupBackupAndRestorePref();
@@ -80,7 +78,7 @@ public class MainSettingsFragment extends BaseSettingsFragment implements OnSele
 		appProfiles.setIconSpaceReserved(false);
 		setupAppProfiles(appProfiles);
 		profileManagementPref();
-		setupLocalBackup();
+		// shiroikuma fork: stock local Export/Import removed (lives on the 白い熊 地図 UI page)
 	}
 
 	@Override
@@ -95,9 +93,6 @@ public class MainSettingsFragment extends BaseSettingsFragment implements OnSele
 				Drawable backgroundDrawable = new ColorDrawable(ColorUtilities.getColorWithAlpha(activeProfileColor, 0.15f));
 				AndroidUtils.setBackground(selectedProfile, backgroundDrawable);
 			}
-		} else if (LOCAL_BACKUP.equals(key)) {
-			TextView title = holder.itemView.findViewById(android.R.id.title);
-			title.setTextColor(ColorUtilities.getPrimaryTextColor(app, isNightMode()));
 		}
 		boolean visible = !ApplicationMode.DEFAULT.getStringKey().equals(key);
 		AndroidUiHelper.updateVisibility(holder.findViewById(R.id.switchWidget), visible);
@@ -143,39 +138,9 @@ public class MainSettingsFragment extends BaseSettingsFragment implements OnSele
 					BackupAuthorizationFragment.showInstance(mapActivity.getSupportFragmentManager());
 				}
 			}
-		} else if (EXPORT_TO_FILE.equals(prefId)) {
-			MapActivity mapActivity = getMapActivity();
-			if (mapActivity != null) {
-				ApplicationMode mode = getSelectedAppMode();
-				FragmentManager fragmentManager = mapActivity.getSupportFragmentManager();
-				ExportSettingsFragment.showInstance(fragmentManager, mode, null, true);
-				return true;
-			}
-		} else if (IMPORT_FROM_FILE.equals(prefId)) {
-			MapActivity mapActivity = getMapActivity();
-			if (mapActivity != null) {
-				mapActivity.getImportHelper().chooseFileToImport(SETTINGS);
-				return true;
-			}
 		}
 
 		return super.onPreferenceClick(preference);
-	}
-
-	private void setupLocalBackup() {
-		setupBackupToFilePref();
-		setupRestoreFromFilePref();
-		findPreference(LOCAL_BACKUP).setIconSpaceReserved(false);
-	}
-
-	private void setupBackupToFilePref() {
-		Preference backupToFile = findPreference(EXPORT_TO_FILE);
-		backupToFile.setIcon(getIcon(R.drawable.ic_action_save_to_file, getActiveColorRes()));
-	}
-
-	private void setupRestoreFromFilePref() {
-		Preference restoreFromFile = findPreference(IMPORT_FROM_FILE);
-		restoreFromFile.setIcon(getIcon(R.drawable.ic_action_read_from_file, getActiveColorRes()));
 	}
 
 	private void setupConfigureProfilePref() {
