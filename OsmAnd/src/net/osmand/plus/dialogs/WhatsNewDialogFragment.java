@@ -59,6 +59,30 @@ public class WhatsNewDialogFragment extends BaseAlertDialogFragment {
 		return builder.create();
 	}
 
+	// shiroikuma fork: black card with a yellow border, yellow buttons
+	@Override
+	public void onStart() {
+		super.onStart();
+		Dialog dialog = getDialog();
+		if (dialog instanceof AlertDialog && dialog.getWindow() != null) {
+			float density = getResources().getDisplayMetrics().density;
+			android.graphics.drawable.GradientDrawable card = new android.graphics.drawable.GradientDrawable();
+			card.setColor(net.osmand.plus.chizu.ChizuTheme.getColor(app, net.osmand.plus.chizu.ChizuTheme.Slot.CARD_BACKGROUND));
+			card.setCornerRadius(8 * density);
+			card.setStroke(Math.max(1, (int) (2 * density)),
+					net.osmand.plus.chizu.ChizuTheme.getColor(app, net.osmand.plus.chizu.ChizuTheme.Slot.ACCENT));
+			dialog.getWindow().setBackgroundDrawable(
+					new android.graphics.drawable.InsetDrawable(card, (int) (16 * density)));
+			AlertDialog alertDialog = (AlertDialog) dialog;
+			int accent = net.osmand.plus.chizu.ChizuTheme.getColor(app, net.osmand.plus.chizu.ChizuTheme.Slot.ACCENT);
+			for (int which : new int[] {AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL}) {
+				if (alertDialog.getButton(which) != null) {
+					alertDialog.getButton(which).setTextColor(accent);
+				}
+			}
+		}
+	}
+
 	private void showArticle() {
 		MapActivity mapActivity = getMapActivity();
 		if (mapActivity != null) {
