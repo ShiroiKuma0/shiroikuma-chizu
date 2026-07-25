@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), an always-visible position marker, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless token-gated backup that an automation app can trigger, an always-visible position marker, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+14`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+15`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -27,7 +27,12 @@ A dedicated 白い熊 地図 settings page (also on long-press of the drawer map
 ---
 
 ## 📦 Export / Import everything, one archive
-The top of the UI page: pick a backup directory once, then export **everything settable in the app** — every stock category (profiles, favorites, tracks, rendering, routing, voices, …), the 白い熊 地図 theming (colors, fonts, sizes, imported font files riding inside the standard `.osf`), and optionally the downloaded **maps** with their subcategories, size-counted live in the panel. Live progress with an item counter and working Cancel; import restores the selected categories and offers a one-tap restart. The stock Settings export/import is replaced by this.
+The top of the UI page: pick a backup directory once, then export **everything settable in the app** — every stock category (profiles, favorites, tracks, rendering, routing, voices, …), the 白い熊 地図 theming (colors, fonts, sizes, imported font files riding inside the same archive), and optionally the downloaded **maps** with their subcategories, size-counted live in the panel. One file per backup, named `shiroikuma-chizu_<yyyy-MM-dd_HH-mm-ss>.zip`; live byte-counting progress with a working Cancel; import restores the selected categories and offers a one-tap restart. The stock Settings export/import is replaced by this.
+
+---
+
+## 🗄️ Backed up headlessly, on a token
+The same export runs **without opening the app**: two exported broadcast actions let a sister automation app ([白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban)) ask this one for its category list and then have it export itself, writing one ZIP and replying with the path, byte count and human size. Every request is gated by a 24-byte token — generated on the device, compared constant-time, kept out of every backup — behind a switch that is **off by default**, both sitting in the Export / Import section. While it works it broadcasts progress in **real numbers** (`512 MB / 4.2 GB`), never a percentage, and the archive it produces is an ordinary backup that the panel's Import restores.
 
 ---
 
