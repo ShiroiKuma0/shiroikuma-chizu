@@ -114,6 +114,18 @@
 				android:resource="@xml/paths" />
 		</provider>
 
+		<!-- shiroikuma fork: the 保存復元 state-export contract — 白い熊 自由作業盤 fires a
+		     token-gated intent, this app exports itself headlessly and replies by broadcast.
+		     No android:permission: the caller cannot hold one, the token is the gate. -->
+		<receiver
+			android:name="net.osmand.plus.chizu.ChizuStateExportReceiver"
+			android:exported="true">
+			<intent-filter>
+				<action android:name="${applicationId}.action.EXPORT_STATE" />
+				<action android:name="${applicationId}.action.LIST_CATEGORIES" />
+			</intent-filter>
+		</receiver>
+
 		<receiver android:name="net.osmand.plus.mapcontextmenu.other.ShareSheetReceiver" android:exported="false" />
 		<receiver android:name="net.osmand.plus.notifications.NotificationDismissReceiver" android:exported="false" />
 		<receiver android:name="net.osmand.plus.liveupdates.LiveUpdatesAlarmReceiver" android:exported="false" />

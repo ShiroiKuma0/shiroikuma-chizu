@@ -1,5 +1,9 @@
 package net.osmand.plus.chizu;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -21,6 +25,7 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentManager;
 
@@ -102,6 +107,8 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addSection(R.string.chizu_section_exim, accent);
 		addEximDirRow(1);
 		addEximOpenRow(1);
+		addAutomationSwitchRow(1);
+		addAutomationTokenRow(1);
 
 		// ===== Foundation =====
 		addSection(R.string.chizu_section_foundation, accent);
@@ -265,6 +272,89 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 
 		box.setOnClickListener(v -> exim.showPanel());
 		holder.addView(box);
+	}
+
+	// the automation gate lives with the backup rows it drives — 保存復元 contract, §2
+	private void addAutomationSwitchRow(int level) {
+		LinearLayout row = tightRow(level);
+		row.addView(stackedLabels(getString(R.string.chizu_automation),
+				getString(R.string.chizu_automation_descr)));
+
+		SwitchCompat toggle = new SwitchCompat(requireContext());
+		int accent = color(ChizuTheme.Slot.ACCENT);
+		toggle.setThumbTintList(ColorStateList.valueOf(accent));
+		toggle.setTrackTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.DIVIDER)));
+		toggle.setChecked(ChizuAutomation.isEnabled(requireContext()));
+		toggle.setOnCheckedChangeListener(
+				(button, checked) -> ChizuAutomation.setEnabled(requireContext(), checked));
+		row.addView(toggle);
+
+		row.setOnClickListener(v -> toggle.toggle());
+		holder.addView(row);
+	}
+
+	private void addAutomationTokenRow(int level) {
+		LinearLayout row = tightRow(level);
+		String token = ChizuAutomation.getToken(requireContext());
+
+		LinearLayout labels = stackedLabels(getString(R.string.chizu_automation_token),
+				ChizuAutomation.abbreviate(token));
+		((TextView) labels.getChildAt(1)).setTextColor(color(ChizuTheme.Slot.ACCENT));
+		((TextView) labels.getChildAt(1)).setTypeface(Typeface.MONOSPACE);
+		row.addView(labels);
+
+		TextView regenerate = new TextView(requireContext());
+		regenerate.setText(R.string.chizu_automation_regenerate);
+		regenerate.setTextSize(14);
+		regenerate.setTextColor(color(ChizuTheme.Slot.ACCENT));
+		regenerate.setPadding(dp(12), dp(6), 0, dp(6));
+		regenerate.setOnClickListener(v -> new AlertDialog.Builder(requireActivity())
+				.setMessage(R.string.chizu_automation_regenerate_confirm)
+				.setPositiveButton(android.R.string.ok, (dialog, which) -> {
+					ChizuAutomation.regenerate(requireContext());
+					buildRows();
+					Toast.makeText(requireContext(), R.string.chizu_automation_regenerated,
+							Toast.LENGTH_LONG).show();
+				})
+				.setNegativeButton(android.R.string.cancel, null)
+				.show());
+		row.addView(regenerate);
+
+		row.setOnClickListener(v -> copyToken(token));
+		holder.addView(row);
+	}
+
+	private void copyToken(@NonNull String token) {
+		ClipboardManager clipboard =
+				(ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE);
+		if (clipboard == null) {
+			return;
+		}
+		clipboard.setPrimaryClip(ClipData.newPlainText(getString(R.string.chizu_automation_token), token));
+		Toast.makeText(requireContext(), R.string.chizu_automation_token_copied, Toast.LENGTH_SHORT).show();
+	}
+
+	/** A weighted title + description column, as the tappable rows use. */
+	private LinearLayout stackedLabels(@NonNull String title, @NonNull String description) {
+		LinearLayout labels = new LinearLayout(requireContext());
+		labels.setOrientation(LinearLayout.VERTICAL);
+		labels.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		TextView titleView = new TextView(requireContext());
+		titleView.setText(title);
+		titleView.setTextSize(16);
+		titleView.setTextColor(color(ChizuTheme.Slot.TEXT));
+		applyGlobalFont(titleView);
+		labels.addView(titleView);
+
+		TextView descrView = new TextView(requireContext());
+		descrView.setText(description);
+		descrView.setTextSize(13);
+		descrView.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
+		applyGlobalFont(descrView);
+		labels.addView(descrView);
+
+		return labels;
 	}
 
 	/** Rebuilds the page (directory status changed, colors imported, …). */
