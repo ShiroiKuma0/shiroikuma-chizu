@@ -29,6 +29,14 @@
 	<string name="chizu_exim_import_failed">Import failed — nothing was changed.</string>
 	<string name="chizu_exim_restart_later">Later</string>
 
+	<string name="chizu_automation">Automation export</string>
+	<string name="chizu_automation_descr">Let sister-app tasks trigger this app\'s export through the token-gated intent.</string>
+	<string name="chizu_automation_token">Automation token</string>
+	<string name="chizu_automation_token_copied">Automation token copied to the clipboard.</string>
+	<string name="chizu_automation_regenerate">Regenerate</string>
+	<string name="chizu_automation_regenerate_confirm">Generate a new automation token? Every pasted copy of the old one stops working and has to be updated.</string>
+	<string name="chizu_automation_regenerated">New token generated — update the pasted copies.</string>
+
 	<string name="chizu_section_foundation">Foundation</string>
 	<string name="chizu_section_fonts">Text &amp; fonts</string>
 	<string name="chizu_section_top_bar">Top bar</string>
