@@ -4,13 +4,13 @@ import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -33,20 +33,14 @@ import net.osmand.plus.R;
 import net.osmand.plus.activities.RestartActivity;
 import net.osmand.plus.settings.backend.ExportCategory;
 import net.osmand.plus.settings.backend.backup.FileSettingsHelper;
-import net.osmand.plus.settings.backend.backup.FileSettingsHelper.SettingsExportListener;
 import net.osmand.plus.settings.backend.backup.SettingsHelper.CollectListener;
 import net.osmand.plus.settings.backend.backup.SettingsHelper.ImportListener;
 import net.osmand.plus.settings.backend.backup.exporttype.ExportType;
-import net.osmand.plus.settings.backend.backup.items.FileSettingsItem;
 import net.osmand.plus.settings.backend.backup.items.SettingsItem;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.FileUtils;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -54,36 +48,26 @@ import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.zip.Deflater;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * shiroikuma fork: Export / Import of everything settable in the app, driven from the
- * 白い熊 地図 UI page. Exports the stock .osf settings archive (all stock export types,
- * maps included) into a user-chosen SAF directory, plus a sidecar entry with the
- * 白い熊 地図 UI prefs (colors, fonts, sizes) and the imported font files. Import reads
- * the same archive back, replacing duplicates silently.
+ * shiroikuma fork: the Export / Import panel of the 白い熊 地図 UI page.
  *
- * The chosen directory lives in its own prefs file ("chizu_exim") so it is device-local
- * and never part of any export.
+ * The panel is one caller of {@link ChizuBackup} — the automation receiver
+ * ({@link ChizuStateExportReceiver}) is the other, and both write the very same archive:
+ * the stock settings ZIP (all selected stock export types, maps included) plus the
+ * 白い熊 地図 UI sidecar (colors, fonts, sizes and the imported font files) inside it.
+ * Import reads that archive back, replacing duplicates silently.
  */
 public class ChizuExim {
 
-	private static final String PREFS_NAME = "chizu_exim"; // device-local; never exported
-	private static final String KEY_DIR_URI = "dir_uri";
-	private static final String EXPORT_PREFIX = "shiroikuma-chizu_";
-	private static final String EXPORT_EXT = ".osf";
-	private static final String SIDECAR_ENTRY = "chizu_ui.json";
-	private static final String SIDECAR_FONTS_PREFIX = "chizu_fonts/";
+	private static final String IMPORT_TEMP_NAME = "chizu_import.osf";
+	/** Resolution of the export progress bar (the message line carries the real numbers). */
+	private static final int PROGRESS_STEPS = 1000;
 
 	/** Warning red for the "no backup directory set" state (yellow once set). */
 	public static final int WARN_COLOR = 0xFFFF5252;
@@ -102,10 +86,8 @@ public class ChizuExim {
 	private TextView panelDirStatus;
 	private volatile int sizeCountToken;
 
-	private volatile boolean exportCancelled;
-	private File pendingExportFile;
-	private long[] exportCumBytes;
-	private int exportTotalItems;
+	private final AtomicBoolean exportCancelled = new AtomicBoolean();
+	private volatile long lastProgressPost;
 
 	/** Must be constructed in the fragment's onCreate (activity-result registration). */
 	ChizuExim(@NonNull ChizuUiFragment fragment, @NonNull OsmandApplication app) {
@@ -125,41 +107,15 @@ public class ChizuExim {
 				});
 	}
 
-	// ---------- backup directory ----------
-
-	private SharedPreferences prefs() {
-		return app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-	}
-
-	@Nullable
-	private Uri getDirUri() {
-		String stored = prefs().getString(KEY_DIR_URI, null);
-		if (stored == null) {
-			return null;
-		}
-		try {
-			return Uri.parse(stored);
-		} catch (Exception e) {
-			return null;
-		}
-	}
+	// ---------- backup directory (stored device-locally by ChizuBackup) ----------
 
 	@Nullable
 	public DocumentFile getDir() {
-		Uri uri = getDirUri();
-		if (uri == null) {
-			return null;
-		}
-		try {
-			DocumentFile dir = DocumentFile.fromTreeUri(app, uri);
-			return dir != null && dir.isDirectory() ? dir : null;
-		} catch (Exception e) {
-			return null;
-		}
+		return ChizuBackup.getDir(app);
 	}
 
 	public void pickDirectory() {
-		dirPicker.launch(getDirUri());
+		dirPicker.launch(ChizuBackup.getDirUri(app));
 	}
 
 	private void onDirPicked(@NonNull Uri uri) {
@@ -168,7 +124,7 @@ public class ChizuExim {
 					Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 		} catch (Exception ignored) {
 		}
-		prefs().edit().putString(KEY_DIR_URI, uri.toString()).apply();
+		ChizuBackup.setDirUri(app, uri);
 		fragment.refreshPage();
 		refreshPanelDirBox();
 	}
@@ -209,8 +165,8 @@ public class ChizuExim {
 		try {
 			for (DocumentFile file : dir.listFiles()) {
 				String name = file.getName();
-				if (file.isFile() && name != null
-						&& name.startsWith(EXPORT_PREFIX) && name.endsWith(EXPORT_EXT)) {
+				// .zip is the family convention; .osf are the backups written before it
+				if (file.isFile() && ChizuBackup.isExportName(name)) {
 					if (newest == null || file.lastModified() > newest.lastModified()) {
 						newest = file;
 					}
@@ -460,89 +416,33 @@ public class ChizuExim {
 			app.showToastMessage(R.string.chizu_exim_warn_nodir);
 			return;
 		}
-		exportCancelled = false;
-		showProgress(app.getString(R.string.chizu_exim_exporting));
-		String baseName = exportBaseName();
-		// collecting the export data can take a while (map file scans) — off the UI thread
+		exportCancelled.set(false);
+		String fileName = ChizuBackup.fileName();
+		ChizuBackup.Selection selection =
+				new ChizuBackup.Selection(types, withChizu, types.size() + (withChizu ? 1 : 0));
+		ChizuBackup.Dest dest = new ChizuBackup.SafDest(app, dir, fileName);
+		showExportProgress();
+		// the very core the automation receiver drives — one export path, two callers
 		new Thread(() -> {
-			List<SettingsItem> items = types.isEmpty()
-					? new ArrayList<>()
-					: app.getFileSettingsHelper().getFilteredSettingsItems(types, true, false, false);
-			app.runInUIThread(() -> startExport(dir, baseName, items, withChizu));
-		}).start();
+			ChizuBackup.Result result =
+					ChizuBackup.export(app, selection, dest, this::onExportProgress, exportCancelled);
+			app.runInUIThread(() -> finishExportUi(result, fileName));
+		}, "chizu-ui-export").start();
 	}
 
-	private void startExport(@NonNull DocumentFile dir, @NonNull String baseName,
-			@NonNull List<SettingsItem> items, boolean withChizu) {
-		if (exportCancelled || !fragment.isAdded()) {
-			hideProgress();
-			return;
-		}
-		if (items.isEmpty()) {
-			// nothing but the 白い熊 地図 UI sidecar — write the archive directly
-			new Thread(() -> {
-				boolean ok = writeSidecarOnlyArchive(dir, baseName);
-				app.runInUIThread(() -> finishExportUi(ok, baseName + EXPORT_EXT));
-			}).start();
-			return;
-		}
-		pendingExportFile = new File(FileUtils.getTempDir(app), baseName + EXPORT_EXT);
-		showExportProgress(items);
-		SettingsExportListener listener = new SettingsExportListener() {
-			@Override
-			public void onSettingsExportFinished(@NonNull File file, boolean succeed) {
-				if (exportCancelled) {
-					//noinspection ResultOfMethodCallIgnored
-					file.delete();
-					hideProgress();
-					return;
-				}
-				if (!succeed) {
-					hideProgress();
-					app.showToastMessage(R.string.chizu_exim_export_failed);
-					return;
-				}
-				if (progress != null) {
-					progress.setMessage(app.getString(R.string.chizu_exim_saving));
-				}
-				new Thread(() -> {
-					boolean ok = copyToDir(file, dir, baseName + EXPORT_EXT, withChizu);
-					//noinspection ResultOfMethodCallIgnored
-					file.delete();
-					app.runInUIThread(() -> finishExportUi(ok, baseName + EXPORT_EXT));
-				}).start();
-			}
-
-			@Override
-			public void onSettingsExportProgressUpdate(int value) {
-				updateExportProgress(value);
-			}
-		};
-		app.getFileSettingsHelper().exportSettings(FileUtils.getTempDir(app), baseName, listener, items, true);
-	}
-
-	/** Horizontal MB progress with a live item counter and a working Cancel. */
-	private void showExportProgress(@NonNull List<SettingsItem> items) {
+	/** Horizontal progress with the live byte counter the core reports, and a working Cancel. */
+	private void showExportProgress() {
 		hideProgress();
 		FragmentActivity activity = fragment.getActivity();
 		if (activity == null) {
 			return;
 		}
-		exportTotalItems = items.size();
-		exportCumBytes = new long[items.size()];
-		long cum = 0;
-		for (int i = 0; i < items.size(); i++) {
-			SettingsItem item = items.get(i);
-			if (item instanceof FileSettingsItem) {
-				cum += ((FileSettingsItem) item).getSize();
-			}
-			exportCumBytes[i] = cum;
-		}
+		lastProgressPost = 0;
 		progress = new ProgressDialog(activity);
 		progress.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-		progress.setMessage(itemsLine(0));
-		progress.setMax(Math.max(1, (int) (cum >> 20)));
-		progress.setProgressNumberFormat("%1d/%2d MB");
+		progress.setMessage(app.getString(R.string.chizu_exim_exporting));
+		progress.setMax(PROGRESS_STEPS);
+		progress.setProgressNumberFormat(null);
 		progress.setCancelable(false);
 		progress.setButton(DialogInterface.BUTTON_NEGATIVE,
 				app.getString(R.string.shared_string_cancel), (d, which) -> cancelExport());
@@ -551,143 +451,40 @@ public class ChizuExim {
 		stylePillButton(progress.getButton(DialogInterface.BUTTON_NEGATIVE));
 	}
 
-	@NonNull
-	private String itemsLine(int done) {
-		return app.getString(R.string.chizu_exim_items_progress, done, exportTotalItems);
-	}
-
-	private void updateExportProgress(int valueMb) {
-		if (progress == null) {
+	/** Called from the export thread — throttled so the main looper is not flooded. */
+	private void onExportProgress(long current, long total, @NonNull String unit, @NonNull String text) {
+		long now = SystemClock.elapsedRealtime();
+		if (now - lastProgressPost < 200 && current < total) {
 			return;
 		}
-		progress.setProgress(valueMb);
-		long bytes = ((long) valueMb) << 20;
-		int done = 0;
-		if (exportCumBytes != null) {
-			for (long boundary : exportCumBytes) {
-				if (boundary <= bytes) {
-					done++;
-				} else {
-					break;
-				}
+		lastProgressPost = now;
+		app.runInUIThread(() -> {
+			if (progress != null) {
+				progress.setMessage(text);
+				progress.setProgress(total > 0 ? (int) (current * PROGRESS_STEPS / total) : 0);
 			}
-		}
-		progress.setMessage(itemsLine(Math.min(done, exportTotalItems)));
+		});
 	}
 
 	private void cancelExport() {
-		exportCancelled = true;
-		if (pendingExportFile != null) {
-			app.getFileSettingsHelper().cancelExportForFile(pendingExportFile);
-		}
+		exportCancelled.set(true);
 		hideProgress();
 	}
 
-	private void finishExportUi(boolean ok, @NonNull String fileName) {
+	private void finishExportUi(@NonNull ChizuBackup.Result result, @NonNull String fileName) {
 		hideProgress();
-		if (exportCancelled) {
+		if (exportCancelled.get()) {
 			return; // cancelled by 白い熊 — no dialogs, the panel stays open
 		}
 		if (!fragment.isAdded()) {
 			return;
 		}
-		if (ok) {
+		if (result.ok) {
 			fragment.refreshPage();
 			refreshPanelDirBox();
 			showExportDoneDialog(fileName);
 		} else {
 			app.showToastMessage(R.string.chizu_exim_export_failed);
-		}
-	}
-
-	@NonNull
-	private String exportBaseName() {
-		String version;
-		try {
-			version = app.getPackageManager().getPackageInfo(app.getPackageName(), 0).versionName;
-		} catch (Exception e) {
-			version = "unknown";
-		}
-		String stamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.ROOT).format(new Date());
-		return EXPORT_PREFIX + version + "_export_" + stamp;
-	}
-
-	/** Streams the finished .osf into the SAF dir, appending the 白い熊 sidecar entries if wanted. */
-	private boolean copyToDir(@NonNull File source, @NonNull DocumentFile dir,
-			@NonNull String fileName, boolean withChizu) {
-		DocumentFile dest = dir.createFile("application/octet-stream", fileName);
-		if (dest == null) {
-			return false;
-		}
-		try (OutputStream rawOut = app.getContentResolver().openOutputStream(dest.getUri())) {
-			if (rawOut == null) {
-				return false;
-			}
-			if (!withChizu) {
-				try (InputStream in = new FileInputStream(source)) {
-					cancellableCopy(in, rawOut);
-				}
-				return true;
-			}
-			// re-zip entry by entry so the sidecar can ride inside the same archive
-			try (ZipInputStream zin = new ZipInputStream(new FileInputStream(source));
-					ZipOutputStream zout = new ZipOutputStream(rawOut)) {
-				zout.setLevel(Deflater.BEST_SPEED);
-				ZipEntry entry;
-				while ((entry = zin.getNextEntry()) != null) {
-					zout.putNextEntry(new ZipEntry(entry.getName()));
-					cancellableCopy(zin, zout);
-					zout.closeEntry();
-				}
-				writeSidecarEntries(zout);
-			}
-			return true;
-		} catch (Exception e) {
-			try {
-				dest.delete();
-			} catch (Exception ignored) {
-			}
-			return false;
-		}
-	}
-
-	private boolean writeSidecarOnlyArchive(@NonNull DocumentFile dir, @NonNull String baseName) {
-		DocumentFile dest = dir.createFile("application/octet-stream", baseName + EXPORT_EXT);
-		if (dest == null) {
-			return false;
-		}
-		try (OutputStream rawOut = app.getContentResolver().openOutputStream(dest.getUri())) {
-			if (rawOut == null) {
-				return false;
-			}
-			try (ZipOutputStream zout = new ZipOutputStream(rawOut)) {
-				writeSidecarEntries(zout);
-			}
-			return true;
-		} catch (Exception e) {
-			try {
-				dest.delete();
-			} catch (Exception ignored) {
-			}
-			return false;
-		}
-	}
-
-	private void writeSidecarEntries(@NonNull ZipOutputStream zout) throws Exception {
-		zout.putNextEntry(new ZipEntry(SIDECAR_ENTRY));
-		zout.write(chizuPrefsJson().toString(2).getBytes("UTF-8"));
-		zout.closeEntry();
-		File[] fonts = ChizuFonts.getFontsDir(app).listFiles();
-		if (fonts != null) {
-			for (File font : fonts) {
-				if (font.isFile()) {
-					zout.putNextEntry(new ZipEntry(SIDECAR_FONTS_PREFIX + font.getName()));
-					try (InputStream in = new FileInputStream(font)) {
-						cancellableCopy(in, zout);
-					}
-					zout.closeEntry();
-				}
-			}
 		}
 	}
 
@@ -706,13 +503,13 @@ public class ChizuExim {
 		List<ExportType> types = selectedTypes();
 		boolean withChizu = chizuUiSelected();
 		new Thread(() -> {
-			File temp = new File(FileUtils.getTempDir(app), "chizu_import" + EXPORT_EXT);
+			File temp = new File(FileUtils.getTempDir(app), IMPORT_TEMP_NAME);
 			try (InputStream in = app.getContentResolver().openInputStream(uri);
 					OutputStream out = new FileOutputStream(temp)) {
 				if (in == null) {
 					throw new IOException("no stream");
 				}
-				streamCopy(in, out);
+				ChizuBackup.streamCopy(in, out);
 			} catch (Exception e) {
 				app.runInUIThread(() -> {
 					hideProgress();
@@ -720,7 +517,7 @@ public class ChizuExim {
 				});
 				return;
 			}
-			boolean chizuApplied = withChizu && applySidecar(temp);
+			boolean chizuApplied = withChizu && ChizuBackup.applySidecar(app, temp);
 			app.runInUIThread(() -> collectAndImport(temp, types, chizuApplied));
 		}).start();
 	}
@@ -769,102 +566,6 @@ public class ChizuExim {
 			helper.importSettings(file, selected, "", 1, importListener);
 		};
 		helper.collectSettings(file, "", 1, collectListener);
-	}
-
-	/** Extracts and applies the 白い熊 地図 UI sidecar; true when it was found and applied. */
-	private boolean applySidecar(@NonNull File archive) {
-		boolean applied = false;
-		try (ZipInputStream zin = new ZipInputStream(new FileInputStream(archive))) {
-			ZipEntry entry;
-			while ((entry = zin.getNextEntry()) != null) {
-				String name = entry.getName();
-				if (SIDECAR_ENTRY.equals(name)) {
-					java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
-					streamCopy(zin, buffer);
-					applyChizuPrefsJson(new JSONObject(buffer.toString("UTF-8")));
-					applied = true;
-				} else if (name.startsWith(SIDECAR_FONTS_PREFIX) && !entry.isDirectory()) {
-					String fontName = name.substring(SIDECAR_FONTS_PREFIX.length());
-					if (!fontName.isEmpty() && !fontName.contains("/") && !fontName.contains("..")) {
-						File target = new File(ChizuFonts.getFontsDir(app), fontName);
-						try (OutputStream out = new FileOutputStream(target)) {
-							streamCopy(zin, out);
-						}
-						applied = true;
-					}
-				}
-				zin.closeEntry();
-			}
-		} catch (Exception e) {
-			return applied;
-		}
-		return applied;
-	}
-
-	// ---------- the 白い熊 地図 UI sidecar payload ----------
-
-	@NonNull
-	private JSONObject chizuPrefsJson() throws Exception {
-		JSONObject json = new JSONObject();
-		Map<String, ?> all = app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE).getAll();
-		for (Map.Entry<String, ?> entry : all.entrySet()) {
-			Object value = entry.getValue();
-			JSONObject typed = new JSONObject();
-			if (value instanceof Boolean) {
-				typed.put("t", "b").put("v", value);
-			} else if (value instanceof Integer) {
-				typed.put("t", "i").put("v", value);
-			} else if (value instanceof Long) {
-				typed.put("t", "l").put("v", value);
-			} else if (value instanceof Float) {
-				typed.put("t", "f").put("v", ((Float) value).doubleValue());
-			} else if (value instanceof String) {
-				typed.put("t", "s").put("v", value);
-			} else if (value instanceof Set) {
-				typed.put("t", "ss").put("v", new JSONArray((Set<?>) value));
-			} else {
-				continue;
-			}
-			json.put(entry.getKey(), typed);
-		}
-		return json;
-	}
-
-	private void applyChizuPrefsJson(@NonNull JSONObject json) throws Exception {
-		SharedPreferences.Editor editor =
-				app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE).edit();
-		java.util.Iterator<String> keys = json.keys();
-		while (keys.hasNext()) {
-			String key = keys.next();
-			JSONObject typed = json.getJSONObject(key);
-			String type = typed.getString("t");
-			switch (type) {
-				case "b":
-					editor.putBoolean(key, typed.getBoolean("v"));
-					break;
-				case "i":
-					editor.putInt(key, typed.getInt("v"));
-					break;
-				case "l":
-					editor.putLong(key, typed.getLong("v"));
-					break;
-				case "f":
-					editor.putFloat(key, (float) typed.getDouble("v"));
-					break;
-				case "s":
-					editor.putString(key, typed.getString("v"));
-					break;
-				case "ss":
-					JSONArray array = typed.getJSONArray("v");
-					Set<String> set = new HashSet<>();
-					for (int i = 0; i < array.length(); i++) {
-						set.add(array.getString(i));
-					}
-					editor.putStringSet(key, set);
-					break;
-			}
-		}
-		editor.apply();
 	}
 
 	// ---------- finish dialogs + the close chain ----------
@@ -992,27 +693,7 @@ public class ChizuExim {
 		}
 	}
 
-	/** Stream copy that aborts (throws) as soon as the export is cancelled. */
-	private void cancellableCopy(@NonNull InputStream in, @NonNull OutputStream out) throws IOException {
-		byte[] buffer = new byte[8192];
-		int read;
-		while ((read = in.read(buffer)) != -1) {
-			if (exportCancelled) {
-				throw new IOException("export cancelled");
-			}
-			out.write(buffer, 0, read);
-		}
-	}
-
 	// ---------- small helpers ----------
-
-	private static void streamCopy(@NonNull InputStream in, @NonNull OutputStream out) throws IOException {
-		byte[] buffer = new byte[8192];
-		int read;
-		while ((read = in.read(buffer)) != -1) {
-			out.write(buffer, 0, read);
-		}
-	}
 
 	private int color(ChizuTheme.Slot slot) {
 		return ChizuTheme.getColor(app, slot);
