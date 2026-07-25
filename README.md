@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, an always-visible position marker, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), an always-visible position marker, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+9`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+14`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -22,7 +22,12 @@ The dark theme is the default and means it: pure-black backgrounds, cards, app b
 ---
 
 ## 🎨 One theming page for the whole app
-A dedicated 白い熊 地図 settings page (also on long-press of the drawer map button): RGBA slider color pickers with prior-color swatches and live preview for every themed color, external font import via the system file picker with a glyph-rendered font list, weight selection and live sample, plus map button size / roundness / opacity and map text size sliders — all applied at runtime, no rebuild.
+A dedicated 白い熊 地図 settings page (also on long-press of the drawer map button — it opens the instant the long-press lands): RGBA slider color pickers with prior-color swatches and live preview for every themed color, external font import via the system file picker with a glyph-rendered font list, weight selection and live sample, plus map button size / roundness / opacity and map text size sliders — all applied at runtime, no rebuild. Styled kxkb-style: bold yellow headings with text-wide underlines, hairline section separators, deep indents.
+
+---
+
+## 📦 Export / Import everything, one archive
+The top of the UI page: pick a backup directory once, then export **everything settable in the app** — every stock category (profiles, favorites, tracks, rendering, routing, voices, …), the 白い熊 地図 theming (colors, fonts, sizes, imported font files riding inside the standard `.osf`), and optionally the downloaded **maps** with their subcategories, size-counted live in the panel. Live progress with an item counter and working Cancel; import restores the selected categories and offers a one-tap restart. The stock Settings export/import is replaced by this.
 
 ---
 
