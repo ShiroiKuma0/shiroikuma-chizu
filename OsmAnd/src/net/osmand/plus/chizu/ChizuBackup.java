@@ -1,0 +1,760 @@
+package net.osmand.plus.chizu;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.net.Uri;
+import android.os.Environment;
+import android.os.SystemClock;
+import android.provider.DocumentsContract;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.documentfile.provider.DocumentFile;
+
+import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.R;
+import net.osmand.plus.settings.backend.ExportCategory;
+import net.osmand.plus.settings.backend.backup.FileSettingsHelper.SettingsExportListener;
+import net.osmand.plus.settings.backend.backup.exporttype.ExportType;
+import net.osmand.plus.settings.backend.backup.items.FileSettingsItem;
+import net.osmand.plus.settings.backend.backup.items.SettingsItem;
+import net.osmand.plus.utils.FileUtils;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.Deflater;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
+
+/**
+ * shiroikuma fork: the backup core — one archive holding everything settable in the app.
+ *
+ * Callable headlessly: the 白い熊 地図 UI panel ({@link ChizuExim}) and the automation
+ * receiver ({@link ChizuStateExportReceiver}) are two thin callers of {@link #export}.
+ * The archive is the stock .osf settings ZIP (all selected stock export types, maps
+ * included) plus the 白い熊 地図 UI sidecar (colors, fonts, sizes and the imported font
+ * files) as extra entries inside the very same ZIP — one file per backup, always.
+ *
+ * The backup directory and the automation token live in their own device-local prefs
+ * file ({@link #PREFS_NAME}), which is never part of any export.
+ */
+public class ChizuBackup {
+
+	/** Device-local prefs: backup directory + automation token. Never exported. */
+	static final String PREFS_NAME = "chizu_exim";
+	private static final String KEY_DIR_URI = "dir_uri";
+
+	/** Family convention (白い熊, 2026-07-25): {@code <english-app-name>_<stamp>.zip}. */
+	public static final String EXPORT_PREFIX = "shiroikuma-chizu_";
+	public static final String EXPORT_EXT = ".zip";
+	/** Extension of backups written before the family convention landed. */
+	public static final String LEGACY_EXT = ".osf";
+
+	private static final String SIDECAR_ENTRY = "chizu_ui.json";
+	private static final String SIDECAR_FONTS_PREFIX = "chizu_fonts/";
+
+	/** Category id of the 白い熊 地図 UI sidecar (sub-option of the Settings group). */
+	public static final String ID_CHIZU_UI = "settings.chizu_ui";
+	/** Category id of the maps group — a group of its own, as in the Export/Import panel. */
+	private static final String GROUP_MAPS = "maps";
+
+	private static final String UNIT_BYTES = "bytes";
+	private static final String UNIT_CATEGORIES = "categories";
+	/** Progress is reported at most once per this many bytes written. */
+	private static final long PROGRESS_STEP_BYTES = 1L << 20;
+
+	private ChizuBackup() {
+	}
+
+	// ---------- device-local prefs (backup directory) ----------
+
+	@NonNull
+	static SharedPreferences prefs(@NonNull Context context) {
+		return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+	}
+
+	@Nullable
+	public static Uri getDirUri(@NonNull Context context) {
+		String stored = prefs(context).getString(KEY_DIR_URI, null);
+		if (stored == null) {
+			return null;
+		}
+		try {
+			return Uri.parse(stored);
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	public static void setDirUri(@NonNull Context context, @NonNull Uri uri) {
+		prefs(context).edit().putString(KEY_DIR_URI, uri.toString()).apply();
+	}
+
+	/** The configured backup directory, or null when none is set / it no longer resolves. */
+	@Nullable
+	public static DocumentFile getDir(@NonNull Context context) {
+		Uri uri = getDirUri(context);
+		if (uri == null) {
+			return null;
+		}
+		try {
+			DocumentFile dir = DocumentFile.fromTreeUri(context, uri);
+			return dir != null && dir.isDirectory() ? dir : null;
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	// ---------- naming ----------
+
+	@NonNull
+	public static String fileName() {
+		String stamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.ROOT).format(new Date());
+		return EXPORT_PREFIX + stamp + EXPORT_EXT;
+	}
+
+	/** True for anything this app ever wrote as a backup (new .zip and legacy .osf names). */
+	public static boolean isExportName(@Nullable String name) {
+		return name != null && name.startsWith(EXPORT_PREFIX)
+				&& (name.endsWith(EXPORT_EXT) || name.endsWith(LEGACY_EXT));
+	}
+
+	// ---------- the category catalogue ----------
+
+	/** One selectable category: a group row (type == null, parent == null) or one of its parts. */
+	public static class Cat {
+
+		public final String id;
+		public final String label;
+		@Nullable
+		public final String parent;
+		@Nullable
+		public final ExportType type;
+
+		Cat(@NonNull String id, @NonNull String label, @Nullable String parent, @Nullable ExportType type) {
+			this.id = id;
+			this.label = label;
+			this.parent = parent;
+			this.type = type;
+		}
+	}
+
+	/**
+	 * Every exportable category, groups first and each group's parts right below it —
+	 * exactly the tree the Export/Import panel shows.
+	 */
+	@NonNull
+	public static List<Cat> catalogue(@NonNull OsmandApplication app) {
+		List<Cat> list = new ArrayList<>();
+
+		list.add(new Cat(GROUP_MAPS, app.getString(R.string.chizu_exim_maps), null, null));
+		for (ExportType type : ExportType.mapValues()) {
+			if (type.isAvailable() && !type.isHidden()) {
+				list.add(new Cat(GROUP_MAPS + "." + idOf(type), type.getTitle(app), GROUP_MAPS, type));
+			}
+		}
+		for (ExportCategory category : ExportCategory.values()) {
+			String group = category.name().toLowerCase(Locale.ROOT);
+			list.add(new Cat(group, app.getString(category.getTitleId()), null, null));
+			if (category == ExportCategory.SETTINGS) {
+				list.add(new Cat(ID_CHIZU_UI, app.getString(R.string.chizu_exim_chizu_ui), group, null));
+			}
+			for (ExportType type : ExportType.availableValuesOf(category)) {
+				if (!type.isMap() && !type.isHidden()) {
+					list.add(new Cat(group + "." + idOf(type), type.getTitle(app), group, type));
+				}
+			}
+		}
+		return list;
+	}
+
+	@NonNull
+	private static String idOf(@NonNull ExportType type) {
+		return type.name().toLowerCase(Locale.ROOT);
+	}
+
+	@Nullable
+	private static Cat find(@NonNull List<Cat> catalogue, @NonNull String id) {
+		for (Cat cat : catalogue) {
+			if (cat.id.equals(id)) {
+				return cat;
+			}
+		}
+		return null;
+	}
+
+	/** What one request asked for, resolved onto stock export types + the 白い熊 sidecar. */
+	public static class Selection {
+
+		public final List<ExportType> types;
+		public final boolean withChizu;
+		/** Number of leaf categories selected — what the reply reports as "<n> categories". */
+		public final int count;
+
+		public Selection(@NonNull List<ExportType> types, boolean withChizu, int count) {
+			this.types = types;
+			this.withChizu = withChizu;
+			this.count = count;
+		}
+	}
+
+	/**
+	 * Resolves a comma-separated {@code items} list. Null/empty selects everything; a group
+	 * id selects all of its parts (the groups carry no data of their own). Returns null when
+	 * an id is not in the catalogue.
+	 */
+	@Nullable
+	public static Selection select(@NonNull OsmandApplication app, @Nullable String items) {
+		List<Cat> catalogue = catalogue(app);
+		Set<String> wanted = new LinkedHashSet<>();
+		if (items == null || items.trim().isEmpty()) {
+			for (Cat cat : catalogue) {
+				if (cat.parent != null) {
+					wanted.add(cat.id);
+				}
+			}
+		} else {
+			for (String raw : items.split(",")) {
+				String id = raw.trim().toLowerCase(Locale.ROOT);
+				if (id.isEmpty()) {
+					continue;
+				}
+				Cat cat = find(catalogue, id);
+				if (cat == null) {
+					return null;
+				}
+				if (cat.parent == null) {
+					for (Cat child : catalogue) {
+						if (id.equals(child.parent)) {
+							wanted.add(child.id);
+						}
+					}
+				} else {
+					wanted.add(cat.id);
+				}
+			}
+		}
+		List<ExportType> types = new ArrayList<>();
+		boolean withChizu = false;
+		for (String id : wanted) {
+			Cat cat = find(catalogue, id);
+			if (cat == null) {
+				continue;
+			}
+			if (cat.type != null) {
+				types.add(cat.type);
+			} else if (ID_CHIZU_UI.equals(cat.id)) {
+				withChizu = true;
+			}
+		}
+		return new Selection(types, withChizu, wanted.size());
+	}
+
+	// ---------- destinations ----------
+
+	/** Where one backup goes: a plain file (All-files access) or a SAF document. */
+	public interface Dest {
+
+		@NonNull
+		OutputStream open() throws IOException;
+
+		/** Byte length of what was written — queried after the stream is closed. */
+		long length();
+
+		void delete();
+
+		/** What the reply reports as the written path. */
+		@NonNull
+		String path();
+	}
+
+	public static class FileDest implements Dest {
+
+		private final File file;
+
+		public FileDest(@NonNull File file) {
+			this.file = file;
+		}
+
+		@NonNull
+		@Override
+		public OutputStream open() throws IOException {
+			File parent = file.getParentFile();
+			if (parent != null && !parent.exists() && !parent.mkdirs()) {
+				throw new IOException("cannot create " + parent.getAbsolutePath());
+			}
+			return new FileOutputStream(file);
+		}
+
+		@Override
+		public long length() {
+			return file.length();
+		}
+
+		@Override
+		public void delete() {
+			//noinspection ResultOfMethodCallIgnored
+			file.delete();
+		}
+
+		@NonNull
+		@Override
+		public String path() {
+			return file.getAbsolutePath();
+		}
+	}
+
+	public static class SafDest implements Dest {
+
+		private final Context context;
+		private final DocumentFile dir;
+		private final String name;
+		private DocumentFile created;
+
+		public SafDest(@NonNull Context context, @NonNull DocumentFile dir, @NonNull String name) {
+			this.context = context;
+			this.dir = dir;
+			this.name = name;
+		}
+
+		@NonNull
+		@Override
+		public OutputStream open() throws IOException {
+			created = dir.createFile("application/zip", name);
+			if (created == null) {
+				throw new IOException("cannot create " + name);
+			}
+			OutputStream out = context.getContentResolver().openOutputStream(created.getUri());
+			if (out == null) {
+				throw new IOException("cannot write " + name);
+			}
+			return out;
+		}
+
+		@Override
+		public long length() {
+			return created != null ? created.length() : 0;
+		}
+
+		@Override
+		public void delete() {
+			if (created != null) {
+				try {
+					created.delete();
+				} catch (Exception ignored) {
+				}
+			}
+		}
+
+		/** A real filesystem path where the document id gives one — that is what 白い熊 restores from. */
+		@NonNull
+		@Override
+		public String path() {
+			if (created == null) {
+				return name;
+			}
+			try {
+				String documentId = DocumentsContract.getDocumentId(created.getUri());
+				int colon = documentId.indexOf(':');
+				if (colon > 0) {
+					String volume = documentId.substring(0, colon);
+					String rest = documentId.substring(colon + 1);
+					if ("primary".equalsIgnoreCase(volume)) {
+						return new File(Environment.getExternalStorageDirectory(), rest).getAbsolutePath();
+					}
+					return "/storage/" + volume + "/" + rest;
+				}
+			} catch (Exception ignored) {
+			}
+			return created.getUri().toString();
+		}
+
+		@NonNull
+		public String fileName() {
+			return name;
+		}
+	}
+
+	// ---------- progress + result ----------
+
+	/** Real numbers, never a percentage: {@code text} is what a caller displays. */
+	public interface Progress {
+		void onProgress(long current, long total, @NonNull String unit, @NonNull String text);
+	}
+
+	public static class Result {
+
+		public final boolean ok;
+		@Nullable
+		public final String error;
+		@NonNull
+		public final String path;
+		public final long bytes;
+		public final int categories;
+
+		private Result(boolean ok, @Nullable String error, @NonNull String path, long bytes, int categories) {
+			this.ok = ok;
+			this.error = error;
+			this.path = path;
+			this.bytes = bytes;
+			this.categories = categories;
+		}
+
+		static Result error(@NonNull String message) {
+			return new Result(false, message, "", 0, 0);
+		}
+
+		static Result ok(@NonNull String path, long bytes, int categories) {
+			return new Result(true, null, path, bytes, categories);
+		}
+	}
+
+	// ---------- the export core ----------
+
+	/**
+	 * Writes one backup archive. Blocking — never call it on the main thread; the stock
+	 * export task it drives reports back there.
+	 */
+	@NonNull
+	public static Result export(@NonNull OsmandApplication app, @NonNull Selection selection,
+			@NonNull Dest dest, @Nullable Progress progress, @NonNull AtomicBoolean cancelled) {
+		if (selection.count == 0) {
+			return Result.error("no categories selected");
+		}
+		report(progress, 0, selection.count, UNIT_CATEGORIES,
+				"Preparing 0/" + selection.count + " categories");
+
+		List<SettingsItem> items;
+		try {
+			items = selection.types.isEmpty()
+					? new ArrayList<>()
+					: app.getFileSettingsHelper().getFilteredSettingsItems(selection.types, true, false, false);
+		} catch (Exception e) {
+			return Result.error("collect failed");
+		}
+		if (cancelled.get()) {
+			return Result.error("cancelled");
+		}
+
+		if (items.isEmpty()) {
+			// nothing but the 白い熊 地図 UI sidecar — write the archive directly
+			try (OutputStream out = dest.open()) {
+				ZipOutputStream zout = new ZipOutputStream(out);
+				writeSidecarEntries(app, zout, cancelled);
+				zout.finish();
+			} catch (Exception e) {
+				dest.delete();
+				return Result.error("write failed");
+			}
+			long written = dest.length();
+			report(progress, written, written, UNIT_BYTES, formatSize(written) + " / " + formatSize(written));
+			return Result.ok(dest.path(), written, selection.count);
+		}
+
+		long totalBytes = 0;
+		for (SettingsItem item : items) {
+			if (item instanceof FileSettingsItem) {
+				totalBytes += ((FileSettingsItem) item).getSize();
+			}
+		}
+		File tempDir = FileUtils.getTempDir(app);
+		String base = "chizu_backup_" + System.currentTimeMillis();
+		File temp = new File(tempDir, base + LEGACY_EXT);
+
+		Result collected = collectToTempFile(app, items, tempDir, base, temp, totalBytes, progress, cancelled);
+		if (collected != null) {
+			return collected;
+		}
+
+		long tempLength = temp.length();
+		long[] copied = {0, 0};
+		// the plain copy moves archive bytes, the re-zip moves the entries' own (uncompressed) bytes
+		long copyTotal = selection.withChizu && totalBytes > 0 ? totalBytes : tempLength;
+		try (OutputStream raw = dest.open()) {
+			if (!selection.withChizu) {
+				try (InputStream in = new FileInputStream(temp)) {
+					copy(in, raw, progress, copied, copyTotal, cancelled);
+				}
+			} else {
+				// re-zip entry by entry so the sidecar rides inside the same archive
+				try (ZipInputStream zin = new ZipInputStream(new FileInputStream(temp))) {
+					ZipOutputStream zout = new ZipOutputStream(raw);
+					zout.setLevel(Deflater.BEST_SPEED);
+					ZipEntry entry;
+					while ((entry = zin.getNextEntry()) != null) {
+						zout.putNextEntry(new ZipEntry(entry.getName()));
+						copy(zin, zout, progress, copied, copyTotal, cancelled);
+						zout.closeEntry();
+					}
+					writeSidecarEntries(app, zout, cancelled);
+					zout.finish();
+				}
+			}
+		} catch (Exception e) {
+			//noinspection ResultOfMethodCallIgnored
+			temp.delete();
+			dest.delete();
+			return Result.error(cancelled.get() ? "cancelled" : "write failed");
+		}
+		//noinspection ResultOfMethodCallIgnored
+		temp.delete();
+
+		long written = dest.length();
+		report(progress, written, written, UNIT_BYTES, formatSize(written) + " / " + formatSize(written));
+		return Result.ok(dest.path(), written, selection.count);
+	}
+
+	/** Runs the stock export task into the temp file; returns null on success, a failure otherwise. */
+	@Nullable
+	private static Result collectToTempFile(@NonNull OsmandApplication app, @NonNull List<SettingsItem> items,
+			@NonNull File tempDir, @NonNull String base, @NonNull File temp, long totalBytes,
+			@Nullable Progress progress, @NonNull AtomicBoolean cancelled) {
+		boolean[] succeeded = {false};
+		CountDownLatch latch = new CountDownLatch(1);
+		SettingsExportListener listener = new SettingsExportListener() {
+			@Override
+			public void onSettingsExportFinished(@NonNull File file, boolean succeed) {
+				succeeded[0] = succeed;
+				latch.countDown();
+			}
+
+			@Override
+			public void onSettingsExportProgressUpdate(int valueMb) {
+				long done = Math.min(((long) valueMb) << 20, totalBytes);
+				report(progress, done, totalBytes, UNIT_BYTES,
+						formatSize(done) + " / " + formatSize(totalBytes));
+			}
+		};
+		// the stock export task is an AsyncTask — start it from the main thread
+		app.runInUIThread(() -> app.getFileSettingsHelper()
+				.exportSettings(tempDir, base, listener, items, true));
+		boolean cancelSent = false;
+		long cancelDeadline = 0;
+		try {
+			while (!latch.await(200, TimeUnit.MILLISECONDS)) {
+				if (!cancelled.get()) {
+					continue;
+				}
+				if (!cancelSent) {
+					cancelSent = true;
+					app.getFileSettingsHelper().cancelExportForFile(temp);
+					cancelDeadline = SystemClock.elapsedRealtime() + 3000;
+				} else if (SystemClock.elapsedRealtime() > cancelDeadline) {
+					// a cancelled task reports to onCancelled(), never to the listener
+					break;
+				}
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			//noinspection ResultOfMethodCallIgnored
+			temp.delete();
+			return Result.error("interrupted");
+		}
+		if (cancelled.get()) {
+			//noinspection ResultOfMethodCallIgnored
+			temp.delete();
+			return Result.error("cancelled");
+		}
+		if (!succeeded[0]) {
+			//noinspection ResultOfMethodCallIgnored
+			temp.delete();
+			return Result.error("export failed");
+		}
+		return null;
+	}
+
+	private static void report(@Nullable Progress progress, long current, long total,
+			@NonNull String unit, @NonNull String text) {
+		if (progress != null) {
+			progress.onProgress(current, total, unit, text);
+		}
+	}
+
+	/** copied[0] = bytes so far, copied[1] = bytes at the last progress report. */
+	private static void copy(@NonNull InputStream in, @NonNull OutputStream out,
+			@Nullable Progress progress, @NonNull long[] copied, long total,
+			@NonNull AtomicBoolean cancelled) throws IOException {
+		byte[] buffer = new byte[8192];
+		int read;
+		while ((read = in.read(buffer)) != -1) {
+			if (cancelled.get()) {
+				throw new IOException("cancelled");
+			}
+			out.write(buffer, 0, read);
+			copied[0] += read;
+			if (total > 0 && copied[0] - copied[1] >= PROGRESS_STEP_BYTES) {
+				copied[1] = copied[0];
+				long done = Math.min(copied[0], total);
+				report(progress, done, total, UNIT_BYTES,
+						"Writing " + formatSize(done) + " / " + formatSize(total));
+			}
+		}
+	}
+
+	static void streamCopy(@NonNull InputStream in, @NonNull OutputStream out) throws IOException {
+		byte[] buffer = new byte[8192];
+		int read;
+		while ((read = in.read(buffer)) != -1) {
+			out.write(buffer, 0, read);
+		}
+	}
+
+	// ---------- the 白い熊 地図 UI sidecar ----------
+
+	private static void writeSidecarEntries(@NonNull OsmandApplication app,
+			@NonNull ZipOutputStream zout, @NonNull AtomicBoolean cancelled) throws Exception {
+		zout.putNextEntry(new ZipEntry(SIDECAR_ENTRY));
+		zout.write(chizuPrefsJson(app).toString(2).getBytes("UTF-8"));
+		zout.closeEntry();
+		File[] fonts = ChizuFonts.getFontsDir(app).listFiles();
+		if (fonts != null) {
+			for (File font : fonts) {
+				if (font.isFile()) {
+					if (cancelled.get()) {
+						throw new IOException("cancelled");
+					}
+					zout.putNextEntry(new ZipEntry(SIDECAR_FONTS_PREFIX + font.getName()));
+					try (InputStream in = new FileInputStream(font)) {
+						streamCopy(in, zout);
+					}
+					zout.closeEntry();
+				}
+			}
+		}
+	}
+
+	/** Extracts and applies the 白い熊 地図 UI sidecar; true when it was found and applied. */
+	static boolean applySidecar(@NonNull OsmandApplication app, @NonNull File archive) {
+		boolean applied = false;
+		try (ZipInputStream zin = new ZipInputStream(new FileInputStream(archive))) {
+			ZipEntry entry;
+			while ((entry = zin.getNextEntry()) != null) {
+				String name = entry.getName();
+				if (SIDECAR_ENTRY.equals(name)) {
+					ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+					streamCopy(zin, buffer);
+					applyChizuPrefsJson(app, new JSONObject(buffer.toString("UTF-8")));
+					applied = true;
+				} else if (name.startsWith(SIDECAR_FONTS_PREFIX) && !entry.isDirectory()) {
+					String fontName = name.substring(SIDECAR_FONTS_PREFIX.length());
+					if (!fontName.isEmpty() && !fontName.contains("/") && !fontName.contains("..")) {
+						File target = new File(ChizuFonts.getFontsDir(app), fontName);
+						try (OutputStream out = new FileOutputStream(target)) {
+							streamCopy(zin, out);
+						}
+						applied = true;
+					}
+				}
+				zin.closeEntry();
+			}
+		} catch (Exception e) {
+			return applied;
+		}
+		return applied;
+	}
+
+	@NonNull
+	private static JSONObject chizuPrefsJson(@NonNull OsmandApplication app) throws Exception {
+		JSONObject json = new JSONObject();
+		Map<String, ?> all = app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE).getAll();
+		for (Map.Entry<String, ?> entry : all.entrySet()) {
+			Object value = entry.getValue();
+			JSONObject typed = new JSONObject();
+			if (value instanceof Boolean) {
+				typed.put("t", "b").put("v", value);
+			} else if (value instanceof Integer) {
+				typed.put("t", "i").put("v", value);
+			} else if (value instanceof Long) {
+				typed.put("t", "l").put("v", value);
+			} else if (value instanceof Float) {
+				typed.put("t", "f").put("v", ((Float) value).doubleValue());
+			} else if (value instanceof String) {
+				typed.put("t", "s").put("v", value);
+			} else if (value instanceof Set) {
+				typed.put("t", "ss").put("v", new JSONArray((Set<?>) value));
+			} else {
+				continue;
+			}
+			json.put(entry.getKey(), typed);
+		}
+		return json;
+	}
+
+	private static void applyChizuPrefsJson(@NonNull OsmandApplication app, @NonNull JSONObject json)
+			throws Exception {
+		SharedPreferences.Editor editor =
+				app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE).edit();
+		Iterator<String> keys = json.keys();
+		while (keys.hasNext()) {
+			String key = keys.next();
+			JSONObject typed = json.getJSONObject(key);
+			switch (typed.getString("t")) {
+				case "b":
+					editor.putBoolean(key, typed.getBoolean("v"));
+					break;
+				case "i":
+					editor.putInt(key, typed.getInt("v"));
+					break;
+				case "l":
+					editor.putLong(key, typed.getLong("v"));
+					break;
+				case "f":
+					editor.putFloat(key, (float) typed.getDouble("v"));
+					break;
+				case "s":
+					editor.putString(key, typed.getString("v"));
+					break;
+				case "ss":
+					JSONArray array = typed.getJSONArray("v");
+					Set<String> set = new HashSet<>();
+					for (int i = 0; i < array.length(); i++) {
+						set.add(array.getString(i));
+					}
+					editor.putStringSet(key, set);
+					break;
+			}
+		}
+		editor.apply();
+	}
+
+	// ---------- display ----------
+
+	/** Human size for the reply line: {@code 4.6 MB}, {@code 1.20 GB}. */
+	@NonNull
+	public static String formatSize(long bytes) {
+		if (bytes < 1024) {
+			return bytes + " B";
+		}
+		double kb = bytes / 1024.0;
+		if (kb < 1024) {
+			return String.format(Locale.US, "%.1f KB", kb);
+		}
+		double mb = kb / 1024.0;
+		if (mb < 1024) {
+			return String.format(Locale.US, "%.1f MB", mb);
+		}
+		return String.format(Locale.US, "%.2f GB", mb / 1024.0);
+	}
+}
