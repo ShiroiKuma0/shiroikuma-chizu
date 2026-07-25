@@ -3,6 +3,51 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+14 — 2026-07-25
+
+Base refreshed: OsmAnd `master` at `d328a7693c` (328 commits ahead of the previous base —
+upstream's new spatial search engine and search-history filter chips, the widget-panel
+appearance revamp, solar/lunar eclipse explorers in Star Map, Android 14+ MSL altitude
+handling, and more). Includes the unpublished 5.4.0+10 – +13 builds.
+
+### Export / Import (new)
+- **Everything settable, one archive** — a new Export / Import section at the top of the
+  白い熊 地図 UI page replaces the stock Settings export/import rows.
+- **Backup directory** (SAF folder, device-local, never itself exported): chosen inside the
+  panel; the UI page reports it read-only — red while unset, yellow with the folder name
+  once set — and shows the newest export's timestamp, queried on opening the page.
+- **Category panel**: Maps first with the stock subcategories (standard maps, road-only,
+  wiki & travel, depth, terrain, map sources), **deselected by default**, each line and the
+  Maps total gaining a live size count while the panel is open; then Settings / My places /
+  Resources with every stock export type — profiles, global settings, quick actions, POI
+  filters, avoid-roads, favorites, tracks, OSM notes/edits, A/V notes, markers and marker
+  history, search and navigation history, itineraries, rendering styles, routing files,
+  online routing engines, map sources, voices, color palettes.
+- **白い熊 地図 UI category**: the theming page's colors, fonts, sizes — including imported
+  font files — ride inside the standard `.osf` archive as a fork sidecar entry.
+- **Export**: writes the stock `.osf` straight into the backup directory as
+  `shiroikuma-chizu_<version>_export_<timestamp>.osf`; live horizontal MB bar plus an
+  "Items: x/y" counter; a working Cancel aborts the task and the copy, removing partial
+  files and leaving the panel open. Data collection runs off the UI thread.
+- **Import**: pick an archive, the selected categories are restored with duplicates
+  replaced silently; the finish dialog offers Later / Restart now.
+- **Close chain**: export OK and import acknowledgement close the info dialog, the panel
+  and the UI page in one go; failure messages toast and leave the panel open.
+
+### UI & theming
+- **kxkb-style UI page**: 20sp/17sp bold yellow headings with text-wide underlines, 1px
+  hairline separators between sections, the deep 36/72/54/90 dp indent ladder.
+- **Export/Import dialogs in the fork look**: black cards with a 2 dp yellow border;
+  Arcanechat-style pill buttons (black fill, yellow outline and ripple) — Cancel separated
+  left, Import and Export on the right.
+- **What's-new dialog** (after an app update): black card with a yellow border, yellow buttons.
+- **Yellow icon** for the 白い熊 地図 UI row in main Settings.
+
+### Fixes & behavior
+- **Drawer button long-press fires promptly**: an own touch-dispatch timer triggers the
+  haptic and opens the UI page the moment the long-press timeout elapses — no more waiting
+  for finger-lift — and suppresses the pending drawer click.
+
 ## 5.4.0+9 — 2026-07-17
 
 Base unchanged (OsmAnd `master` at `52d8e08df1`).
