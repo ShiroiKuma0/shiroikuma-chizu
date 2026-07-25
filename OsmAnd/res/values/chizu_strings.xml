@@ -4,6 +4,31 @@
 	<string name="chizu_ui_title">白い熊 地図 UI</string>
 	<string name="chizu_ui_descr">Colors, fonts, sizes — the black-yellow UI</string>
 
+	<string name="chizu_section_exim">Export / Import</string>
+	<string name="chizu_exim_dir">Backup directory (tap to choose)</string>
+	<string name="chizu_exim_dir_label">Backup directory</string>
+	<string name="chizu_exim_dir_unset">Not set — tap to choose a directory</string>
+	<string name="chizu_exim_dir_unset_page">Not set — choose it in Export / Import…</string>
+	<string name="chizu_exim_warn_nodir">No backup directory set yet — pick one to enable export.</string>
+	<string name="chizu_exim_warn_none">No export in this directory yet.</string>
+	<string name="chizu_exim_last">Last export: %1$s</string>
+	<string name="chizu_exim_open">Export / Import…</string>
+	<string name="chizu_exim_open_descr">Choose categories, then export to or import from the backup directory.</string>
+	<string name="chizu_exim_maps">Maps</string>
+	<string name="chizu_exim_chizu_ui">白い熊 地図 UI (colors, fonts, sizes)</string>
+	<string name="chizu_exim_none_selected">No categories selected.</string>
+	<string name="chizu_exim_exporting">Exporting…</string>
+	<string name="chizu_exim_items_progress">Items: %1$d/%2$d</string>
+	<string name="chizu_exim_saving">Saving to the backup directory…</string>
+	<string name="chizu_exim_importing">Importing…</string>
+	<string name="chizu_exim_export_done">✓ Export finished</string>
+	<string name="chizu_exim_export_done_msg">Saved %1$s to the backup directory.</string>
+	<string name="chizu_exim_export_failed">Export failed — nothing was saved.</string>
+	<string name="chizu_exim_import_done">✓ Import finished</string>
+	<string name="chizu_exim_import_done_msg">Restart to apply everything.</string>
+	<string name="chizu_exim_import_failed">Import failed — nothing was changed.</string>
+	<string name="chizu_exim_restart_later">Later</string>
+
 	<string name="chizu_section_foundation">Foundation</string>
 	<string name="chizu_section_fonts">Text &amp; fonts</string>
 	<string name="chizu_section_top_bar">Top bar</string>

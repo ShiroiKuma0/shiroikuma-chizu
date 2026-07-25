@@ -1,6 +1,5 @@
 package net.osmand.plus.chizu;
 
-import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -43,18 +42,22 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 
 	public static final String TAG = ChizuUiFragment.class.getName();
 
-	private static final int INDENT_STEP_DP = 40;
+	// kxkb indent ladder: section heading 36, its rows 72, sub-heading 54, sub-rows 90
+	private static final int SECTION_INSET_DP = 36;
+	private static final int SUBHEAD_INSET_DP = 54;
 	private static final int BASE_INSET_DP = 14;
 
 	private LinearLayout holder;
 	private float density;
 	private ActivityResultLauncher<String[]> fontImportLauncher;
+	private ChizuExim exim;
 
 	@Override
 	public void onCreate(@Nullable Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		fontImportLauncher = registerForActivityResult(
 				new ActivityResultContracts.OpenDocument(), this::onFontImported);
+		exim = new ChizuExim(this, app);
 	}
 
 	@Nullable
@@ -94,6 +97,11 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		root.findViewById(R.id.chizu_toolbar_rule).setBackgroundColor(divider);
 
 		holder.removeAllViews();
+
+		// ===== Export / Import =====
+		addSection(R.string.chizu_section_exim, accent);
+		addEximDirRow(1);
+		addEximOpenRow(1);
 
 		// ===== Foundation =====
 		addSection(R.string.chizu_section_foundation, accent);
@@ -135,44 +143,143 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 
 	// ---------- row builders ----------
 
+	// kxkb-style section header: a 1px full-width separator above every group but the
+	// first, then a big bold heading with a text-wide underline.
 	private void addSection(int labelRes, @ColorInt int accent) {
+		boolean first = holder.getChildCount() == 0;
 		LinearLayout section = new LinearLayout(requireContext());
 		section.setOrientation(LinearLayout.VERTICAL);
-		section.setPadding(dp(BASE_INSET_DP), dp(14), dp(BASE_INSET_DP), dp(2));
+		section.setPadding(0, first ? dp(12) : dp(10), 0, dp(2));
+
+		if (!first) {
+			View spacer = new View(requireContext());
+			spacer.setBackgroundColor(accent);
+			section.addView(spacer, new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.MATCH_PARENT, 1));
+		}
+
+		LinearLayout inner = new LinearLayout(requireContext());
+		inner.setOrientation(LinearLayout.VERTICAL);
+		inner.setPadding(dp(SECTION_INSET_DP), first ? 0 : dp(8), dp(BASE_INSET_DP), 0);
 
 		TextView label = new TextView(requireContext());
 		label.setText(labelRes);
-		label.setTextSize(18);
+		label.setTextSize(20);
 		label.setTypeface(currentGlobalOrDefault(), Typeface.BOLD);
 		label.setTextColor(accent);
-		label.setPaintFlags(label.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
-		section.addView(label);
+		inner.addView(label);
+		inner.addView(textWideRule(label, accent, 2.5f));
 
-		View rule = new View(requireContext());
-		rule.setBackgroundColor(accent);
-		LinearLayout.LayoutParams ruleParams =
-				new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2));
-		ruleParams.topMargin = dp(3);
-		rule.setLayoutParams(ruleParams);
-		section.addView(rule);
-
+		section.addView(inner);
 		holder.addView(section);
 	}
 
 	private void addSubgroup(int labelRes, @ColorInt int accent, int level) {
 		LinearLayout sub = new LinearLayout(requireContext());
 		sub.setOrientation(LinearLayout.VERTICAL);
-		sub.setPadding(indent(level), dp(6), dp(BASE_INSET_DP), dp(1));
+		sub.setPadding(dp(SUBHEAD_INSET_DP), dp(10), dp(BASE_INSET_DP), dp(2));
 
 		TextView label = new TextView(requireContext());
 		label.setText(labelRes);
-		label.setTextSize(15);
+		label.setTextSize(17);
 		label.setTypeface(currentGlobalOrDefault(), Typeface.BOLD);
 		label.setTextColor(accent);
-		label.setPaintFlags(label.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
 		sub.addView(label);
+		sub.addView(textWideRule(label, accent, 1.5f));
 
 		holder.addView(sub);
+	}
+
+	/** An underline exactly as wide as the label's text. */
+	private View textWideRule(@NonNull TextView label, @ColorInt int accent, float heightDp) {
+		label.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+		View rule = new View(requireContext());
+		rule.setBackgroundColor(accent);
+		LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+				label.getMeasuredWidth(), Math.max(1, dp(heightDp)));
+		params.topMargin = dp(2);
+		rule.setLayoutParams(params);
+		return rule;
+	}
+
+	// ---------- Export / Import section ----------
+
+	// report-only: red when no backup directory is set, yellow (with the name) once it is;
+	// the directory is chosen inside the Export / Import panel
+	private void addEximDirRow(int level) {
+		LinearLayout box = new LinearLayout(requireContext());
+		box.setOrientation(LinearLayout.VERTICAL);
+		box.setPadding(indent(level), dp(6), dp(BASE_INSET_DP), dp(6));
+
+		TextView caption = new TextView(requireContext());
+		caption.setText(R.string.chizu_exim_dir_label);
+		caption.setTextSize(12);
+		caption.setTextColor(color(ChizuTheme.Slot.ACCENT));
+		applyGlobalFont(caption);
+		box.addView(caption);
+
+		ChizuExim.Status status = exim.queryStatus();
+		TextView value = new TextView(requireContext());
+		value.setTextSize(15);
+		value.setTypeface(currentGlobalOrDefault(), Typeface.BOLD);
+		if (status.dirName == null) {
+			value.setText(R.string.chizu_exim_dir_unset_page);
+			value.setTextColor(ChizuExim.WARN_COLOR);
+		} else {
+			value.setText(status.dirName);
+			value.setTextColor(color(ChizuTheme.Slot.ACCENT));
+		}
+		box.addView(value);
+
+		TextView statusLine = new TextView(requireContext());
+		statusLine.setText(status.message);
+		statusLine.setTextSize(13);
+		statusLine.setTextColor(status.warn ? ChizuExim.WARN_COLOR : color(ChizuTheme.Slot.ACCENT));
+		applyGlobalFont(statusLine);
+		box.addView(statusLine);
+
+		holder.addView(box);
+	}
+
+	private void addEximOpenRow(int level) {
+		LinearLayout box = new LinearLayout(requireContext());
+		box.setOrientation(LinearLayout.VERTICAL);
+		box.setPadding(indent(level), dp(5), dp(BASE_INSET_DP), dp(5));
+		TypedValue out = new TypedValue();
+		requireContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, out, true);
+		box.setBackgroundResource(out.resourceId);
+
+		TextView title = new TextView(requireContext());
+		title.setText(R.string.chizu_exim_open);
+		title.setTextSize(16);
+		title.setTextColor(color(ChizuTheme.Slot.TEXT));
+		applyGlobalFont(title);
+		box.addView(title);
+
+		TextView descr = new TextView(requireContext());
+		descr.setText(R.string.chizu_exim_open_descr);
+		descr.setTextSize(13);
+		descr.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
+		applyGlobalFont(descr);
+		box.addView(descr);
+
+		box.setOnClickListener(v -> exim.showPanel());
+		holder.addView(box);
+	}
+
+	/** Rebuilds the page (directory status changed, colors imported, …). */
+	void refreshPage() {
+		if (getView() != null) {
+			buildRows();
+		}
+	}
+
+	/** Closes this settings page (the end of the export/import close chain). */
+	void closePage() {
+		FragmentActivity activity = getActivity();
+		if (activity != null) {
+			activity.getSupportFragmentManager().popBackStack();
+		}
 	}
 
 	private void addColorRow(ChizuTheme.Slot slot, int level) {
@@ -441,7 +548,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	private TextView itemLabel(String label) {
 		TextView view = new TextView(requireContext());
 		view.setText(label);
-		view.setTextSize(15);
+		view.setTextSize(16);
 		view.setTextColor(color(ChizuTheme.Slot.TEXT));
 		applyGlobalFont(view);
 		view.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -508,10 +615,11 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	}
 
 	private int indent(int level) {
-		return dp(BASE_INSET_DP) + level * dp(INDENT_STEP_DP);
+		// kxkb ladder: section rows at 72dp, sub-rows at 90dp
+		return dp(level >= 2 ? 90 : 72);
 	}
 
-	private int dp(int value) {
+	private int dp(float value) {
 		return (int) (value * density + 0.5f);
 	}
 
