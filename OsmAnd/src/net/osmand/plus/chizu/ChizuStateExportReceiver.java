@@ -22,9 +22,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * path and size.
  *
  * <pre>
- * &lt;pkg&gt;.action.LIST_CATEGORIES  token → OK: + one "id\tlabel[\tparent]" line per category
+ * &lt;pkg&gt;.action.LIST_CATEGORIES  token → OK: + one "id\tlabel\tparent\ton|off" line per
+ *                              category; the fourth field says whether it starts ticked
  * &lt;pkg&gt;.action.EXPORT_STATE     token [path] [items] [progress_action]
  *                              → OK:&lt;path&gt;|&lt;bytes&gt;|&lt;human size&gt;|&lt;n&gt; categories
+ * &lt;pkg&gt;.action.CANCEL_EXPORT    token [reply_id] → nothing at all; the export it stops
+ *                              answers its own request with ERROR:cancelled
  * </pre>
  *
  * The reply is a fresh broadcast — never a Binder (ResultReceiver / PendingIntent /
@@ -37,6 +40,7 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 
 	private static final String SUFFIX_EXPORT = ".action.EXPORT_STATE";
 	private static final String SUFFIX_LIST = ".action.LIST_CATEGORIES";
+	private static final String SUFFIX_CANCEL = ".action.CANCEL_EXPORT";
 
 	private static final String EXTRA_TOKEN = "token";
 	private static final String EXTRA_PATH = "path";
@@ -70,6 +74,16 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 		PendingResult pending = goAsync();
 		Replier replier = new Replier(app, pending, ordered, replyAction, replyPackage, replyId);
 
+		if (action.endsWith(SUFFIX_CANCEL)) {
+			// Fire-and-forget: never answered — not on success, not on a bad token, not when
+			// nothing is running. Safe to send at any time; the export it stops sends the one
+			// terminal reply (ERROR:cancelled) for the request that started it.
+			if (ChizuAutomation.isEnabled(app) && ChizuAutomation.matches(app, token)) {
+				ChizuBackup.cancelRunning(replyId);
+			}
+			replier.finishSilently();
+			return;
+		}
 		if (!ChizuAutomation.isEnabled(app)) {
 			replier.send("ERROR:automation disabled");
 			return;
@@ -102,10 +116,11 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 				builder.append('\n');
 			}
 			first = false;
-			builder.append(cat.id).append('\t').append(oneLine(cat.label));
-			if (cat.parent != null) {
-				builder.append('\t').append(cat.parent);
-			}
+			// id ⇥ label ⇥ parent ⇥ on|off — the third field stays empty for a group row,
+			// so the fourth keeps its position
+			builder.append(cat.id).append('\t').append(oneLine(cat.label))
+					.append('\t').append(cat.parent != null ? cat.parent : "")
+					.append('\t').append(cat.defaultSelected ? "on" : "off");
 		}
 		return builder.toString();
 	}
@@ -120,8 +135,16 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 	private void runExport(@NonNull OsmandApplication app, @NonNull Replier replier,
 			@Nullable String progressAction, @Nullable String replyPackage, @Nullable String replyId,
 			@Nullable String items, @Nullable String path) {
+		// published for the whole request, not just the write: a cold-started process waits
+		// here for the app to initialize, and a cancel arriving then must still land
+		AtomicBoolean cancelled = new AtomicBoolean();
+		ChizuBackup.beginRun(replyId, cancelled);
 		try {
 			awaitInit(app);
+			if (cancelled.get()) {
+				replier.send("ERROR:cancelled");
+				return;
+			}
 			ChizuBackup.Selection selection = ChizuBackup.select(app, items);
 			if (selection == null) {
 				replier.send("ERROR:unknown category in items: " + items);
@@ -139,7 +162,7 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 					? new ProgressSender(app, progressAction, replyPackage, replyId)
 					: null;
 			ChizuBackup.Result result =
-					ChizuBackup.export(app, selection, dest, progress, new AtomicBoolean());
+					ChizuBackup.export(app, selection, dest, progress, cancelled);
 			if (!result.ok) {
 				replier.send("ERROR:" + (result.error != null ? result.error : "export failed"));
 				return;
@@ -149,6 +172,8 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 		} catch (Throwable error) {
 			Log.e(TAG, "export failed", error);
 			replier.send("ERROR:" + error.getClass().getSimpleName());
+		} finally {
+			ChizuBackup.endRun(cancelled);
 		}
 	}
 
@@ -224,6 +249,17 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 			this.replyAction = replyAction;
 			this.replyPackage = replyPackage;
 			this.replyId = replyId;
+		}
+
+		/** Ends the broadcast without answering it — what a fire-and-forget action gets. */
+		void finishSilently() {
+			if (!sent.compareAndSet(false, true)) {
+				return;
+			}
+			try {
+				pending.finish();
+			} catch (Exception ignored) {
+			}
 		}
 
 		void send(@NonNull String result) {
