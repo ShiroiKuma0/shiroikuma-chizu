@@ -10,7 +10,7 @@ A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+15`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+16`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -32,7 +32,7 @@ The top of the UI page: pick a backup directory once, then export **everything s
 ---
 
 ## 🗄️ Backed up headlessly, on a token
-The same export runs **without opening the app**: two exported broadcast actions let a sister automation app ([白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban)) ask this one for its category list and then have it export itself, writing one ZIP and replying with the path, byte count and human size. Every request is gated by a 24-byte token — generated on the device, compared constant-time, kept out of every backup — behind a switch that is **off by default**, both sitting in the Export / Import section. While it works it broadcasts progress in **real numbers** (`512 MB / 4.2 GB`), never a percentage, and the archive it produces is an ordinary backup that the panel's Import restores.
+The same export runs **without opening the app**: three exported broadcast actions let a sister automation app ([白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban)) ask this one for its category list — each entry saying whether it **starts ticked**, so the gigabytes of downloadable maps and voice packages come pre-excluded while everything authored comes pre-selected — then have it export itself, writing one ZIP and replying with the path, byte count and human size, and **stop it mid-run**: a cancel unwinds at the next entry boundary and deletes the half-written archive, leaving the backup directory exactly as it found it. Every request is gated by a 24-byte token — generated on the device, compared constant-time, kept out of every backup — behind a switch that is **off by default**, both sitting in the Export / Import section. While it works it broadcasts progress in **real numbers** (`512 MB / 4.2 GB`), never a percentage, and the archive it produces is an ordinary backup that the panel's Import restores.
 
 ---
 
