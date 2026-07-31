@@ -32,6 +32,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -78,7 +79,16 @@ public class ChizuBackup {
 	/** Category id of the 白い熊 地図 UI sidecar (sub-option of the Settings group). */
 	public static final String ID_CHIZU_UI = "settings.chizu_ui";
 	/** Category id of the maps group — a group of its own, as in the Export/Import panel. */
-	private static final String GROUP_MAPS = "maps";
+	public static final String GROUP_MAPS = "maps";
+
+	/**
+	 * The non-map categories that start <b>unticked</b> in every picker: downloaded voice
+	 * packages, re-obtainable from OsmAnd's own servers. Everything under {@link #GROUP_MAPS}
+	 * starts unticked too (gigabytes, equally re-downloadable) — that one is structural, see
+	 * {@link #catalogue}. All the rest is authored and cannot be re-obtained, so it starts ticked.
+	 */
+	private static final Set<String> UNTICKED_BY_DEFAULT =
+			new HashSet<>(Arrays.asList("resources.tts_voice", "resources.voice"));
 
 	private static final String UNIT_BYTES = "bytes";
 	private static final String UNIT_CATEGORIES = "categories";
@@ -152,12 +162,20 @@ public class ChizuBackup {
 		public final String parent;
 		@Nullable
 		public final ExportType type;
+		/** Whether a picker starts this one ticked — the contract's optional fourth field. */
+		public final boolean defaultSelected;
 
 		Cat(@NonNull String id, @NonNull String label, @Nullable String parent, @Nullable ExportType type) {
+			this(id, label, parent, type, true);
+		}
+
+		Cat(@NonNull String id, @NonNull String label, @Nullable String parent, @Nullable ExportType type,
+				boolean defaultSelected) {
 			this.id = id;
 			this.label = label;
 			this.parent = parent;
 			this.type = type;
+			this.defaultSelected = defaultSelected;
 		}
 	}
 
@@ -169,10 +187,10 @@ public class ChizuBackup {
 	public static List<Cat> catalogue(@NonNull OsmandApplication app) {
 		List<Cat> list = new ArrayList<>();
 
-		list.add(new Cat(GROUP_MAPS, app.getString(R.string.chizu_exim_maps), null, null));
+		list.add(new Cat(GROUP_MAPS, app.getString(R.string.chizu_exim_maps), null, null, false));
 		for (ExportType type : ExportType.mapValues()) {
 			if (type.isAvailable() && !type.isHidden()) {
-				list.add(new Cat(GROUP_MAPS + "." + idOf(type), type.getTitle(app), GROUP_MAPS, type));
+				list.add(new Cat(GROUP_MAPS + "." + idOf(type), type.getTitle(app), GROUP_MAPS, type, false));
 			}
 		}
 		for (ExportCategory category : ExportCategory.values()) {
@@ -183,11 +201,28 @@ public class ChizuBackup {
 			}
 			for (ExportType type : ExportType.availableValuesOf(category)) {
 				if (!type.isMap() && !type.isHidden()) {
-					list.add(new Cat(group + "." + idOf(type), type.getTitle(app), group, type));
+					String id = group + "." + idOf(type);
+					list.add(new Cat(id, type.getTitle(app), group, type, !UNTICKED_BY_DEFAULT.contains(id)));
 				}
 			}
 		}
 		return list;
+	}
+
+	/** Whether the category with this id starts ticked; an id we do not know starts ticked. */
+	public static boolean startsTicked(@NonNull List<Cat> catalogue, @NonNull String id) {
+		Cat cat = find(catalogue, id);
+		return cat == null || cat.defaultSelected;
+	}
+
+	/** The same answer for one stock export type — what the in-app picker seeds its rows from. */
+	public static boolean startsTicked(@NonNull List<Cat> catalogue, @NonNull ExportType type) {
+		for (Cat cat : catalogue) {
+			if (cat.type == type) {
+				return cat.defaultSelected;
+			}
+		}
+		return true;
 	}
 
 	@NonNull
@@ -221,9 +256,11 @@ public class ChizuBackup {
 	}
 
 	/**
-	 * Resolves a comma-separated {@code items} list. Null/empty selects everything; a group
-	 * id selects all of its parts (the groups carry no data of their own). Returns null when
-	 * an id is not in the catalogue.
+	 * Resolves a comma-separated {@code items} list. Null/empty selects the default set —
+	 * every part that starts ticked, which is everything but the maps and the voice packages.
+	 * A group id selects all of its parts, ticked by default or not (the groups carry no data
+	 * of their own): naming one is an explicit ask, not a default. Returns null when an id is
+	 * not in the catalogue.
 	 */
 	@Nullable
 	public static Selection select(@NonNull OsmandApplication app, @Nullable String items) {
@@ -231,7 +268,7 @@ public class ChizuBackup {
 		Set<String> wanted = new LinkedHashSet<>();
 		if (items == null || items.trim().isEmpty()) {
 			for (Cat cat : catalogue) {
-				if (cat.parent != null) {
+				if (cat.parent != null && cat.defaultSelected) {
 					wanted.add(cat.id);
 				}
 			}
@@ -431,11 +468,65 @@ public class ChizuBackup {
 		}
 	}
 
+	// ---------- the running export (never two at once) ----------
+
+	private static final Object RUN_LOCK = new Object();
+	@Nullable
+	private static String runId;
+	@Nullable
+	private static AtomicBoolean runCancelled;
+
+	/**
+	 * Raises the cancel flag of the export currently running, so it unwinds at the next entry
+	 * boundary and deletes everything it had already written. A null/blank {@code id} means
+	 * "whatever is running" — unambiguous, since two exports at once are forbidden; a named id
+	 * must be the one running. A silent no-op when nothing is running: no error, no crash.
+	 *
+	 * This is the one way to unwind an export — the panel's Cancel button and the automation
+	 * contract's CANCEL_EXPORT both end here, at the flag {@link #export} polls.
+	 */
+	public static void cancelRunning(@Nullable String id) {
+		synchronized (RUN_LOCK) {
+			if (runCancelled == null) {
+				return;
+			}
+			if (id != null && !id.trim().isEmpty() && runId != null && !id.equals(runId)) {
+				return;
+			}
+			runCancelled.set(true);
+		}
+	}
+
+	/**
+	 * Publishes the flag {@link #cancelRunning} raises. Call it around the <b>whole</b>
+	 * request, not just around {@link #export} — a cold-started process spends its first
+	 * seconds waiting for the app to initialize, and a cancel arriving then must still land.
+	 * {@code id} is the automation request's reply_id, null for the in-app panel. Always
+	 * paired with {@link #endRun} in a finally.
+	 */
+	public static void beginRun(@Nullable String id, @NonNull AtomicBoolean cancelled) {
+		synchronized (RUN_LOCK) {
+			runId = id;
+			runCancelled = cancelled;
+		}
+	}
+
+	public static void endRun(@NonNull AtomicBoolean cancelled) {
+		synchronized (RUN_LOCK) {
+			if (runCancelled == cancelled) {
+				runId = null;
+				runCancelled = null;
+			}
+		}
+	}
+
 	// ---------- the export core ----------
 
 	/**
 	 * Writes one backup archive. Blocking — never call it on the main thread; the stock
-	 * export task it drives reports back there.
+	 * export task it drives reports back there. {@code cancelled} is polled between entries
+	 * and unwinds the run, deleting everything already written; callers publish it through
+	 * {@link #beginRun} so a cancel can reach it from outside.
 	 */
 	@NonNull
 	public static Result export(@NonNull OsmandApplication app, @NonNull Selection selection,
@@ -465,8 +556,9 @@ public class ChizuBackup {
 				writeSidecarEntries(app, zout, cancelled);
 				zout.finish();
 			} catch (Exception e) {
+				// a cancelled run leaves the backup directory exactly as it found it
 				dest.delete();
-				return Result.error("write failed");
+				return Result.error(cancelled.get() ? "cancelled" : "write failed");
 			}
 			long written = dest.length();
 			report(progress, written, written, UNIT_BYTES, formatSize(written) + " / " + formatSize(written));
@@ -513,6 +605,8 @@ public class ChizuBackup {
 				}
 			}
 		} catch (Exception e) {
+			// a cancelled run leaves the backup directory exactly as it found it: the
+			// half-written archive goes with the temp file, in the very same unwind
 			//noinspection ResultOfMethodCallIgnored
 			temp.delete();
 			dest.delete();
