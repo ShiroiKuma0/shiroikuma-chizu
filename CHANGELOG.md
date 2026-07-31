@@ -3,6 +3,33 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+17 — 2026-07-31
+
+Base refreshed: OsmAnd `master` at `7c597b19bd` (124 commits ahead of the previous base). No
+fork-side changes in this build — everything below is upstream's, carried in by the rebase, and
+all 22 of our commits replayed onto it without a single conflict.
+
+### What came in from upstream
+- **Search reworked, then partly rolled back**: upstream reverted its own "Improve spatial search
+  android" wholesale and rebuilt it piecemeal — POI-category search gains a frequency signal and
+  zoom-tile deduplication, bounding-box clipping, a search radius raised to **400 km**, short
+  region codes in the search URL, "show more" and category items in the result list, the category
+  list capped at five, and client-side sorting dropped in favour of the engine's own order.
+  Search results will behave noticeably differently from `+16`.
+- **Native crash logs can be shared**: a new `NativeCrashHandler` and a refactored
+  `FeedbackHelper`; the "Send crash log" dialog no longer interrupts active navigation.
+- **A dedicated media folder** for attached media, with a legacy A/V-notes fallback — this
+  reworks `AttachedMediaExportType`, which is the stock side of our `my_places.attached_media`
+  backup category, so an export/import round-trip of attached media is worth exercising.
+- **Wikipedia images fixed**: legacy Wikimedia thumbnail URL matching, and broken article images.
+- **Sensors**: the external-sensor battery warning now fires once per connection rather than
+  repeatedly; cadence data parsing fixed.
+- **Nautical**: AIS rendering optimized, with stable decluttering.
+- **POI**: a new `site` type, rare categories resolved at low zooms, chip-scope colors.
+- **Fixes**: favourites search UI, GPX layer rendering, OSM GPX upload visibility, the
+  trip-recording max-speed and slope widgets, and a simplified quick-search dialog.
+- **Translations**: 54 Weblate commits across roughly 25 languages.
+
 ## 5.4.0+16 — 2026-07-31
 
 Base unchanged (OsmAnd `master` at `d328a7693c`).
