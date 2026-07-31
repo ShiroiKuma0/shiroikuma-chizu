@@ -227,13 +227,18 @@ public class ChizuExim {
 		list.addView(dirBox);
 		refreshPanelDirBox();
 
+		// Every row starts ticked or unticked exactly as LIST_CATEGORIES answers for it,
+		// so this sheet and 保存復元's automation picker open on the same selection
+		List<ChizuBackup.Cat> catalogue = ChizuBackup.catalogue(app);
+
 		// Maps — a separate block at the very beginning, deselected by default
 		CheckBox mapsMaster = addCheck(list, ctx, app.getString(R.string.chizu_exim_maps),
-				false, true, 0, accent, text);
+				ChizuBackup.startsTicked(catalogue, ChizuBackup.GROUP_MAPS), true, 0, accent, text);
 		Map<ExportType, CheckBox> mapTypeChecks = new LinkedHashMap<>();
 		for (ExportType type : ExportType.mapValues()) {
 			if (type.isAvailable() && !type.isHidden()) {
-				CheckBox cb = addCheck(list, ctx, type.getTitle(ctx), false, false, 24, accent, text);
+				CheckBox cb = addCheck(list, ctx, type.getTitle(ctx),
+						ChizuBackup.startsTicked(catalogue, type), false, 24, accent, text);
 				typeChecks.put(type, cb);
 				mapTypeChecks.put(type, cb);
 			}
@@ -245,16 +250,17 @@ public class ChizuExim {
 		});
 		startMapSizeCount(mapTypeChecks, mapsMaster);
 
-		// The stock categories, everything selected by default
+		// The stock categories — all selected by default but the downloadable voice packages
 		for (ExportCategory category : ExportCategory.values()) {
 			addPanelHeading(list, ctx, app.getString(category.getTitleId()), accent);
 			if (category == ExportCategory.SETTINGS) {
 				chizuUiCheck = addCheck(list, ctx, app.getString(R.string.chizu_exim_chizu_ui),
-						true, false, 0, accent, text);
+						ChizuBackup.startsTicked(catalogue, ChizuBackup.ID_CHIZU_UI), false, 0, accent, text);
 			}
 			for (ExportType type : ExportType.availableValuesOf(category)) {
 				if (!type.isMap() && !type.isHidden()) {
-					CheckBox cb = addCheck(list, ctx, type.getTitle(ctx), true, false, 0, accent, text);
+					CheckBox cb = addCheck(list, ctx, type.getTitle(ctx),
+							ChizuBackup.startsTicked(catalogue, type), false, 0, accent, text);
 					typeChecks.put(type, cb);
 				}
 			}
@@ -422,11 +428,17 @@ public class ChizuExim {
 				new ChizuBackup.Selection(types, withChizu, types.size() + (withChizu ? 1 : 0));
 		ChizuBackup.Dest dest = new ChizuBackup.SafDest(app, dir, fileName);
 		showExportProgress();
-		// the very core the automation receiver drives — one export path, two callers
+		// the very core the automation receiver drives — one export path, two callers.
+		// Published while it runs, so an automation CANCEL_EXPORT unwinds this one too.
+		ChizuBackup.beginRun(null, exportCancelled);
 		new Thread(() -> {
-			ChizuBackup.Result result =
-					ChizuBackup.export(app, selection, dest, this::onExportProgress, exportCancelled);
-			app.runInUIThread(() -> finishExportUi(result, fileName));
+			try {
+				ChizuBackup.Result result =
+						ChizuBackup.export(app, selection, dest, this::onExportProgress, exportCancelled);
+				app.runInUIThread(() -> finishExportUi(result, fileName));
+			} finally {
+				ChizuBackup.endRun(exportCancelled);
+			}
 		}, "chizu-ui-export").start();
 	}
 
@@ -466,6 +478,7 @@ public class ChizuExim {
 		});
 	}
 
+	/** The panel's own stop button — the same flag a CANCEL_EXPORT raises, one way to unwind. */
 	private void cancelExport() {
 		exportCancelled.set(true);
 		hideProgress();
