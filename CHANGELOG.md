@@ -3,6 +3,51 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+16 — 2026-07-31
+
+Base unchanged (OsmAnd `master` at `d328a7693c`).
+
+### 保存復元 — every category says whether it starts ticked (new)
+- **`LIST_CATEGORIES` gained a fourth field**: each line is now `id⇥label⇥parent⇥on|off`,
+  with the third field left **empty** on a group row so the fourth keeps its position. The
+  field is positional and optional in the contract — absent means `on` — so nothing written
+  against the old three-field reply breaks. 白い熊 自由作業盤 redraws its backup-item picker
+  from this reply every time it is opened, so the starting selection is now this app's
+  answer to give rather than the caller's to guess.
+- **Unticked by default**: the whole `maps` group and each of its parts — standard maps,
+  wiki & travel, depth data, road maps, terrain — being gigabytes of downloaded map files,
+  and `resources.tts_voice` / `resources.voice`, the downloaded voice packages. All of them
+  are re-obtainable from OsmAnd's own servers. Everything under `settings` and `my_places`
+  stays ticked: favourites, tracks, attached media and profiles are authored and cannot be
+  re-downloaded. The maps rule is structural rather than a list of ids, so an
+  upstream-renamed map type cannot silently flip back to ticked.
+- **The in-app picker reads the same flag**: the Export / Import panel seeds every checkbox
+  from the shared catalogue instead of its own hardcoded defaults, so the sheet and the
+  automation picker open on one answer instead of two.
+- **An absent `items` extra** still means "the default set" — but that set is now the ticked
+  categories rather than every category. Naming a group id explicitly still takes all of its
+  parts, ticked or not: asking for a group is an explicit ask, not a default.
+
+### 保存復元 — `CANCEL_EXPORT` (new)
+- **A third exported action**, `shiroikuma.chizu.action.CANCEL_EXPORT`, on the same receiver
+  and behind the same token, with an optional `reply_id` (absent = whatever is running, which
+  is unambiguous because two exports at once are forbidden). It exists because a cancelled run
+  used to carry on to the end and deliver a backup that had already been stopped.
+- **Fire-and-forget**: it is never answered — not on success, not on a bad token, and not when
+  nothing is running, where it is a silent no-op rather than an error or a crash. Safe to send
+  at any time, including after the export it names has already finished.
+- **The export it stops unwinds cleanly**: the cancel flag is polled between entries, so the
+  run ends at the next boundary — never a killed process, never a thread interrupted
+  mid-`write()`. It deletes the half-written archive in the very same unwind that handles
+  every other failure, leaving the backup directory exactly as it found it — no short archive,
+  no stray partial — and sends the one terminal reply for the original request,
+  `ERROR:cancelled`, through the existing single-shot replier.
+- **Reachable during a cold start**: the flag is published for the whole request rather than
+  just the write, so a cancel arriving while a cold-started process is still waiting for the
+  app to finish initializing — up to three minutes — lands instead of being ignored.
+- **One way to unwind**: the panel's own Cancel button and the broadcast end at the same flag,
+  and that path deletes the partial archive for both.
+
 ## 5.4.0+15 — 2026-07-25
 
 Base unchanged (OsmAnd `master` at `d328a7693c`).
