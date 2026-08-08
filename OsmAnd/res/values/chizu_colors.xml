@@ -2,4 +2,18 @@
 <!-- shiroikuma fork: launcher icon background (house black) -->
 <resources>
 	<color name="chizu_icon_background">#000000</color>
+
+	<!--
+		Content (text + icons) drawn ON TOP of the accent fill.
+
+		Upstream reuses active_buttons_and_links_text_* for two different jobs: content on the
+		app bar, and content on the accent-coloured fill. Those agree upstream (dark-grey app bar,
+		orange accent, near-white on both) but not here: our app bar is black (needs light content)
+		while our accent is #FFFF00 (needs dark content). So we split the roles - the upstream
+		colour keeps the app bar, and these two carry the accent fill.
+
+		ChizuTheme recomputes both by luminance when the ACCENT slot is overridden.
+	-->
+	<color name="chizu_on_accent_dark">#000000</color>
+	<color name="chizu_on_accent_light">#FFFFFF</color>
 </resources>
