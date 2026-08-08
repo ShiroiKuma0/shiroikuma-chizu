@@ -3,6 +3,27 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+019 — 2026-08-08
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Packaging only — the app is identical to `+18`.
+
+### Build counter zero-padded to three digits
+
+The `versionName` counter was written bare, so the APK filenames it feeds — and the release tags
+taken from those filenames — sorted lexicographically instead of in build order: `+10` landed
+before `+3`, burying the newest build in the middle of `~/tmp/`, of the phone's file manager, and
+of the release list. Three digits fixes the order up to `+999`, which the `versionCode` multiplier
+(`base * 10000 + N`) had already capped it at.
+
+- **`versionName` is now `<base>+NNN`** — this release is `5.4.0+019`, and the APK is
+  `shiroikuma-chizu_5.4.0+019_arm64-v8a.apk`.
+- **`versionCode` keeps the plain integer** (`53990019`): padding is a text convention, and the
+  code has to stay numeric and monotonic. `BUILD_NUMBER` in `gradle.properties` stays plain too, so
+  the `buildApk` auto-increment is untouched.
+- **Nothing already published was renamed.** Builds up to `+017` keep their unpadded tags and
+  filenames. Padded names sort before the older unpadded ones for a while; that settles as the old
+  builds age out.
+
 ## 5.4.0+18 — 2026-08-08
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
