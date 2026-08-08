@@ -33,6 +33,7 @@ import net.osmand.plus.widgets.style.CustomTypefaceSpan;
 import net.osmand.router.TransportRoutePlanner.TransportRouteResultSegment;
 import net.osmand.router.TransportRouteResult;
 import net.osmand.util.Algorithms;
+import net.osmand.plus.chizu.ChizuTheme;
 
 import java.util.Iterator;
 import java.util.List;
@@ -174,7 +175,8 @@ public class PublicTransportCard extends MapBaseCard {
 		FrameLayout showButton = view.findViewById(R.id.show_button);
 		TextView showButtonDescr = view.findViewById(R.id.show_button_descr);
 		if (isCurrentRoute()) {
-			color = ContextCompat.getColor(app, R.color.card_and_list_background_light);
+			// shiroikuma fork: the show button is filled with the accent - contrast against it
+			color = ColorUtilities.getColor(app, ChizuTheme.getOnAccentColorId(nightMode));
 			AndroidUtils.setBackground(app, showButton, nightMode, R.drawable.btn_active_light, R.drawable.btn_active_dark);
 			if (!Algorithms.isEmpty(showButtonCustomTitle)) {
 				showButtonDescr.setText(showButtonCustomTitle);
