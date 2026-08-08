@@ -32,7 +32,7 @@ line — this is what OsmAnd nightlies ship) and treat a change of the `versionN
 | Code namespace | `net.osmand.plus` (**unchanged** from upstream) | `OsmAnd/build-common.gradle` |
 | App label | `白い熊 地図` | `productFlavors.androidFull` `resValue "string", "app_name"` |
 | FileProvider authority | `${applicationId}.fileprovider` (code derives it from `getPackageName()`) | `OsmAnd/AndroidManifest.xml` |
-| Version tail | `versionName = "<base>+N"`, `versionCode = <base>*10000+N` | fork lines at the end of `defaultConfig` in `OsmAnd/build.gradle` |
+| Version tail | `versionName = "<base>+NNN"` (counter zero-padded), `versionCode = <base>*10000+N` | fork lines at the end of `defaultConfig` in `OsmAnd/build.gradle` |
 | Build counter | `BUILD_NUMBER` | root `gradle.properties` (bumped by `buildApk`, reset to 1 on upstream sync) |
 | Signing | gitignored `keystore.properties` → `~/.android-keystores/shiroikuma-chizu.jks` (alias `chizu`) | `signingConfigs.fork` + release buildType in `OsmAnd/build.gradle` |
 | Build task | `buildApk` (assemble + copy to `~/tmp` + bump counter) | end of `OsmAnd/build.gradle` |
@@ -43,9 +43,13 @@ The upstream base version literals (`versionCode 5399` / `versionName "5.4.0"`) 
 rebase; never edit them by hand. Our fork lines sit AFTER them and multiply/append.
 
 ### Versioning & APK naming
-- Fork `versionName = "<upstreamBase>+N"` (e.g. `5.4.0+1`), `versionCode = <upstreamCode> * 10000 + N`
-  (e.g. `5399 * 10000 + 1 = 53990001`). When upstream's code climbs, the new line's codes exceed the
+- Fork `versionName = "<upstreamBase>+NNN"` (e.g. `5.4.0+019`), `versionCode = <upstreamCode> * 10000 + N`
+  (e.g. `5399 * 10000 + 19 = 53990019`). When upstream's code climbs, the new line's codes exceed the
   old — upgrades stay monotonic.
+- **The versionName counter is zero-padded to three digits**, so APK filenames and the release tags
+  taken from them sort in build order (`+010` after `+009`, not before `+9`). The `versionCode` keeps
+  the plain integer — padding is text only. Builds up to `+017` predate this and stay unpadded;
+  never rename or retag them.
 - `BUILD_NUMBER` (root `gradle.properties`) is bumped by `buildApk` after every successful build and
   reset to `1` on each new upstream version.
 - APK: `shiroikuma-chizu_<versionName>_arm64-v8a.apk`, copied to `~/tmp/`.
@@ -92,10 +96,10 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=/home/shiroikuma/andro
 - **Always run `adb` with `dangerouslyDisableSandbox: true`** (the sandbox blocks adb's server socket).
 - **Never commit/push unprompted.** Build, let 白い熊 test, and only commit/push on an explicit
   **"Push"**. After an upstream rebase, `custom` needs `git push --force-with-lease origin custom`.
-- **Every build bumps `+N`** — never reuse a build number, never overwrite an older APK in `~/tmp`.
+- **Every build bumps `+NNN`** — never reuse a build number, never overwrite an older APK in `~/tmp`.
 - `keystore.properties`, `*.jks`, `local.properties` are gitignored — never commit them.
 - On a new upstream version, run the `upstream-new-version` skill (proceed-gated feature table BEFORE
-  the rebase, then rebase `custom`, reset `BUILD_NUMBER=1`, build `+1`).
+  the rebase, then rebase `custom`, reset `BUILD_NUMBER=1`, build `+001`).
 - Keep our changes a **small, legible layer** on top of upstream — prefer new files / minimal edits;
   never rename the `net.osmand.plus` namespace.
 

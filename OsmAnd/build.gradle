@@ -23,14 +23,18 @@ apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 // Less important
 
 // --- shiroikuma fork: signing from gitignored keystore.properties + per-build version tail ---
-// forkVersionName = "<upstreamBase>+N", forkVersionCode = <upstreamCode>*10000 + N,
+// forkVersionName = "<upstreamBase>+NNN", forkVersionCode = <upstreamCode>*10000 + N,
 // where N = BUILD_NUMBER from the root gradle.properties (bumped by buildApk, reset to 1 on upstream sync).
+// The versionName counter is zero-padded to three digits, so the APK filenames it feeds — and the
+// release tags derived from them — sort in build order (+010 after +009, not before +9). The
+// versionCode keeps the plain integer: padding is a text convention, and the code must stay numeric.
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
 	keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
 def forkBuildNumber = (project.findProperty("BUILD_NUMBER") ?: "1").toString().trim().toInteger()
+def forkBuildTail = String.format("%03d", forkBuildNumber)
 
 android {
 	signingConfigs {
@@ -79,7 +83,7 @@ android {
 		// shiroikuma fork: per-build version tail (keep AFTER the upstream lines above so their
 		// literals track upstream on rebase; ours just multiply/append)
 		versionCode versionCode * 10000 + forkBuildNumber
-		versionName versionName + "+" + forkBuildNumber
+		versionName versionName + "+" + forkBuildTail
 	}
 
 	lintOptions {
