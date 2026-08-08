@@ -180,6 +180,8 @@
         <item name="text_color_tab_active">@color/text_color_tab_active_light</item>
         <item name="text_color_tab_active_white">@color/text_color_secondary_light</item>
         <item name="app_bar_primary_item_color">@color/active_buttons_and_links_text_light</item>
+        <!-- shiroikuma fork: light content on the blue accent fill -->
+        <item name="chizu_on_accent">@color/chizu_on_accent_light</item>
         <item name="inactive_text_color">@color/icon_color_secondary_light</item>
 	    <item name="text_color_secondary">@color/text_color_secondary_light</item>
 

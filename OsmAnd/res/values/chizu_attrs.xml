@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- shiroikuma fork: theme attributes for the 白い熊 地図 look -->
+<resources>
+	<!-- Content colour for anything drawn on the accent fill; see chizu_colors.xml. -->
+	<attr name="chizu_on_accent" format="color" />
+</resources>

@@ -67,6 +67,7 @@ import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.activities.actions.AppModeDialog;
 import net.osmand.plus.avoidroads.AvoidRoadInfo;
 import net.osmand.plus.avoidroads.AvoidRoadsBottomSheetDialogFragment;
+import net.osmand.plus.chizu.ChizuTheme;
 import net.osmand.plus.base.ContextMenuFragment.MenuState;
 import net.osmand.plus.download.DownloadIndexesThread.DownloadEvents;
 import net.osmand.plus.helpers.AndroidUiHelper;
@@ -1192,11 +1193,14 @@ public class MapRouteInfoMenu implements IRouteInformationListener, CardListener
 			}
 			color2 = color1;
 		} else {
-			color1 = ColorUtilities.getActiveButtonsAndLinksTextColorId(nightMode);
 			if (routeCalculated || currentLocationNotFound && !helper.isRouteBeingCalculated() && !hasCalculatedMissingMaps) {
+				// shiroikuma fork: this branch fills the button with the accent, so the label and
+				// icon must contrast with the accent rather than with the activity background
+				color1 = ChizuTheme.getOnAccentColorId(nightMode);
 				AndroidUtils.setBackgroundColor(app, startButton, ColorUtilities.getActiveColorId(nightMode));
 				color2 = color1;
 			} else {
+				color1 = ColorUtilities.getActiveButtonsAndLinksTextColorId(nightMode);
 				AndroidUtils.setBackgroundColor(app, startButton, ColorUtilities.getActivityBgColorId(nightMode));
 				color2 = R.color.icon_color_default_light;
 			}

@@ -178,7 +178,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:textColor="@color/card_and_list_background_light"
+                    android:textColor="?attr/chizu_on_accent"
                     android:textSize="@dimen/default_list_text_size"
                     tools:text="Show" />
 
@@ -189,7 +189,7 @@
                     android:layout_gravity="center"
                     android:layout_marginStart="20dp"
                     android:layout_marginEnd="20dp"
-                    android:textColor="@color/text_color_primary_dark"
+                    android:textColor="?attr/chizu_on_accent"
                     android:textSize="@dimen/default_desc_text_size"
                     app:typefaceWeight="medium"
                     tools:text="Selected categories: 3" />

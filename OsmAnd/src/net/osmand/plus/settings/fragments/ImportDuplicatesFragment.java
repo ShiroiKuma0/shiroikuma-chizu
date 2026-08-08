@@ -31,6 +31,7 @@ import net.osmand.plus.utils.InsetTarget;
 import net.osmand.plus.utils.InsetTargetsCollection;
 import net.osmand.util.Algorithms;
 import net.osmand.view.ComplexButton;
+import net.osmand.plus.chizu.ChizuTheme;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -84,8 +85,9 @@ public abstract class ImportDuplicatesFragment extends BaseFullScreenFragment {
 				? getColor(R.color.icon_color_active_dark)
 				: getColor(R.color.icon_color_active_light))
 		);
+		// shiroikuma fork: this button sits on the accent-filled dlg_btn_primary background
 		replaceAllBtn.setIcon(getPaintedIcon(R.drawable.ic_action_replace,
-				ColorUtilities.getActiveButtonsAndLinksTextColor(app, nightMode))
+				ColorUtilities.getColor(app, ChizuTheme.getOnAccentColorId(nightMode)))
 		);
 		keepBothBtn.setOnClickListener(v -> importItems(false));
 		replaceAllBtn.setOnClickListener(v -> importItems(true));

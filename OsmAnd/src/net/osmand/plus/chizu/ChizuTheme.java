@@ -106,10 +106,43 @@ public class ChizuTheme {
 							OVERRIDES.put(resId, stored);
 						}
 					}
+					if (slot == Slot.ACCENT && stored != UNSET) {
+						// Content on the accent fill is derived, never picked: keep it readable
+						// whatever accent was chosen. Left alone when the accent is the default,
+						// so the static per-theme values in chizu_colors.xml apply.
+						int onAccent = contrastOn(stored);
+						OVERRIDES.put(R.color.chizu_on_accent_dark, onAccent);
+						OVERRIDES.put(R.color.chizu_on_accent_light, onAccent);
+					}
 				}
 			}
 			hasOverrides = OVERRIDES.size() > 0;
 		}
+	}
+
+	/**
+	 * Black or white, whichever reads better on {@code background}. Uses the WCAG relative
+	 * luminance so a mid-tone accent flips at the point where contrast actually crosses over.
+	 */
+	@ColorInt
+	public static int contrastOn(@ColorInt int background) {
+		double luminance = 0.2126 * channel(android.graphics.Color.red(background))
+				+ 0.7152 * channel(android.graphics.Color.green(background))
+				+ 0.0722 * channel(android.graphics.Color.blue(background));
+		// contrast against white is (1.05 / (L + 0.05)), against black (L + 0.05) / 0.05
+		return luminance > 0.1791 ? BLACK : 0xFFFFFFFF;
+	}
+
+	private static double channel(int component) {
+		double c = component / 255.0;
+		return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+	}
+
+	/**
+	 * The colour resource for text and icons drawn on top of the accent fill.
+	 */
+	public static int getOnAccentColorId(boolean nightMode) {
+		return nightMode ? R.color.chizu_on_accent_dark : R.color.chizu_on_accent_light;
 	}
 
 	/**

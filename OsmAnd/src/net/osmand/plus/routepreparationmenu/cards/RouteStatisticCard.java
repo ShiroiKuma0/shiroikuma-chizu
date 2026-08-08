@@ -32,6 +32,8 @@ import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.OsmAndFormatter;
 import net.osmand.shared.gpx.GpxFile;
 import net.osmand.shared.gpx.GpxTrackAnalysis;
+import net.osmand.plus.chizu.ChizuTheme;
+import net.osmand.plus.utils.ColorUtilities;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -128,7 +130,8 @@ public class RouteStatisticCard extends MapBaseCard {
 		FrameLayout startButton = view.findViewById(R.id.start_button);
 		TextView startButtonDescr = view.findViewById(R.id.start_button_descr);
 		AndroidUtils.setBackground(app, startButton, nightMode, R.drawable.btn_active_light, R.drawable.btn_active_dark);
-		int color = ContextCompat.getColor(app, R.color.card_and_list_background_light);
+		// shiroikuma fork: the start button is filled with the accent - contrast against it
+		int color = ColorUtilities.getColor(app, ChizuTheme.getOnAccentColorId(nightMode));
 		startButton.setOnClickListener(v -> notifyButtonPressed(START_BUTTON_INDEX));
 		RoutingHelper helper = app.getRoutingHelper();
 		if (helper.isFollowingMode() || helper.isPauseNavigation()) {

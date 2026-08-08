@@ -34,7 +34,7 @@
         android:contentDescription="@string/quick_action_new_action"
         app:backgroundTint="?attr/color_dialog_buttons"
         app:srcCompat="@drawable/ic_action_plus"
-        app:tint="?attr/app_bar_primary_item_color" />
+        app:tint="?attr/chizu_on_accent" />
 
     <LinearLayout
         android:id="@+id/bottom_panel"
