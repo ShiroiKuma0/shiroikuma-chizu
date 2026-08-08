@@ -10,7 +10,7 @@ A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+17`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+18`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -18,6 +18,8 @@ Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
 ## 🖤💛 Black-yellow everywhere
 The dark theme is the default and means it: pure-black backgrounds, cards, app bars and map buttons, with yellow text, icons, accents and dividers. The splash is black with the traced-pin logo — no wordmarks — and the launcher icon is a yellow edge-traced pin on black.
+
+Anything drawn **on** the yellow accent — the trip-recording Start button, every primary dialog button, the navigation Go button, accent-filled FABs — takes a contrasting dark label rather than stock's near-white, which would be unreadable. That contrast is derived, not hard-coded: change the accent to a dark color in the theming page and the labels flip to white on their own, by relative luminance.
 
 ---
 
