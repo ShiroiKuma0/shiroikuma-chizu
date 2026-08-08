@@ -683,7 +683,9 @@ public class TripRecordingBottomSheet extends MenuBottomSheetDialogFragment impl
 
 	@ColorRes
 	public static int getPressedColorId(boolean nightMode) {
-		return ColorUtilities.getActiveButtonsAndLinksTextColorId(nightMode);
+		// shiroikuma fork: every caller draws on the accent fill (the Start button, and the
+		// pressed state of the sheet's buttons), so the content has to contrast with the accent.
+		return net.osmand.plus.chizu.ChizuTheme.getOnAccentColorId(nightMode);
 	}
 
 	@DrawableRes
