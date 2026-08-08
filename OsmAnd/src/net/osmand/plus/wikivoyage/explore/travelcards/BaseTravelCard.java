@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.chizu.ChizuTheme;
 
 public abstract class BaseTravelCard {
 
@@ -63,7 +64,8 @@ public abstract class BaseTravelCard {
 	@ColorRes
 	protected int getPrimaryBtnTextColorRes(boolean enabled) {
 		if (enabled) {
-			return ColorUtilities.getActiveButtonsAndLinksTextColorId(nightMode);
+			// shiroikuma fork: wikivoyage_primary_btn_bg is the accent fill
+			return ChizuTheme.getOnAccentColorId(nightMode);
 		}
 		return R.color.text_color_secondary_light;
 	}

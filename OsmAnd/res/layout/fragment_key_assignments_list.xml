@@ -43,7 +43,7 @@
 		android:transitionName="shared_element_container"
 		app:backgroundTint="?attr/color_dialog_buttons"
 		app:srcCompat="@drawable/ic_action_plus"
-		app:tint="?attr/app_bar_primary_item_color" />
+		app:tint="?attr/chizu_on_accent" />
 
 	<LinearLayout
 		android:layout_width="match_parent"

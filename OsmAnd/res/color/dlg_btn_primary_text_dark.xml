@@ -1,5 +1,7 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
+	<!-- pressed fill is active_buttons_and_links_bg_pressed_dark (dark brown) - light content -->
 	<item android:color="@color/active_buttons_and_links_text_dark" android:state_pressed="true" />
 	<item android:color="@color/text_color_secondary_dark" android:state_enabled="false" />
-	<item android:color="@color/active_buttons_and_links_text_dark" />
+	<!-- shiroikuma fork: resting fill is the yellow accent, so the content must be dark -->
+	<item android:color="@color/chizu_on_accent_dark" />
 </selector>
