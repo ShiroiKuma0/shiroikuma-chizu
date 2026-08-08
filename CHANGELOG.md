@@ -3,6 +3,48 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+18 — 2026-08-08
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+### Legible content on the yellow accent (fix)
+
+Stock OsmAnd uses one color — `active_buttons_and_links_text_*`, a near-white `#ebebeb` — for two
+different jobs: content on the **app bar**, and content on the **accent fill**. Upstream those
+agree, because upstream's app bar is dark grey and its accent is orange; near-white reads on both.
+They cannot agree here. Our app bar is `#000000` and needs light content, while our accent is
+`#FFFF00` and needs dark content. Every accent-filled button in the app was therefore drawing
+near-white text on yellow — the trip-recording **Start** button being the one that made it obvious.
+
+- **The two roles are now separate resources.** `active_buttons_and_links_text_*` keeps the app
+  bar, untouched, so all ~40 toolbar call sites behave exactly as before; a new
+  `chizu_on_accent_dark` / `chizu_on_accent_light` carries the accent fill, exposed to layouts as
+  `?attr/chizu_on_accent`.
+- **The on-accent color is derived, not fixed.** Since the accent is user-settable in the 白い熊
+  地図 theming page, hard-coding black would break the moment a dark accent was chosen.
+  `ChizuTheme.contrastOn()` picks black or white from the WCAG relative luminance of the accent,
+  and the override is re-derived whenever the ACCENT slot changes. The default yellow gives black.
+
+Fixed everywhere light content sat on the accent fill:
+
+- the **trip-recording Start button**, and the pressed state of every button in that sheet
+- **every PRIMARY dialog button in the app** — Apply, Save, Continue, Replace all — via the
+  `dlg_btn_primary_text_dark` selector's resting state
+- the **navigation Go button**, split per-branch so the branch that is *not* accent-filled keeps
+  its light label on the activity background
+- the **route statistic** and **public transport** card buttons
+- the **Replace all** icon in the import-duplicates screen
+- **wikivoyage** primary buttons
+- **FABs filled with the accent** — quick actions, key assignments, marker groups
+- the **custom-POI Show bar**, whose subtitle was separately yellow-on-yellow, i.e. invisible
+
+Deliberately left alone, having been checked and found legible: selection-mode toolbars (they fill
+with `#0E3A7C`, not the accent), snackbars (black fill), and plugin logos (already black on yellow).
+
+Known limitation, pre-existing: a custom accent only repaints views colored through
+`ColorUtilities`. XML-themed views keep the static yellow, so changing the accent does not yet
+recolor those fills — only the label contrast on them follows.
+
 ## 5.4.0+17 — 2026-07-31
 
 Base refreshed: OsmAnd `master` at `7c597b19bd` (124 commits ahead of the previous base). No
