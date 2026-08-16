@@ -10,6 +10,7 @@ import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
 import net.osmand.plus.notifications.OsmandNotification;
+import net.osmand.plus.utils.ColorUtilities;
 
 public class CarAppNotification extends OsmandNotification {
 
@@ -49,7 +50,9 @@ public class CarAppNotification extends OsmandNotification {
 		String notificationTitle;
 		String notificationText;
 		icon = R.drawable.ic_action_osmand_logo;
-		notificationTitle = "OsmAnd Android Auto";
+		// shiroikuma fork: our own name, and the accent tint on the notification
+		color = ColorUtilities.getColor(app, R.color.map_button_icon_color_dark, 1.0f);
+		notificationTitle = app.getString(R.string.app_name) + " — Android Auto";
 		notificationText = "Running...";
 
 		return createBuilder(wearable)

@@ -5,12 +5,12 @@ import androidx.annotation.StringRes
 import androidx.car.app.CarContext
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
-import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Item
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.core.graphics.drawable.IconCompat
+import androidx.car.app.navigation.model.PlaceListNavigationTemplate
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -18,6 +18,7 @@ import net.osmand.Location
 import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener
 import net.osmand.plus.R
 import net.osmand.plus.auto.NavigationSession
+import net.osmand.plus.chizu.ChizuCar
 
 class LandingScreen(
     carContext: CarContext,
@@ -84,7 +85,8 @@ class LandingScreen(
                 }
             }
             val title = app.getString(category.titleId)
-            val icon = CarIcon.Builder(IconCompat.createWithResource(app, category.iconId)).build()
+            // shiroikuma fork: yellow glyph
+            val icon = ChizuCar.icon(carContext, category.iconId)
             listBuilder.addItem(
                 Row.Builder()
                     .setTitle(title)
@@ -97,25 +99,17 @@ class LandingScreen(
         updateCompass()
         actionStripBuilder.addAction(settingsAction)
         actionStripBuilder.addAction(createSearchAction())
+        // shiroikuma fork: every map button gets the yellow glyph. Icon tint only — the map
+        // action strip restricts background colors to a primary action, and it has none.
         val mapActionStripBuilder = ActionStrip.Builder()
             .addAction(
-                Action.Builder()
-                    .setIcon(
-                        CarIcon.Builder(
-                            IconCompat.createWithResource(carContext, R.drawable.ic_my_location)
-                        ).build()
-                    )
+                ChizuCar.action(carContext, R.drawable.ic_my_location)
                     .setOnClickListener {
                         session?.navigationCarSurface?.handleRecenter()
                     }
                     .build())
             .addAction(
-                Action.Builder()
-                    .setIcon(
-                        CarIcon.Builder(
-                            IconCompat.createWithResource(carContext, R.drawable.ic_zoom_in)
-                        ).build()
-                    )
+                ChizuCar.action(carContext, R.drawable.ic_zoom_in)
                     .setOnClickListener {
                         app.carNavigationSession?.navigationCarSurface?.handleScale(
 	                        NavigationSession.INVALID_FOCAL_POINT_VAL,
@@ -125,13 +119,7 @@ class LandingScreen(
                     }
                     .build())
             .addAction(
-                Action.Builder()
-                    .setIcon(
-                        CarIcon.Builder(
-                            IconCompat.createWithResource(
-                                carContext,
-                                R.drawable.ic_zoom_out))
-                            .build())
+                ChizuCar.action(carContext, R.drawable.ic_zoom_out)
                     .setOnClickListener {
                         app.carNavigationSession?.navigationCarSurface?.handleScale(
 	                        NavigationSession.INVALID_FOCAL_POINT_VAL,
@@ -152,10 +140,7 @@ class LandingScreen(
 
     private fun createContinueNavigationItem(): Item {
         val title = app.getString(R.string.continue_navigation)
-        val icon = CarIcon.Builder(
-            IconCompat.createWithResource(
-                app,
-                R.drawable.ic_action_gdirections_dark)).build()
+        val icon = ChizuCar.icon(carContext, R.drawable.ic_action_gdirections_dark)
         return Row.Builder()
             .setTitle(title)
             .setImage(icon)
