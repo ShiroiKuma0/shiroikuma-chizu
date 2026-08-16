@@ -12,6 +12,7 @@ import net.osmand.PlatformUtil
 import net.osmand.plus.AppInitializeListener
 import net.osmand.plus.AppInitializer
 import net.osmand.plus.R
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.search.listitems.QuickSearchListItem
 import net.osmand.plus.utils.AndroidUtils
 import net.osmand.search.core.SearchCoreFactory.SearchAmenityTypesAPI
@@ -73,9 +74,9 @@ class POICategoriesScreen(
 			if (groupIcon == null) {
 				groupIcon = app.uiUtilities.getIcon(R.drawable.mx_special_custom_category)
 			}
-			val icon = CarIcon.Builder(
-				IconCompat.createWithBitmap(AndroidUtils.drawableToBitmap(groupIcon))
-			).build()
+			// shiroikuma fork: category glyphs are monochrome, drawn in the app's default icon
+			// colour — grey whenever the phone is in day mode. Tint them yellow on the car.
+			val icon = ChizuCar.icon(carContext, AndroidUtils.drawableToBitmap(groupIcon))
 			listBuilder.addItem(
 				Row.Builder()
 					.setTitle(title)

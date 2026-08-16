@@ -1200,6 +1200,13 @@
 			android:value="1"
 			tools:ignore="MetadataTagInsideApplicationTag" />
 
+		<!-- shiroikuma fork: the car host reads this style to resolve CarColor.PRIMARY and
+		     CarColor.SECONDARY. Without it both fall back to the host's own grey/blue, which
+		     is why the Android Auto screens ignored the black-yellow theme. -->
+		<meta-data android:name="androidx.car.app.theme"
+			android:resource="@style/ChizuCarAppTheme"
+			tools:ignore="MetadataTagInsideApplicationTag" />
+
 		<service
 			android:process="${applicationId}"
 			android:name="net.osmand.plus.auto.NavigationCarAppService"

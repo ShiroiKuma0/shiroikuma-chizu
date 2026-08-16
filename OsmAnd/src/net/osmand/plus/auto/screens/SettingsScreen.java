@@ -10,10 +10,10 @@ import androidx.car.app.model.Row;
 import androidx.car.app.model.SectionedItemList;
 import androidx.car.app.model.Template;
 import androidx.car.app.model.Toggle;
-import androidx.core.graphics.drawable.IconCompat;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.settings.backend.OsmandSettings;
 
 /**
@@ -47,7 +47,9 @@ public final class SettingsScreen extends BaseAndroidAutoScreen {
         );
 		sectionABuilder.addItem(new Row.Builder()
 				.setTitle(getCarContext().getString(R.string.display_distance_to_first_intermediate))
-				.addText(getCarContext().getString(R.string.display_distance_to_first_intermediate_summary))
+				// shiroikuma fork: yellow summary line
+				.addText(ChizuCar.colored(getCarContext(),
+						getCarContext().getString(R.string.display_distance_to_first_intermediate_summary)))
 				.setToggle(
 						new Toggle.Builder(osmandSettings.USE_LEFT_DISTANCE_TO_INTERMEDIATE::set)
 								.setChecked(osmandSettings.USE_LEFT_DISTANCE_TO_INTERMEDIATE.get())
@@ -60,7 +62,7 @@ public final class SettingsScreen extends BaseAndroidAutoScreen {
 						sectionABuilder.build(),
 						getCarContext().getString(R.string.shared_string_navigation)));
 
-		CarIcon icon = new CarIcon.Builder(IconCompat.createWithResource(getApp(), R.drawable.ic_action_map_magnifier)).build();
+		CarIcon icon = ChizuCar.icon(getCarContext(), R.drawable.ic_action_map_magnifier);
 		Row.Builder magnifierRowBuilder = new Row.Builder()
 				.setTitle(getCarContext().getString(R.string.map_magnifier))
 				.setImage(icon)

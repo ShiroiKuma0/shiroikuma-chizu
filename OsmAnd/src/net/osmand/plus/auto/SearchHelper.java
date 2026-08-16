@@ -16,6 +16,7 @@ import net.osmand.data.Amenity;
 import net.osmand.data.LatLon;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.search.listitems.QuickSearchListItem;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.OsmAndFormatter;
@@ -191,7 +192,7 @@ public class SearchHelper {
 				Drawable icon = QuickSearchListItem.getIcon(app, r);
 				itemList.setNoItemsMessage(app.getString(R.string.search_nothing_found));
 				String description = composeDescription(r);
-				Row.Builder builder = buildSearchRow(searchSettings.getOriginalLocation(), r.location, name, icon, description);
+				Row.Builder builder = buildSearchRow(searchSettings.getOriginalLocation(), r.location, name, icon, description, r);
 				if (builder != null) {
 					builder.setOnClickListener(() -> {
 						if (listener != null) {
@@ -222,9 +223,10 @@ public class SearchHelper {
 					builder.setTitle(app.getString(R.string.increase_search_radius));
 					int minimalSearchRadius = searchUICore.getMinimalSearchRadius(phrase);
 					if (count == 0 && minimalSearchRadius != Integer.MAX_VALUE) {
-						double rd = OsmAndFormatter.calculateRoundedDist(minimalSearchRadius, app);
-						builder.addText(app.getString(R.string.nothing_found_in_radius) + " "
-								+ OsmAndFormatter.getFormattedDistance((float) rd, app, OsmAndFormatterParams.NO_TRAILING_ZEROS));
+						builder.addText(ChizuCar.colored(app, app.getString(R.string.nothing_found_in_radius) + " "
+								+ OsmAndFormatter.getFormattedDistance(
+										(float) OsmAndFormatter.calculateRoundedDist(minimalSearchRadius, app),
+										app, OsmAndFormatterParams.NO_TRAILING_ZEROS)));
 					}
 					builder.setOnClickListener(this::onClickSearchMore);
 					builder.setBrowsable(true);
@@ -294,9 +296,20 @@ public class SearchHelper {
 	@Nullable
 	public Row.Builder buildSearchRow(@Nullable LatLon searchLocation, @Nullable LatLon placeLocation,
 	                                  @NonNull String name, @Nullable Drawable icon, @Nullable String description) {
+		return buildSearchRow(searchLocation, placeLocation, name, icon, description, null);
+	}
+
+	@Nullable
+	public Row.Builder buildSearchRow(@Nullable LatLon searchLocation, @Nullable LatLon placeLocation,
+	                                  @NonNull String name, @Nullable Drawable icon, @Nullable String description,
+	                                  @Nullable SearchResult result) {
 		Row.Builder builder = new Row.Builder();
 		if (icon != null) {
-			builder.setImage(new CarIcon.Builder(IconCompat.createWithBitmap(AndroidUtils.drawableToBitmap(icon))).build());
+			// shiroikuma fork: yellow glyph, unless the icon carries a colour of its own
+			IconCompat iconCompat = IconCompat.createWithBitmap(AndroidUtils.drawableToBitmap(icon));
+			builder.setImage(keepsOwnColor(result)
+					? new CarIcon.Builder(iconCompat).build()
+					: ChizuCar.tinted(iconCompat, ChizuCar.accent(app)));
 		}
 		builder.setTitle(name);
 		if (name.equals(description)) {
@@ -312,16 +325,38 @@ public class SearchHelper {
 			SpannableString descriptionSpannable = new SpannableString(descriptionBuilder.toString());
 			DistanceSpan distanceSpan = DistanceSpan.create(TripUtils.getDistance(app, dist));
 			descriptionSpannable.setSpan(distanceSpan, 0, 1, SPAN_INCLUSIVE_INCLUSIVE);
-			builder.addText(descriptionSpannable);
-			builder.setMetadata(new Metadata.Builder().setPlace(new Place.Builder(
-					CarLocation.create(placeLocation.getLatitude(), placeLocation.getLongitude())).build()).build());
+			builder.addText(ChizuCar.colored(app, descriptionSpannable));
+			// shiroikuma fork: yellow map pin
+			builder.setMetadata(new Metadata.Builder().setPlace(
+					ChizuCar.place(app, placeLocation.getLatitude(), placeLocation.getLongitude())).build());
 		} else {
 			if (!Algorithms.isEmpty(description)) {
-				builder.addText(description);
+				builder.addText(ChizuCar.colored(app, description));
 			}
 			builder.setBrowsable(true);
 		}
 		return builder;
+	}
+
+	/**
+	 * shiroikuma fork: the search list mixes monochrome glyphs — POI, address, street, all
+	 * drawn in the app's default icon colour — with icons whose colour carries meaning: a
+	 * favourite's category colour, a map marker's colour. The first kind goes yellow with
+	 * everything else on the car screen; the second keeps what it came with.
+	 */
+	private static boolean keepsOwnColor(@Nullable SearchResult result) {
+		if (result == null || result.objectType == null) {
+			return false;
+		}
+		switch (result.objectType) {
+			case FAVORITE:
+			case FAVORITE_GROUP:
+			case WPT:
+			case MAP_MARKER:
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	private void onClickSearchMore() {

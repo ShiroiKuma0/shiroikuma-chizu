@@ -3,24 +3,19 @@ package net.osmand.plus.auto.screens
 import androidx.car.app.CarContext
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
-import androidx.car.app.model.CarColor
-import androidx.car.app.model.CarIcon
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.PlaceListNavigationTemplate
-import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import net.osmand.IndexConstants.GPX_INDEX_DIR
 import net.osmand.plus.R
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.configmap.tracks.TrackTab
 import net.osmand.plus.configmap.tracks.TrackTabType
 import net.osmand.plus.configmap.tracks.TrackTabsHelper
-import net.osmand.plus.settings.enums.ThemeUsageContext
 import net.osmand.plus.settings.enums.TracksSortMode
-import net.osmand.plus.utils.AndroidUtils
-import net.osmand.plus.utils.ColorUtilities
 import net.osmand.plus.utils.FileUtils
 import net.osmand.shared.extensions.kFile
 import net.osmand.shared.gpx.TrackFolderLoaderTask
@@ -47,11 +42,7 @@ class TracksFoldersScreen(
         setupTrackFolders(templateBuilder)
         val actionStripBuilder = ActionStrip.Builder()
         actionStripBuilder.addAction(
-            Action.Builder()
-                .setIcon(
-                    CarIcon.Builder(
-                        IconCompat.createWithResource(
-                            carContext, R.drawable.ic_action_search_dark)).build())
+            ChizuCar.action(carContext, R.drawable.ic_action_search_dark)
                 .setOnClickListener { openSearch() }
                 .build())
 
@@ -70,13 +61,8 @@ class TracksFoldersScreen(
 
     private fun setupTrackFolders(templateBuilder: PlaceListNavigationTemplate.Builder) {
         val listBuilder = ItemList.Builder()
-        val iconLastModified =
-            CarIcon.Builder(IconCompat.createWithResource(app, R.drawable.ic_action_history))
-                .setTint(
-                    CarColor.createCustom(
-                        app.getColor(R.color.icon_color_osmand_light),
-                        app.getColor(R.color.icon_color_osmand_dark)))
-                .build()
+        // shiroikuma fork: yellow, not the upstream OsmAnd orange
+        val iconLastModified = ChizuCar.icon(carContext, R.drawable.ic_action_history)
         listBuilder.addItem(
             Row.Builder()
                 .setTitle(app.getString(R.string.sort_last_modified))
@@ -102,11 +88,7 @@ class TracksFoldersScreen(
                 break
             }
             val title = trackTab.getDirName(includingSubdirs = true)
-            val nightMode = app.daynightHelper.isNightMode(ThemeUsageContext.MAP)
-            val iconColorId = ColorUtilities.getDefaultIconColorId(nightMode)
-            val iconDrawable = app.uiUtilities.getIcon(trackTab.type.iconId, iconColorId)
-            val icon = CarIcon.Builder(
-                IconCompat.createWithBitmap(AndroidUtils.drawableToBitmap(iconDrawable))).build()
+            val icon = ChizuCar.icon(carContext, trackTab.type.iconId)
             listBuilder.addItem(
                 Row.Builder()
                     .setTitle(title)

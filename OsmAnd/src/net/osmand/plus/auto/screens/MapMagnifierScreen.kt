@@ -11,6 +11,7 @@ import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.MapWithContentTemplate
 import androidx.lifecycle.LifecycleOwner
 import net.osmand.plus.R
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.views.corenative.NativeCoreContext
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -95,9 +96,11 @@ class MapMagnifierScreen(
 			.setSingleList(listBuilder.build())
 			.build()
 
+		// shiroikuma fork: filled yellow Apply. This strip belongs to MapWithContentTemplate,
+		// whose constraints allow a background colour only on the single primary action.
 		val actionStrip = ActionStrip.Builder()
 			.addAction(
-				Action.Builder()
+				ChizuCar.primaryAction(carContext)
 					.setTitle(app.getString(R.string.shared_string_apply))
 					.setOnClickListener {
 						isApplied = true

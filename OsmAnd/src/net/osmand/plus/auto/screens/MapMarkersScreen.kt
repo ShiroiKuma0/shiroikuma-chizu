@@ -7,7 +7,6 @@ import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarColor
 import androidx.car.app.model.CarIcon
-import androidx.car.app.model.CarLocation
 import androidx.car.app.model.DistanceSpan
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.Metadata
@@ -22,6 +21,7 @@ import net.osmand.data.LatLon
 import net.osmand.data.QuadRect
 import net.osmand.plus.R
 import net.osmand.plus.auto.TripUtils
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.mapmarkers.MapMarker
 import net.osmand.plus.settings.enums.CompassMode
 import net.osmand.plus.views.layers.base.OsmandMapLayer.CustomMapObjects
@@ -72,13 +72,12 @@ class MapMarkersScreen(
                 val address = SpannableString(" ")
                 val distanceSpan = DistanceSpan.create(TripUtils.getDistance(app, dist))
                 address.setSpan(distanceSpan, 0, 1, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-                rowBuilder.addText(address)
+                rowBuilder.addText(ChizuCar.colored(carContext, address))
+                // shiroikuma fork: yellow map pin — and at the marker, not at our own
+                // position, which is what upstream passed here
                 rowBuilder.setMetadata(
                     Metadata.Builder().setPlace(
-                        Place.Builder(
-                            CarLocation.create(
-                                location.latitude,
-                                location.longitude)).build()).build())
+                        ChizuCar.place(carContext, markerLocation.latitude, markerLocation.longitude)).build())
             }
             listBuilder.addItem(rowBuilder.build())
         }

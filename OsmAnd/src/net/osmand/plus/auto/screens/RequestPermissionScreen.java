@@ -7,7 +7,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.car.app.CarContext;
 import androidx.car.app.model.Action;
-import androidx.car.app.model.CarColor;
 import androidx.car.app.model.MessageTemplate;
 import androidx.car.app.model.OnClickListener;
 import androidx.car.app.model.ParkedOnlyOnClickListener;
@@ -15,6 +14,7 @@ import androidx.car.app.model.Template;
 
 import net.osmand.PlatformUtil;
 import net.osmand.plus.R;
+import net.osmand.plus.chizu.ChizuCar;
 
 import org.apache.commons.logging.Log;
 
@@ -73,9 +73,9 @@ public class RequestPermissionScreen extends BaseAndroidAutoScreen {
 			}
 		});
 
-		Action action = new Action.Builder()
+		// shiroikuma fork: filled yellow button, instead of upstream's green
+		Action action = ChizuCar.filledAction(getCarContext())
 				.setTitle(getCarContext().getString(R.string.location_access_request_action))
-				.setBackgroundColor(CarColor.GREEN)
 				.setOnClickListener(listener)
 				.build();
 

@@ -11,6 +11,7 @@ import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.MapWithContentTemplate
 import net.osmand.plus.R
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.settings.backend.ApplicationMode
 import net.osmand.plus.settings.backend.preferences.OsmandPreference
 
@@ -18,7 +19,8 @@ import net.osmand.plus.settings.backend.preferences.OsmandPreference
 class PrivateAccessScreen(carContext: CarContext) : BaseAndroidAutoScreen(carContext) {
 
 	override fun getTemplate(): Template {
-		val yesAction = Action.Builder()
+		// shiroikuma fork: filled yellow buttons
+		val yesAction = ChizuCar.filledAction(carContext)
 			.setTitle(app.getString(R.string.shared_string_allow))
 			.setOnClickListener {
 				setResult(true)
@@ -26,7 +28,7 @@ class PrivateAccessScreen(carContext: CarContext) : BaseAndroidAutoScreen(carCon
 			}
 			.build()
 
-		val cancelAction = Action.Builder()
+		val cancelAction = ChizuCar.filledAction(carContext)
 			.setTitle(app.getString(R.string.shared_string_cancel))
 			.setOnClickListener {
 				setResult(false)

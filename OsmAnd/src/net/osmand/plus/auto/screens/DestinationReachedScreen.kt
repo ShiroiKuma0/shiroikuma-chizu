@@ -3,7 +3,6 @@ package net.osmand.plus.auto.screens
 import androidx.car.app.CarContext
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
-import androidx.car.app.model.CarIcon
 import androidx.car.app.model.CarText
 import androidx.car.app.model.Header
 import androidx.car.app.model.ItemList
@@ -11,8 +10,8 @@ import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.MapWithContentTemplate
-import androidx.core.graphics.drawable.IconCompat
 import net.osmand.plus.R
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.plugins.PluginsHelper
 import net.osmand.plus.plugins.parking.ParkingPositionPlugin
 import net.osmand.plus.poi.PoiFiltersHelper
@@ -47,13 +46,7 @@ class DestinationReachedScreen(carContext: CarContext) : BaseAndroidAutoScreen(c
 			itemListBuilder.addItem(
 				Row.Builder()
 					.setTitle(CarText.create(app.getString(R.string.context_menu_item_add_parking_point)))
-					.setImage(
-						CarIcon.Builder(
-							IconCompat.createWithResource(
-								carContext,
-								R.drawable.ic_action_parking_location)
-						).build(), Row.IMAGE_TYPE_ICON
-					)
+					.setImage(ChizuCar.icon(carContext, R.drawable.ic_action_parking_location), Row.IMAGE_TYPE_ICON)
 					.setOnClickListener {
 						val location = app.locationProvider.lastKnownLocation
 						location?.let {
@@ -76,13 +69,7 @@ class DestinationReachedScreen(carContext: CarContext) : BaseAndroidAutoScreen(c
 		itemListBuilder.addItem(
 			Row.Builder()
 				.setTitle(CarText.create(app.getString(R.string.find_parking)))
-				.setImage(
-					CarIcon.Builder(
-						IconCompat.createWithResource(
-							carContext,
-							R.drawable.ic_action_parking_dark)
-					).build(), Row.IMAGE_TYPE_ICON
-				)
+				.setImage(ChizuCar.icon(carContext, R.drawable.ic_action_parking_dark), Row.IMAGE_TYPE_ICON)
 				.setOnClickListener {
 					app.carNavigationSession?.let { session ->
 						val helper: PoiFiltersHelper = app.poiFilters
@@ -109,13 +96,7 @@ class DestinationReachedScreen(carContext: CarContext) : BaseAndroidAutoScreen(c
 		itemListBuilder.addItem(
 			Row.Builder()
 				.setTitle(CarText.create(app.getString(R.string.recalculate_route)))
-				.setImage(
-					CarIcon.Builder(
-						IconCompat.createWithResource(
-							carContext,
-							R.drawable.ic_action_gdirections_dark)
-					).build(), Row.IMAGE_TYPE_ICON
-				)
+				.setImage(ChizuCar.icon(carContext, R.drawable.ic_action_gdirections_dark), Row.IMAGE_TYPE_ICON)
 				.setOnClickListener {
 					val mapActions = app.osmandMap.mapActions
 					mapActions.recalculateRoute(false)
@@ -128,13 +109,7 @@ class DestinationReachedScreen(carContext: CarContext) : BaseAndroidAutoScreen(c
 		itemListBuilder.addItem(
 			Row.Builder()
 				.setTitle(CarText.create(app.getString(R.string.finish_navigation)))
-				.setImage(
-					CarIcon.Builder(
-						IconCompat.createWithResource(
-							carContext,
-							R.drawable.ic_action_finish_navigation)
-					).build(), Row.IMAGE_TYPE_ICON
-				)
+				.setImage(ChizuCar.icon(carContext, R.drawable.ic_action_finish_navigation), Row.IMAGE_TYPE_ICON)
 				.setOnClickListener {
 					app.stopNavigation()
 					screenManager.popToRoot()

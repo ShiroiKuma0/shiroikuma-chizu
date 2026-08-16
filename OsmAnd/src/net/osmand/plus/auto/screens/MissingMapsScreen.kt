@@ -8,6 +8,7 @@ import androidx.car.app.model.Template
 import net.osmand.plus.OsmandApplication
 import net.osmand.plus.R
 import net.osmand.plus.activities.MapActivity
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.routepreparationmenu.RequiredMapsFragment
 import net.osmand.plus.settings.backend.OsmandSettings
 
@@ -28,8 +29,9 @@ class MissingMapsScreen(carContext: CarContext, screenType: MissingMapsScreenTyp
 		val builder = MessageTemplate.Builder(message).setTitle(title)
 
 		if (screenType == MissingMapsScreenType.POSSIBLE_MISSING_MAPS) {
+			// shiroikuma fork: filled yellow buttons
 			builder.addAction(
-				Action.Builder()
+				ChizuCar.filledAction(carContext)
 					.setTitle(app.getString(R.string.route_calculation_use_existing_maps))
 					.setOnClickListener {
 						app.getSettings().setStopOnMissingMaps(false)
@@ -43,7 +45,7 @@ class MissingMapsScreen(carContext: CarContext, screenType: MissingMapsScreenTyp
 
 		return builder
 			.addAction(
-				Action.Builder()
+				ChizuCar.filledAction(carContext)
 					.setTitle(app.getString(R.string.view_on_phone))
 					.setOnClickListener {
 						val app = carContext.applicationContext as OsmandApplication

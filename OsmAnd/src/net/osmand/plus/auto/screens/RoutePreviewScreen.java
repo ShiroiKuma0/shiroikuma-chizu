@@ -30,6 +30,7 @@ import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.auto.NavigationSession;
 import net.osmand.plus.auto.TripUtils;
+import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.helpers.TargetPoint;
 import net.osmand.plus.helpers.TargetPointsHelper;
 import net.osmand.plus.routing.IRouteInformationListener;
@@ -151,7 +152,9 @@ public final class RoutePreviewScreen extends BaseAndroidAutoScreen implements I
 				String typeName = QuickSearchListItem.getTypeName(app, searchResult);
 				title = Algorithms.isEmpty(name) ? typeName : name;
 			}
-			routeRows.add(new Row.Builder().setTitle(title).addText(description).build());
+			// shiroikuma fork: yellow distance-and-time line
+			routeRows.add(new Row.Builder().setTitle(title)
+					.addText(ChizuCar.colored(getCarContext(), description)).build());
 			this.routeRows = routeRows;
 			calculating = app.getRoutingHelper().isRouteBeingCalculated();
 			invalidate();
@@ -201,7 +204,8 @@ public final class RoutePreviewScreen extends BaseAndroidAutoScreen implements I
 		for (Row row : routeRows) {
 			paneBuilder.addRow(row);
 		}
-		paneBuilder.addAction(new Action.Builder()
+		// shiroikuma fork: filled yellow Start
+		paneBuilder.addAction(ChizuCar.filledAction(getCarContext())
 				.setTitle(getApp().getString(R.string.shared_string_control_start))
 				.setOnClickListener(this::onNavigate)
 				.build());

@@ -7,7 +7,6 @@ import androidx.car.app.CarContext
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarIcon
-import androidx.car.app.model.CarLocation
 import androidx.car.app.model.DistanceSpan
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.Metadata
@@ -23,6 +22,7 @@ import net.osmand.data.LatLon
 import net.osmand.data.QuadRect
 import net.osmand.plus.R
 import net.osmand.plus.auto.TripUtils
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.search.listitems.QuickSearchListItem
 import net.osmand.plus.settings.enums.CompassMode
 import net.osmand.plus.utils.AndroidUtils
@@ -138,9 +138,9 @@ class POIScreen(
                 if (groupIcon == null) {
                     groupIcon = AppCompatResources.getDrawable(app, R.drawable.mx_special_custom_category)
                 }
-                val icon = if (groupIcon != null) CarIcon.Builder(
-                    IconCompat.createWithBitmap(AndroidUtils.drawableToBitmap(groupIcon)))
-                    .build() else null
+                // shiroikuma fork: amenity glyphs are monochrome — tint them yellow
+                val icon = if (groupIcon != null)
+                    ChizuCar.icon(carContext, AndroidUtils.drawableToBitmap(groupIcon)) else null
                 val dist = MapUtils.getDistance(
                     point.location.latitude, point.location.longitude,
                     location.latitude, location.longitude)
@@ -150,14 +150,12 @@ class POIScreen(
                 address.setSpan(distanceSpan, 0, 1, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
                 val rowBuilder = Row.Builder()
                     .setTitle(title)
-                    .addText(address)
+                    .addText(ChizuCar.colored(carContext, address))
                     .setOnClickListener { onClickSearchResult(point) }
+                    // shiroikuma fork: yellow map pin
                     .setMetadata(
                         Metadata.Builder().setPlace(
-                            Place.Builder(
-                                CarLocation.create(
-                                    point.location.latitude,
-                                    point.location.longitude)).build()).build())
+                            ChizuCar.place(carContext, point.location.latitude, point.location.longitude)).build())
                 icon?.let { rowBuilder.setImage(it) }
                 listBuilder.addItem(rowBuilder.build())
                 counter++

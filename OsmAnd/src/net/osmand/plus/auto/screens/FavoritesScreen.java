@@ -11,7 +11,6 @@ import androidx.car.app.constraints.ConstraintManager;
 import androidx.car.app.model.Action;
 import androidx.car.app.model.ActionStrip;
 import androidx.car.app.model.CarIcon;
-import androidx.car.app.model.CarLocation;
 import androidx.car.app.model.DistanceSpan;
 import androidx.car.app.model.ItemList;
 import androidx.car.app.model.Metadata;
@@ -29,6 +28,7 @@ import net.osmand.data.QuadRect;
 import net.osmand.plus.R;
 import net.osmand.plus.auto.NavigationSession;
 import net.osmand.plus.auto.TripUtils;
+import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.myplaces.favorites.FavoriteGroup;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.views.PointImageUtils;
@@ -129,10 +129,12 @@ public final class FavoritesScreen extends BaseAndroidAutoScreen {
 			listBuilder.addItem(new Row.Builder()
 					.setTitle(title)
 					.setImage(icon)
-					.addText(address)
+					// shiroikuma fork: yellow second line
+					.addText(ChizuCar.colored(getCarContext(), address))
 					.setOnClickListener(() -> onClickFavorite(point))
-					.setMetadata(new Metadata.Builder().setPlace(new Place.Builder(
-							CarLocation.create(point.getLatitude(), point.getLongitude())).build()).build())
+					// shiroikuma fork: yellow map pin
+					.setMetadata(new Metadata.Builder().setPlace(
+							ChizuCar.place(getCarContext(), point.getLatitude(), point.getLongitude())).build())
 					.build());
 		}
 	}

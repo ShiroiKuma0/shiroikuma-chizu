@@ -5,15 +5,14 @@ import androidx.car.app.HostException
 import androidx.car.app.Screen
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.Action
-import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Template
-import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import net.osmand.data.LatLon
 import net.osmand.data.QuadRect
 import net.osmand.plus.OsmandApplication
 import net.osmand.plus.R
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.views.Zoom
 import net.osmand.search.core.SearchResult
 import net.osmand.util.Algorithms
@@ -99,16 +98,11 @@ abstract class BaseAndroidAutoScreen(carContext: CarContext) : Screen(carContext
 		session?.startNavigationScreen()
 	}
 
-	protected fun createSearchAction() = Action.Builder()
-		.setIcon(
-			CarIcon.Builder(
-				IconCompat.createWithResource(
-					carContext, R.drawable.ic_action_search_dark
-				)
-			).build()
-		)
-		.setOnClickListener { openSearch() }
-		.build()
+	// shiroikuma fork: yellow glyph, like every other car action
+	protected fun createSearchAction() =
+		ChizuCar.action(carContext, R.drawable.ic_action_search_dark)
+			.setOnClickListener { openSearch() }
+			.build()
 
 	private fun openSearch() {
 		app.carNavigationSession?.let { navigationSession ->

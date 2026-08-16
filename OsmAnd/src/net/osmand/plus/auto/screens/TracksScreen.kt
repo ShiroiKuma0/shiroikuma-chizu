@@ -6,20 +6,18 @@ import android.text.Spanned
 import androidx.car.app.CarContext
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
-import androidx.car.app.model.CarColor
-import androidx.car.app.model.CarIcon
 import androidx.car.app.model.DistanceSpan
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.PlaceListNavigationTemplate
-import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import net.osmand.plus.OsmAndTaskManager
 import net.osmand.plus.shared.SharedUtil
 import net.osmand.plus.R
 import net.osmand.plus.auto.TripUtils
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.configmap.tracks.TrackTab
 import net.osmand.plus.configmap.tracks.TrackTabType
 import net.osmand.plus.settings.enums.CompassMode
@@ -137,13 +135,8 @@ class TracksScreen(
 				KAlgorithms.extendRectToContainRect(mapRect, gpxRect)
 			}
 			val title = track.name
-			val icon = CarIcon.Builder(
-				IconCompat.createWithResource(app, R.drawable.ic_action_polygom_dark))
-				.setTint(
-					CarColor.createCustom(
-						app.getColor(R.color.icon_color_default_light),
-						app.getColor(R.color.icon_color_default_dark)))
-				.build()
+			// shiroikuma fork: yellow glyph in both day and night
+			val icon = ChizuCar.icon(carContext, R.drawable.ic_action_polygom_dark)
 			var description = ""
 			var dist = 0f
 			track.dataItem?.let { dataItem ->
@@ -162,7 +155,7 @@ class TracksScreen(
 			listBuilder.addItem(Row.Builder()
 				.setTitle(title)
 				.setImage(icon)
-				.addText(address)
+				.addText(ChizuCar.colored(carContext, address))
 				.setOnClickListener { onClickTrack(track) }
 				.build())
 		}

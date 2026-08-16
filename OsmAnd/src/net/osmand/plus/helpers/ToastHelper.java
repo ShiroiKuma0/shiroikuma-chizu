@@ -16,6 +16,7 @@ import androidx.car.app.model.CarText;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.auto.NavigationSession;
+import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.ColorUtilities;
 import net.osmand.util.Algorithms;
@@ -117,7 +118,9 @@ public class ToastHelper {
 					// custom color spans) instead, toast as fallback
 					try {
 						Alert alert = new Alert.Builder(CAR_FLASH_ALERT_ID,
-								CarText.create(text), isLong ? 5000 : 2500).build();
+								CarText.create(text), isLong ? 5000 : 2500)
+								.setIcon(ChizuCar.icon(app, R.drawable.ic_action_info_dark))
+								.build();
 						navigationSession.getCarContext().getCarService(AppManager.class).showAlert(alert);
 					} catch (RuntimeException e) {
 						int duration = isLong ? CarToast.LENGTH_LONG : CarToast.LENGTH_SHORT;
