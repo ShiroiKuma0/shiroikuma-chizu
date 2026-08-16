@@ -3,6 +3,72 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+020 — 2026-08-16
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+### Android Auto: black-yellow everywhere the car API reaches
+
+`+8` gave the car screen yellow glyphs and a themed flash. Everything around them stayed the
+host's grey with white text, for a reason nothing had looked at: **OsmAnd declares no
+`androidx.car.app.theme` in its manifest.** Without that meta-data the host resolves
+`CarColor.PRIMARY` and `CarColor.SECONDARY` from its own defaults — and `NavigationScreen` was
+already setting `CarColor.SECONDARY` as the background of the card behind the turn instructions,
+so it was literally asking the host to pick whichever grey it liked.
+
+- **The theme is now declared.** `chizu_car_theme.xml` defines `carColorPrimary` /
+  `carColorSecondary` (and their `*Dark` variants) as our yellow and black, and the manifest
+  names it. Day and night carry the same values on purpose — the fork is black-yellow either way.
+- **Everything the app itself paints goes through `ChizuCar`**, which reads `ColorUtilities` and
+  therefore follows the 白い熊 地図 theming page. The car host runs in its own process and cannot
+  see those runtime overrides, so the manifest style carries the static defaults for
+  `PRIMARY`/`SECONDARY` alone.
+
+Themed this release:
+
+- **The navigation card** behind the turn instructions is black instead of host grey.
+- **Every action glyph is yellow** — search, compass, 2D/3D, settings, pan, my location, zoom in
+  and out, on the landing screen, the navigation screen, history and tracks.
+- **Filled yellow buttons**: Stop, Start, Apply, Yes / No, Allow / Cancel, both missing-maps
+  buttons, the location-permission button (stock: `CarColor.GREEN`) and the purchase button
+  (stock: `CarColor.BLUE`).
+- **Monochrome row icons are yellow** — including the two "sort by last modified" icons that were
+  still tinted upstream's OsmAnd orange, and the POI and amenity glyphs, which are drawn in the
+  app's *default icon colour* and so came out **grey whenever the phone itself was in day mode**,
+  regardless of what the car was doing.
+- **Every row's second line is yellow** — distances, addresses, opening hours, track descriptions.
+- **The ETA panel** — remaining time and remaining distance — plus the **destination pin** and the
+  **`Place` markers the host drops on the map** for list rows.
+- **Car flashes** carry a yellow glyph, and the Android Auto **notification** gets the accent tint
+  and our own name in place of the hard-coded "OsmAnd Android Auto".
+
+Left alone deliberately: icons whose colour carries meaning are **not** flattened to yellow — a
+favourite keeps its category colour, a map marker keeps its own — and turn arrows keep
+`nav_arrow` `#FADE23` with the imminent green, since that is the same drawable the in-app map
+widget renders.
+
+### What the car API does not allow, recorded so it is not retried
+
+- **A row title cannot be coloured.** `Row.setTitle` validates against
+  `CarTextConstraints.TEXT_AND_ICON`, which rejects a `ForegroundCarColorSpan` and throws. Only
+  `addText` — the second line — permits colour spans, which is why the subtitles are yellow and
+  the titles are still the host's white.
+- **The surrounding chrome is host-drawn** with no hook: list background, header bar, dividers,
+  scrollbar, and the standard `Action.BACK` / `Action.APP_ICON`.
+- **Background colours must follow `ActionsConstraints` exactly**, because violating them throws
+  at template-build time and takes the whole car session down — the crash loop fixed in `+8`.
+  Body actions on `Pane` and `MessageTemplate` accept a background on any action, so
+  `ChizuCar.filledAction` just sets one; navigation and map action strips accept one only on the
+  single primary action, so `ChizuCar.primaryAction` pairs it with `FLAG_PRIMARY`. The map
+  strip's four buttons therefore stay icon-tint-only — that strip has no primary action.
+
+### Map pins landed on the driver (fix)
+
+`MapMarkersScreen` built each row's `Place` metadata from **our own position** rather than the
+marker's, so every pin the host drew for the map-markers list sat on top of the driver instead of
+on the marker. Harmless while the pins were host-default and easy to miss; not once they are
+themed and conspicuous.
+
 ## 5.4.0+019 — 2026-08-08
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Packaging only — the app is identical to `+18`.
