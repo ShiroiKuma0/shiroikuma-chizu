@@ -10,7 +10,7 @@ A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+019`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+020`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -54,7 +54,9 @@ In-app toasts are no longer the unthemable white system pill: they render as bla
 ---
 
 ## 🚗 Android Auto, in the same colors
-The launcher icon renders full-bleed on the car screen (no white rim), every map button glyph is yellow, and car flashes appear as dark navigation alerts instead of white toast pills. The map keeps the full OpenGL 3D renderer, with a self-healing guard that re-enables it after a crash-loop auto-disable.
+The car screen is black and yellow as far as the car API reaches. Stock declares no car theme at all, so the host picked its own grey for everything — including the card behind the turn instructions, which OsmAnd was asking the host to colour for it. This fork declares one, and paints the rest itself: black navigation card, yellow glyphs on every action, filled yellow buttons for Stop / Start / Apply / Allow / permission and purchase prompts, yellow row subtitles, yellow ETA and distance, yellow destination pin and map pins. The launcher icon renders full-bleed (no white rim) and car flashes are dark navigation alerts rather than white toast pills.
+
+The colours come from the same theming page as the rest of the app, so recolouring there recolours the car. What the car API keeps to itself stays host-drawn — row **titles** cannot take a colour span at all, and neither can the list background or header bar. The map keeps the full OpenGL 3D renderer, with a self-healing guard that re-enables it after a crash-loop auto-disable.
 
 ---
 
