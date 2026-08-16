@@ -1,7 +1,6 @@
 package net.osmand.plus.auto.screens
 
 import androidx.car.app.CarContext
-import androidx.car.app.model.Action
 import androidx.car.app.model.Header
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
@@ -9,6 +8,7 @@ import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.MapWithContentTemplate
 import net.osmand.plus.R
+import net.osmand.plus.chizu.ChizuCar
 
 class ConfirmScreen(
 	carContext: CarContext,
@@ -23,7 +23,9 @@ class ConfirmScreen(
 			.setTitle(title)
 			.build()
 
-		val yesAction = Action.Builder()
+		// shiroikuma fork: filled yellow buttons — a Pane's body actions accept a background
+		// colour on every action, so neither has to stay host grey
+		val yesAction = ChizuCar.filledAction(carContext)
 			.setTitle(app.getString(R.string.shared_string_yes))
 			.setOnClickListener {
 				onConfirm()
@@ -31,7 +33,7 @@ class ConfirmScreen(
 			}
 			.build()
 
-		val noAction = Action.Builder()
+		val noAction = ChizuCar.filledAction(carContext)
 			.setTitle(app.getString(R.string.shared_string_no))
 			.setOnClickListener {
 				onCancel()

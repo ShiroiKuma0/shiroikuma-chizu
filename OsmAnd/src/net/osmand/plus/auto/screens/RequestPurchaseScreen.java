@@ -5,7 +5,6 @@ import android.os.Bundle;
 import androidx.annotation.NonNull;
 import androidx.car.app.CarContext;
 import androidx.car.app.model.Action;
-import androidx.car.app.model.CarColor;
 import androidx.car.app.model.MessageTemplate;
 import androidx.car.app.model.OnClickListener;
 import androidx.car.app.model.ParkedOnlyOnClickListener;
@@ -14,6 +13,7 @@ import androidx.car.app.model.Template;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
+import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.chooseplan.ChoosePlanFragment;
 import net.osmand.plus.chooseplan.OsmAndFeature;
 
@@ -37,9 +37,9 @@ public class RequestPurchaseScreen extends BaseAndroidAutoScreen {
 			MapActivity.launchMapActivityMoveToTop(app, null, null, params);
 		});
 		
-		Action action = new Action.Builder()
+		// shiroikuma fork: filled yellow button, instead of upstream's blue
+		Action action = ChizuCar.filledAction(getCarContext())
 				.setTitle(getCarContext().getString(R.string.continue_on_phone))
-				.setBackgroundColor(CarColor.BLUE)
 				.setOnClickListener(listener)
 				.build();
 
