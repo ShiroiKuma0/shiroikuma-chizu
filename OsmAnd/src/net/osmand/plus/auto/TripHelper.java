@@ -20,6 +20,7 @@ import androidx.core.graphics.drawable.IconCompat;
 import net.osmand.Location;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.chizu.ChizuCar;
 import net.osmand.plus.helpers.TargetPointsHelper;
 import net.osmand.plus.helpers.TargetPoint;
 import net.osmand.plus.routing.NextDirectionInfo;
@@ -179,6 +180,7 @@ public class TripHelper {
 		DateTimeWithZone stepDateTime = DateTimeWithZone.create(turnArrivalTime, TimeZone.getDefault());
 		TravelEstimate.Builder stepTravelEstimateBuilder = new TravelEstimate.Builder(stepDistance, stepDateTime);
 		stepTravelEstimateBuilder.setRemainingTimeSeconds(leftTurnTimeSec >= 0 ? leftTurnTimeSec : REMAINING_TIME_UNKNOWN);
+		paintEstimate(stepTravelEstimateBuilder);
 		Step step = stepBuilder.build();
 		TravelEstimate stepTravelEstimate = stepTravelEstimateBuilder.build();
 		tripBuilder.addStep(step, stepTravelEstimate);
@@ -219,6 +221,7 @@ public class TripHelper {
 			DateTimeWithZone nextStepDateTime = DateTimeWithZone.create(nextTurnArrivalTime, TimeZone.getDefault());
 			TravelEstimate.Builder nextStepTravelEstimateBuilder = new TravelEstimate.Builder(nextStepDistance, nextStepDateTime);
 			nextStepTravelEstimateBuilder.setRemainingTimeSeconds(leftNextTurnTimeSec >= 0 ? leftNextTurnTimeSec : REMAINING_TIME_UNKNOWN);
+			paintEstimate(nextStepTravelEstimateBuilder);
 
 			TurnType nextNextTurnType = null;
 			AnnounceTimeDistances atd = routingHelper.getVoiceRouter().getAnnounceTimeDistances();
@@ -295,8 +298,8 @@ public class TripHelper {
 			name = app.getString(R.string.route_descr_destination);
 		}
 		destBuilder.setName(name);
-		destBuilder.setImage(new CarIcon.Builder(IconCompat.createWithResource(app,
-				R.drawable.ic_action_point_destination)).build());
+		// shiroikuma fork: yellow destination pin
+		destBuilder.setImage(ChizuCar.icon(app, R.drawable.ic_action_point_destination));
 
 		int leftTimeSec = 0;
 		int leftDistance = 0;
@@ -312,9 +315,18 @@ public class TripHelper {
 		DateTimeWithZone dateTime = DateTimeWithZone.create(System.currentTimeMillis() + leftTimeSec * 1000L, TimeZone.getDefault());
 		TravelEstimate.Builder travelEstimateBuilder = new TravelEstimate.Builder(distance, dateTime);
 		travelEstimateBuilder.setRemainingTimeSeconds(leftTimeSec >= 0 ? leftTimeSec : REMAINING_TIME_UNKNOWN);
+		paintEstimate(travelEstimateBuilder);
 		Destination destination = destBuilder.build();
 		TravelEstimate travelEstimate = travelEstimateBuilder.build();
 		return new Pair<>(destination, travelEstimate);
+	}
+
+	/**
+	 * shiroikuma fork: the ETA panel — remaining time and distance — in yellow.
+	 */
+	private void paintEstimate(@NonNull TravelEstimate.Builder builder) {
+		builder.setRemainingTimeColor(ChizuCar.accent(app));
+		builder.setRemainingDistanceColor(ChizuCar.accent(app));
 	}
 
 	@NonNull

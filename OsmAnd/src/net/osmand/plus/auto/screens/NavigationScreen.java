@@ -11,7 +11,6 @@ import androidx.annotation.Nullable;
 import androidx.car.app.CarContext;
 import androidx.car.app.model.Action;
 import androidx.car.app.model.ActionStrip;
-import androidx.car.app.model.CarColor;
 import androidx.car.app.model.CarIcon;
 import androidx.car.app.model.CarText;
 import androidx.car.app.model.Distance;
@@ -234,7 +233,8 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 	@Override
 	public Template getTemplate() {
 		NavigationTemplate.Builder builder = new NavigationTemplate.Builder();
-		builder.setBackgroundColor(CarColor.SECONDARY);
+		// shiroikuma fork: black card behind the turn instructions, instead of the host grey
+		builder.setBackgroundColor(ChizuCar.surface(getCarContext()));
 
 		// Set the action strip.
 		SurfaceRenderer surfaceRenderer = getSurfaceRenderer();
@@ -265,8 +265,10 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 		}
 		actionStripBuilder.addAction(settingsAction);
 		if (navigating) {
+			// shiroikuma fork: filled yellow Stop. The navigation strip only accepts a
+			// background color on its single primary action, so this one carries the flag.
 			actionStripBuilder.addAction(
-					new Action.Builder()
+					ChizuCar.primaryAction(getCarContext())
 							.setTitle(getApp().getString(R.string.shared_string_control_stop))
 							.setOnClickListener(this::stopNavigation)
 							.build());
