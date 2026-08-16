@@ -16,7 +16,6 @@ import androidx.car.app.model.Metadata
 import androidx.car.app.model.Place
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
-import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import net.osmand.plus.shared.SharedUtil
@@ -24,6 +23,7 @@ import net.osmand.data.LatLon
 import net.osmand.plus.OsmAndTaskManager
 import net.osmand.plus.R
 import net.osmand.plus.auto.TripUtils
+import net.osmand.plus.chizu.ChizuCar
 import net.osmand.plus.search.history.SearchHistoryHelper
 import net.osmand.plus.search.history.HistoryEntry
 import net.osmand.plus.search.QuickSearchHelper.SearchHistoryAPI
@@ -74,11 +74,7 @@ class HistoryScreen(
 		    prepareList(templateBuilder)
 	    }
         val searchAction =
-            Action.Builder()
-                .setIcon(
-                    CarIcon.Builder(
-                        IconCompat.createWithResource(
-                            carContext, R.drawable.ic_action_search_dark)).build())
+            ChizuCar.action(carContext, R.drawable.ic_action_search_dark)
                 .setOnClickListener { openSearch() }
                 .build()
         val header = Header.Builder()
@@ -142,8 +138,8 @@ class HistoryScreen(
 				val result = item.searchResult?.`object` as HistoryEntry
 				val pointDescription = result.name
 				var title = item.name
-				val icon = CarIcon.Builder(
-					IconCompat.createWithResource(app, pointDescription.itemIcon)).build()
+				// shiroikuma fork: yellow glyph
+				val icon = ChizuCar.icon(carContext, pointDescription.itemIcon)
 				if (Algorithms.isEmpty(title)) {
 					title = item.searchResult?.location?.toString()
 				}
@@ -155,12 +151,10 @@ class HistoryScreen(
 					0.0
 				} else {
 					val startLocation = item.searchResult.location
+					// shiroikuma fork: yellow map pin
 					rowBuilder.setMetadata(
 						Metadata.Builder().setPlace(
-							Place.Builder(
-								CarLocation.create(
-									startLocation.latitude,
-									startLocation.longitude)).build()).build())
+							ChizuCar.place(carContext, startLocation.latitude, startLocation.longitude)).build())
 					MapUtils.getDistance(
 						startLocation.latitude, startLocation.longitude,
 						location.latitude, location.longitude)
@@ -168,7 +162,7 @@ class HistoryScreen(
 				val address = SpannableString(" ")
 				val distanceSpan = DistanceSpan.create(TripUtils.getDistance(app, dist))
 				address.setSpan(distanceSpan, 0, 1, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-				rowBuilder.addText(address)
+				rowBuilder.addText(ChizuCar.colored(carContext, address))
 				listBuilder.addItem(rowBuilder.build())
 			}
 		}

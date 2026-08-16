@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	shiroikuma fork: the Android Auto host's copy of the black-yellow theme.
+
+	The car host runs in its own process and cannot see our runtime colour overrides, so it
+	resolves CarColor.PRIMARY / CarColor.SECONDARY from this style (declared in the manifest
+	as androidx.car.app.theme). Everything the app itself draws or tints goes through
+	ChizuCar, which reads ColorUtilities and therefore follows the 白い熊 地図 UI page.
+
+	Day and night carry the same values on purpose: the fork is black-yellow in both.
+-->
+<resources>
+
+	<color name="chizu_car_accent">#FFFF00</color>
+	<color name="chizu_car_surface">#000000</color>
+
+	<style name="ChizuCarAppTheme">
+		<item name="carColorPrimary">@color/chizu_car_accent</item>
+		<item name="carColorPrimaryDark">@color/chizu_car_accent</item>
+		<item name="carColorSecondary">@color/chizu_car_surface</item>
+		<item name="carColorSecondaryDark">@color/chizu_car_surface</item>
+	</style>
+
+</resources>
