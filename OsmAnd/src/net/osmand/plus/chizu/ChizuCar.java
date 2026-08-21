@@ -58,6 +58,26 @@ public class ChizuCar {
 	}
 
 	/**
+	 * Yellow again, but as a <b>standard</b> car color, for the setters whose {@code
+	 * CarColorConstraints} are {@code STANDARD_ONLY} and reject a custom color outright. In
+	 * car-app 1.7.0 that is {@code TravelEstimate.Builder}'s remaining-time and
+	 * remaining-distance colors, and nothing else — every other color hook in the library is
+	 * {@code UNCONSTRAINED} and takes {@link #accent}.
+	 *
+	 * <p>{@code CarColor.PRIMARY} resolves in the host from {@code ChizuCarAppTheme}'s
+	 * {@code carColorPrimary}, i.e. the same #FFFF00, so the ETA still reads yellow. Like
+	 * every host-resolved color it cannot follow a runtime override from the theming page.
+	 *
+	 * <p>Passing {@link #accent} to one of those setters throws {@code
+	 * IllegalArgumentException} as the trip is built, which is the first thing that happens
+	 * when navigation starts — it took the car session down every single time (+020).
+	 */
+	@NonNull
+	public static CarColor standardAccent() {
+		return CarColor.PRIMARY;
+	}
+
+	/**
 	 * Black — what the yellow sits on: the navigation card behind the turn instructions.
 	 */
 	@NonNull
