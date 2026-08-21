@@ -3,6 +3,42 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+021 — 2026-08-21
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+### Android Auto: the crash on every navigation start
+
+`+020` painted the car screen's ETA panel yellow and, in doing so, hit the one validator in the
+car API that refuses a custom colour. Starting navigation in the car killed the app — every
+time, sixteen fatal crashes in a single drive's crash buffer.
+
+- **What threw.** `TravelEstimate.Builder.setRemainingTimeColor` and `setRemainingDistanceColor`
+  validate against `CarColorConstraints.STANDARD_ONLY`: they accept the seven standard car
+  colours (`DEFAULT`, `PRIMARY`, `SECONDARY`, `RED`, `GREEN`, `BLUE`, `YELLOW`) and reject a
+  custom one outright. `+020` handed them `ChizuCar.accent()`, a custom `#FFFF00`, so building
+  the trip threw `IllegalArgumentException: Car color type is not allowed: [type: CUSTOM,
+  color: -256, dark: -256]`.
+- **Why navigation start, specifically.** Building the trip is the first thing
+  `NavigationSession` does in `startCarNavigation`, and it does it again on every
+  `newRouteIsCalculated` — so the car session died the instant a route went live.
+- **Why the phone kept working.** `TripHelper` only ever runs inside a car session; navigating
+  on the phone itself never touched the failing code.
+- **The fix.** Both colours now go through a new `ChizuCar.standardAccent()`, which returns
+  `CarColor.PRIMARY`. That passes the validator, and the host resolves it from
+  `ChizuCarAppTheme`'s `carColorPrimary` — the same `#FFFF00` — so the ETA still reads yellow.
+  The one cost is the limitation `PRIMARY`/`SECONDARY` already carried: the host process cannot
+  see the theming page's runtime overrides, so those two numbers stay at the manifest value.
+
+`paintEstimate` is shared by the destination, current-step and next-step estimates, so the
+single change covers all three.
+
+Nothing else `+020` painted can fail the same way. In `androidx.car.app:app:1.7.0`, the version
+the fork builds against, `TravelEstimate.Builder` is the **only** class in the entire library
+that references `STANDARD_ONLY` — icon tints, action background colours, `PlaceMarker` colours,
+`ForegroundCarColorSpan` and the navigation card background are all `UNCONSTRAINED` and keep
+taking the custom accent.
+
 ## 5.4.0+020 — 2026-08-16
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
