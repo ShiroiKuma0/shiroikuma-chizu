@@ -322,11 +322,13 @@ public class TripHelper {
 	}
 
 	/**
-	 * shiroikuma fork: the ETA panel — remaining time and distance — in yellow.
+	 * shiroikuma fork: the ETA panel — remaining time and distance — in yellow. Both setters
+	 * validate against {@code CarColorConstraints.STANDARD_ONLY}, so the color has to be a
+	 * standard one; {@link ChizuCar#standardAccent} is the yellow that qualifies.
 	 */
 	private void paintEstimate(@NonNull TravelEstimate.Builder builder) {
-		builder.setRemainingTimeColor(ChizuCar.accent(app));
-		builder.setRemainingDistanceColor(ChizuCar.accent(app));
+		builder.setRemainingTimeColor(ChizuCar.standardAccent());
+		builder.setRemainingDistanceColor(ChizuCar.standardAccent());
 	}
 
 	@NonNull
