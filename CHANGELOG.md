@@ -3,6 +3,35 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+026 — 2026-08-24
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+### 歩行記録: `active_time_s`, the one figure the band also measures
+
+The import reply already carried `duration_s` (the span) and `moving_time_s`, and neither stands
+against anything: the HUAWEI Band 11 Pro publishes no equivalent of either, so a disagreement
+between the two devices was never a finding — only two instruments answering different questions.
+Active time is the number the band does report, so it is the one place a mismatch means something.
+
+- **New string extra `active_time_s`**, beside `moving_time_s`. The walk with its gaps taken out:
+  the deltas between consecutive points summed, dropping any longer than the gap threshold and
+  never bridging a segment boundary.
+- **The positional `OK:` line is deliberately unchanged.** The sister app reads the named extra,
+  and lengthening that line would break anything still splitting it on six fields.
+- **The threshold was measured, not chosen.** The reference walk is one `<trkseg>` of 1763 timed
+  points spanning 7669 s, its points a second apart, with exactly three deltas above ten seconds:
+  18 s, 1025 s and 4865 s. Every threshold from 20 s to 1024 s therefore returns the same 1779 s,
+  and anything at or below 15 s returns 1761 s. **60 s** sits in the middle of a plateau over a
+  thousand seconds wide, far from either edge.
+- **It agrees with the band, and with the other side of the wire.** 自由作業盤 computes 1779 s
+  independently; the band's own figure is 1767 s. Twelve seconds apart — the kind of agreement that
+  makes the three-percent distance shortfall believable as a band defect rather than a decoding
+  artefact.
+- **Why the obvious implementation fails.** The band's GPX has no chunk structure at all: one
+  segment holds the whole day-window, pauses included. Summing per-segment spans hands back the
+  7669 s span unchanged. The chunks exist only as these gaps.
+
 ## 5.4.0+025 — 2026-08-24
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only. Covers the unreleased
