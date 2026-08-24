@@ -20,6 +20,8 @@ import net.osmand.shared.gpx.GpxDbHelper;
 import net.osmand.shared.gpx.GpxFile;
 import net.osmand.shared.gpx.GpxParameter;
 import net.osmand.shared.gpx.GpxTrackAnalysis;
+import net.osmand.shared.gpx.primitives.TrkSegment;
+import net.osmand.shared.gpx.primitives.WptPt;
 import net.osmand.shared.io.KFile;
 import net.osmand.util.Algorithms;
 
@@ -51,6 +53,15 @@ public class ChizuTracks {
 	public static final int DEFAULT_TRACK_COLOR = 0xFFFFFF00;
 	@ColorInt
 	private static final int EMPTY_BACKGROUND = 0xFF000000;
+
+	/**
+	 * The gap that ends a chunk of walking, for {@link #activeSeconds}. Taken from the band's own
+	 * recording rather than from taste: its points land a second apart, and the pauses that break a
+	 * walk into chunks run to minutes — on the reference walk the only three gaps are 18 s, 1025 s
+	 * and 4865 s, so every threshold from 20 s to 1024 s yields the same total. 60 s sits in the
+	 * middle of that plateau, far from either edge.
+	 */
+	private static final long ACTIVE_GAP_MS = 60_000;
 
 	private ChizuTracks() {
 	}
@@ -96,6 +107,7 @@ public class ChizuTracks {
 		public float distanceM;
 		public long durationS;
 		public long movingS;
+		public long activeS;
 		public long startTime;
 		public long endTime;
 		public int points;
@@ -134,7 +146,7 @@ public class ChizuTracks {
 		result.trackId = relative;
 		result.name = stored.getName();
 		result.storedPath = stored.getAbsolutePath();
-		fill(result, analysis);
+		fill(result, analysis, gpx);
 
 		String base = stripExtension(stored.getName());
 		result.gpxPath = copy(stored, new File(outDir, base + ".gpx"));
@@ -336,10 +348,12 @@ public class ChizuTracks {
 		});
 	}
 
-	private static void fill(@NonNull Result result, @NonNull GpxTrackAnalysis analysis) {
+	private static void fill(@NonNull Result result, @NonNull GpxTrackAnalysis analysis,
+			@NonNull GpxFile gpx) {
 		result.distanceM = analysis.getTotalDistance();
 		result.durationS = analysis.getTimeSpan() / 1000;
 		result.movingS = analysis.getTimeMoving() / 1000;
+		result.activeS = activeSeconds(gpx);
 		result.startTime = analysis.getStartTime();
 		result.endTime = analysis.getEndTime();
 		result.points = analysis.getPoints();
@@ -347,6 +361,35 @@ public class ChizuTracks {
 		result.elevationDown = analysis.getDiffElevationDown();
 		result.avgSpeed = analysis.getAvgSpeed();
 		result.maxSpeed = analysis.getMaxSpeed();
+	}
+
+	/**
+	 * The walk with its gaps taken out: the deltas between consecutive points summed, dropping any
+	 * delta longer than {@link #ACTIVE_GAP_MS} and never bridging a segment boundary.
+	 *
+	 * This is the one figure the band reports too, so a disagreement here is a finding — the span
+	 * and the moving time have nothing to stand against, because the band measures neither. The
+	 * band's own GPX carries a single segment holding the whole day-window, so the chunks exist
+	 * only as these gaps; summing segment spans would just give the span back.
+	 */
+	private static long activeSeconds(@NonNull GpxFile gpx) {
+		long active = 0;
+		for (TrkSegment segment : gpx.getNonEmptyTrkSegments(false)) {
+			WptPt previous = null;
+			for (WptPt point : segment.getPoints()) {
+				if (point.getTime() <= 0) {
+					continue;
+				}
+				if (previous != null) {
+					long delta = point.getTime() - previous.getTime();
+					if (delta > 0 && delta <= ACTIVE_GAP_MS) {
+						active += delta;
+					}
+				}
+				previous = point;
+			}
+		}
+		return active / 1000;
 	}
 
 	@NonNull
