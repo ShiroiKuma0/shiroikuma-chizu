@@ -127,6 +127,33 @@
 			</intent-filter>
 		</receiver>
 
+		<!-- shiroikuma fork: the walk contract - 白い熊 自由作業盤 hands over a track it pulled
+		     off the HUAWEI Band 11 Pro, this app files it, draws it and answers by broadcast.
+		     Same switch and same token as the export above; the token is the gate. -->
+		<receiver
+			android:name="net.osmand.plus.chizu.ChizuTrackReceiver"
+			android:exported="true">
+			<intent-filter>
+				<action android:name="${applicationId}.action.IMPORT_TRACK" />
+				<action android:name="${applicationId}.action.SHOW_TRACK" />
+			</intent-filter>
+		</receiver>
+
+		<!-- shiroikuma fork: "open this walk in 地図" as one intent. The caller has the foreground
+		     and hands it here, so starting the map is an ordinary foreground start - the broadcast
+		     above cannot do that from a receiver, which has no window. No token: this opens the app
+		     and picks a track, which a launcher icon already does. -->
+		<activity
+			android:name="net.osmand.plus.chizu.ChizuShowTrackActivity"
+			android:exported="true"
+			android:excludeFromRecents="true"
+			android:theme="@android:style/Theme.Translucent.NoTitleBar">
+			<intent-filter>
+				<action android:name="${applicationId}.action.OPEN_TRACK" />
+				<category android:name="android.intent.category.DEFAULT" />
+			</intent-filter>
+		</activity>
+
 		<receiver android:name="net.osmand.plus.mapcontextmenu.other.ShareSheetReceiver" android:exported="false" />
 		<receiver android:name="net.osmand.plus.notifications.NotificationDismissReceiver" android:exported="false" />
 		<receiver android:name="net.osmand.plus.liveupdates.LiveUpdatesAlarmReceiver" android:exported="false" />

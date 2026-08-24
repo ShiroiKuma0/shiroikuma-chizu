@@ -49,7 +49,6 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 	private static final String EXTRA_REPLY_ACTION = "reply_action";
 	private static final String EXTRA_REPLY_PACKAGE = "reply_package";
 	private static final String EXTRA_REPLY_ID = "reply_id";
-	private static final String EXTRA_RESULT = "result";
 
 	/** How long a cold-started process may wait for the app to finish initializing. */
 	private static final long INIT_TIMEOUT_MS = 180_000;
@@ -72,7 +71,7 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 		boolean ordered = isOrderedBroadcast();
 
 		PendingResult pending = goAsync();
-		Replier replier = new Replier(app, pending, ordered, replyAction, replyPackage, replyId);
+		ChizuReplier replier = new ChizuReplier(app, pending, ordered, replyAction, replyPackage, replyId);
 
 		if (action.endsWith(SUFFIX_CANCEL)) {
 			// Fire-and-forget: never answered — not on success, not on a bad token, not when
@@ -132,7 +131,7 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 
 	// ---------- EXPORT_STATE ----------
 
-	private void runExport(@NonNull OsmandApplication app, @NonNull Replier replier,
+	private void runExport(@NonNull OsmandApplication app, @NonNull ChizuReplier replier,
 			@Nullable String progressAction, @Nullable String replyPackage, @Nullable String replyId,
 			@Nullable String items, @Nullable String path) {
 		// published for the whole request, not just the write: a cold-started process waits
@@ -184,7 +183,7 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 	 */
 	@Nullable
 	private ChizuBackup.Dest resolveDest(@NonNull OsmandApplication app, @Nullable String path,
-			@NonNull Replier replier) {
+			@NonNull ChizuReplier replier) {
 		String name = ChizuBackup.fileName();
 		if (path != null && !path.trim().isEmpty()) {
 			if (ChizuStorage.hasAllFilesAccess()) {
@@ -224,73 +223,6 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				return;
-			}
-		}
-	}
-
-	// ---------- the reply ----------
-
-	/** Exactly one terminal reply per request — an async success and a sync error cannot both fire. */
-	private static class Replier {
-
-		private final OsmandApplication app;
-		private final BroadcastReceiver.PendingResult pending;
-		private final boolean ordered;
-		private final String replyAction;
-		private final String replyPackage;
-		private final String replyId;
-		private final AtomicBoolean sent = new AtomicBoolean();
-
-		Replier(@NonNull OsmandApplication app, @NonNull BroadcastReceiver.PendingResult pending, boolean ordered,
-				@Nullable String replyAction, @Nullable String replyPackage, @Nullable String replyId) {
-			this.app = app;
-			this.pending = pending;
-			this.ordered = ordered;
-			this.replyAction = replyAction;
-			this.replyPackage = replyPackage;
-			this.replyId = replyId;
-		}
-
-		/** Ends the broadcast without answering it — what a fire-and-forget action gets. */
-		void finishSilently() {
-			if (!sent.compareAndSet(false, true)) {
-				return;
-			}
-			try {
-				pending.finish();
-			} catch (Exception ignored) {
-			}
-		}
-
-		void send(@NonNull String result) {
-			if (!sent.compareAndSet(false, true)) {
-				return;
-			}
-			Log.i(TAG, "reply " + replyId + ": " + result.split("\n")[0]);
-			if (replyAction != null && replyPackage != null) {
-				try {
-					Intent reply = new Intent(replyAction);
-					reply.setPackage(replyPackage);
-					reply.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-					reply.putExtra(EXTRA_REPLY_ID, replyId != null ? replyId : "");
-					reply.putExtra(EXTRA_RESULT, result);
-					app.sendBroadcast(reply);
-				} catch (Exception e) {
-					Log.e(TAG, "reply broadcast failed", e);
-				}
-			} else {
-				Log.w(TAG, "no reply_action/reply_package — nowhere to reply to");
-			}
-			// correct AOSP behaviour, but EMUI severs it between third-party apps: never the only reply
-			if (ordered) {
-				try {
-					pending.setResultData(result);
-				} catch (Exception ignored) {
-				}
-			}
-			try {
-				pending.finish();
-			} catch (Exception ignored) {
 			}
 		}
 	}

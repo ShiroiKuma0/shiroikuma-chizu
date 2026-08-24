@@ -105,6 +105,11 @@ public class MapRenderRepositories {
 	// Field used in C++
 	private boolean interrupted;
 	private int renderedState; 	// (1 (if basemap) + 2 (if normal map)
+
+	// shiroikuma fork: a headless picture must not change with the time of day. The walks grid
+	// in 白い熊 自由作業盤 keeps these images for years and shows them side by side, so one drawn
+	// after dusk under the night style would read as a broken cell. Null = follow the app.
+	private Boolean nightModeOverride;
 	private RenderingContext currentRenderingContext;
 	private RenderingContext visibleRenderingContext;
 	private SearchRequest<BinaryMapDataObject> searchRequest;
@@ -653,7 +658,9 @@ public class MapRenderRepositories {
 		}
 		try {
 			// find selected rendering type
-			boolean nightMode = app.getDaynightHelper().isNightMode(ThemeUsageContext.MAP);
+			boolean nightMode = nightModeOverride != null
+					? nightModeOverride
+					: app.getDaynightHelper().isNightMode(ThemeUsageContext.MAP);
 
 			// boolean moreDetail = prefs.SHOW_MORE_MAP_DETAIL.get();
 			RenderingRulesStorage storage = app.getRendererRegistry().getCurrentSelectedRenderer();
@@ -888,6 +895,11 @@ public class MapRenderRepositories {
 			parentsStates.put(name, enabled);
 		}
 		return renderingReq;
+	}
+
+	/** shiroikuma fork: pin the style for one offscreen render; null hands it back to the app. */
+	public void setNightModeOverride(Boolean nightMode) {
+		this.nightModeOverride = nightMode;
 	}
 
 	public Bitmap getBitmap() {
