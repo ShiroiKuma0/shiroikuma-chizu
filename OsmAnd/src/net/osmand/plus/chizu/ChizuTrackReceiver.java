@@ -1,0 +1,258 @@
+package net.osmand.plus.chizu;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Color;
+import android.os.Bundle;
+import android.os.SystemClock;
+import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import net.osmand.plus.OsmandApplication;
+import net.osmand.plus.activities.MapActivity;
+
+import java.util.Locale;
+
+/**
+ * shiroikuma fork: the walk contract — 白い熊 自由作業盤 hands over a track it pulled off the
+ * HUAWEI Band 11 Pro, this app files it and draws it, headlessly, and answers by broadcast.
+ *
+ * <pre>
+ * &lt;pkg&gt;.action.IMPORT_TRACK  token gpx_data|gpx_path [name] [track_id] [folder] [out_dir]
+ *                           [thumb_w thumb_h map_w map_h | thumb_px map_px]
+ *                           [track_color] [night=day|night|auto] [show] [density]
+ *                           → OK:&lt;track_id&gt;|&lt;gpx_path&gt;|&lt;thumb_path&gt;|&lt;map_path&gt;
+ *                             |&lt;distance_m&gt;|&lt;duration_s&gt;, and every value again as its
+ *                             own string extra
+ * &lt;pkg&gt;.action.SHOW_TRACK    token track_id → OK:&lt;track_id&gt;, and the map comes to the front
+ *                           on that walk. The one action here that is not headless.
+ * </pre>
+ *
+ * Same switch and same token as the 保存復元 export: {@link ChizuAutomation}. The reply is a
+ * fresh broadcast, never a Binder — see {@link ChizuReplier}.
+ */
+public class ChizuTrackReceiver extends BroadcastReceiver {
+
+	private static final String TAG = "ChizuAutomation";
+
+	private static final String SUFFIX_IMPORT = ".action.IMPORT_TRACK";
+	private static final String SUFFIX_SHOW = ".action.SHOW_TRACK";
+
+	private static final long INIT_TIMEOUT_MS = 180_000;
+
+	@Override
+	public void onReceive(@NonNull Context context, @NonNull Intent intent) {
+		String action = intent.getAction();
+		if (action == null) {
+			return;
+		}
+		OsmandApplication app = (OsmandApplication) context.getApplicationContext();
+		ChizuReplier replier = new ChizuReplier(app, goAsync(), isOrderedBroadcast(),
+				intent.getStringExtra("reply_action"), intent.getStringExtra("reply_package"),
+				intent.getStringExtra("reply_id"));
+
+		if (!ChizuAutomation.isEnabled(app)) {
+			replier.send("ERROR:automation disabled");
+			return;
+		}
+		if (!ChizuAutomation.matches(app, intent.getStringExtra("token"))) {
+			replier.send("ERROR:bad token");
+			return;
+		}
+		if (action.endsWith(SUFFIX_IMPORT)) {
+			ChizuTracks.Params params = read(app, intent);
+			new Thread(() -> runImport(app, replier, params), "chizu-import-track").start();
+		} else if (action.endsWith(SUFFIX_SHOW)) {
+			String trackId = intent.getStringExtra("track_id");
+			new Thread(() -> runShow(app, replier, trackId), "chizu-show-track").start();
+		} else {
+			replier.send("ERROR:unknown action");
+		}
+	}
+
+	// ---------- IMPORT_TRACK ----------
+
+	private void runImport(@NonNull OsmandApplication app, @NonNull ChizuReplier replier,
+			@NonNull ChizuTracks.Params params) {
+		try {
+			awaitInit(app);
+			ChizuTracks.Result result = ChizuTracks.importTrack(app, params);
+			Bundle extras = new Bundle();
+			extras.putString("track_id", result.trackId);
+			extras.putString("name", result.name);
+			extras.putString("stored_path", result.storedPath);
+			extras.putString("gpx_path", result.gpxPath);
+			extras.putString("thumb_path", result.thumbPath);
+			extras.putString("map_path", result.mapPath);
+			extras.putString("map_detail", result.mapDetail);
+			extras.putString("zoom", String.valueOf(result.zoom));
+			extras.putString("distance_m", decimal(result.distanceM));
+			extras.putString("duration_s", String.valueOf(result.durationS));
+			extras.putString("moving_time_s", String.valueOf(result.movingS));
+			extras.putString("points", String.valueOf(result.points));
+			extras.putString("start_time", String.valueOf(result.startTime));
+			extras.putString("end_time", String.valueOf(result.endTime));
+			extras.putString("elevation_up", decimal(result.elevationUp));
+			extras.putString("elevation_down", decimal(result.elevationDown));
+			extras.putString("avg_speed", decimal(result.avgSpeed));
+			extras.putString("max_speed", decimal(result.maxSpeed));
+
+			replier.send("OK:" + result.trackId + "|" + result.gpxPath + "|" + result.thumbPath
+					+ "|" + result.mapPath + "|" + decimal(result.distanceM) + "|" + result.durationS,
+					extras);
+		} catch (ChizuTracks.TrackError error) {
+			replier.send("ERROR:" + error.getMessage());
+		} catch (Throwable error) {
+			Log.e(TAG, "import failed", error);
+			replier.send("ERROR:" + error.getClass().getSimpleName());
+		}
+	}
+
+	@NonNull
+	private ChizuTracks.Params read(@NonNull OsmandApplication app, @NonNull Intent intent) {
+		ChizuTracks.Params params = new ChizuTracks.Params();
+		params.gpxData = intent.getStringExtra("gpx_data");
+		params.gpxPath = intent.getStringExtra("gpx_path");
+		params.name = intent.getStringExtra("name");
+		params.trackId = intent.getStringExtra("track_id");
+		params.outDir = intent.getStringExtra("out_dir");
+		String folder = intent.getStringExtra("folder");
+		if (folder != null && !folder.trim().isEmpty()) {
+			params.folder = folder;
+		}
+		// the explicit w/h form is the contract; the square edge is the courtesy fallback
+		int thumbEdge = number(intent, "thumb_px", 0);
+		int mapEdge = number(intent, "map_px", 0);
+		params.thumbWidth = number(intent, "thumb_w", thumbEdge > 0 ? thumbEdge : params.thumbWidth);
+		params.thumbHeight = number(intent, "thumb_h", thumbEdge > 0 ? thumbEdge : params.thumbHeight);
+		params.mapWidth = number(intent, "map_w", mapEdge > 0 ? mapEdge : params.mapWidth);
+		params.mapHeight = number(intent, "map_h", mapEdge > 0 ? mapEdge : params.mapHeight);
+		params.thumbWidth = clamp(params.thumbWidth);
+		params.thumbHeight = clamp(params.thumbHeight);
+		params.mapWidth = clamp(params.mapWidth);
+		params.mapHeight = clamp(params.mapHeight);
+
+		params.color = color(intent.getStringExtra("track_color"), ChizuTracks.DEFAULT_TRACK_COLOR);
+		params.night = night(intent.getStringExtra("night"));
+		params.show = flag(intent, "show");
+		float density = decimal(intent, "density", app.getResources().getDisplayMetrics().density);
+		params.density = Math.max(1f, Math.min(4f, density));
+		return params;
+	}
+
+	// ---------- SHOW_TRACK ----------
+
+	private void runShow(@NonNull OsmandApplication app, @NonNull ChizuReplier replier,
+			@Nullable String trackId) {
+		try {
+			awaitInit(app);
+			if (!ChizuTracks.prepareShow(app, trackId)) {
+				replier.send("ERROR:unknown track: " + trackId);
+				return;
+			}
+			// A receiver has no window, and since Android 10 an app without one may not start an
+			// activity: this call is silently refused when 地図 is in the background, which is the
+			// usual case. It costs nothing to try, and it does not matter — the target is pending,
+			// so whoever brings the map up next lands on the track. The caller that has the
+			// foreground should prefer ChizuShowTrackActivity, which has no such problem.
+			app.runInUIThread(() -> MapActivity.launchMapActivityMoveToTop(app));
+			replier.send("OK:" + trackId);
+		} catch (Throwable error) {
+			Log.e(TAG, "show failed", error);
+			replier.send("ERROR:" + error.getClass().getSimpleName());
+		}
+	}
+
+	// ---------- extras ----------
+
+	/** Every value may arrive as a string: the sister apps send string extras only. */
+	private int number(@NonNull Intent intent, @NonNull String key, int fallback) {
+		Object value = intent.getExtras() != null ? intent.getExtras().get(key) : null;
+		if (value instanceof Number number) {
+			return number.intValue();
+		}
+		if (value instanceof String text) {
+			try {
+				return (int) Double.parseDouble(text.trim());
+			} catch (NumberFormatException ignored) {
+			}
+		}
+		return fallback;
+	}
+
+	private float decimal(@NonNull Intent intent, @NonNull String key, float fallback) {
+		Object value = intent.getExtras() != null ? intent.getExtras().get(key) : null;
+		if (value instanceof Number number) {
+			return number.floatValue();
+		}
+		if (value instanceof String text) {
+			try {
+				return Float.parseFloat(text.trim());
+			} catch (NumberFormatException ignored) {
+			}
+		}
+		return fallback;
+	}
+
+	private boolean flag(@NonNull Intent intent, @NonNull String key) {
+		Object value = intent.getExtras() != null ? intent.getExtras().get(key) : null;
+		if (value instanceof Boolean bool) {
+			return bool;
+		}
+		if (value instanceof String text) {
+			String clean = text.trim();
+			return "true".equalsIgnoreCase(clean) || "1".equals(clean) || "yes".equalsIgnoreCase(clean);
+		}
+		return false;
+	}
+
+	private int color(@Nullable String value, int fallback) {
+		if (value == null || value.trim().isEmpty()) {
+			return fallback;
+		}
+		try {
+			return Color.parseColor(value.trim());
+		} catch (IllegalArgumentException error) {
+			Log.w(TAG, "unparseable track_color " + value + " — keeping the default");
+			return fallback;
+		}
+	}
+
+	/** Day unless told otherwise: a picture filed away for years must not drift with the clock. */
+	@Nullable
+	private Boolean night(@Nullable String value) {
+		if (value == null || value.trim().isEmpty()) {
+			return Boolean.FALSE;
+		}
+		String clean = value.trim().toLowerCase(Locale.US);
+		if ("auto".equals(clean)) {
+			return null;
+		}
+		return "night".equals(clean) || "true".equals(clean) || "1".equals(clean);
+	}
+
+	private int clamp(int size) {
+		return Math.max(64, Math.min(4096, size));
+	}
+
+	@NonNull
+	private String decimal(double value) {
+		return String.format(Locale.US, "%.1f", value);
+	}
+
+	/** A cold-started process must let the app finish loading before any of this works. */
+	private void awaitInit(@NonNull OsmandApplication app) {
+		long deadline = SystemClock.elapsedRealtime() + INIT_TIMEOUT_MS;
+		while (app.isApplicationInitializing() && SystemClock.elapsedRealtime() < deadline) {
+			try {
+				Thread.sleep(200);
+			} catch (InterruptedException error) {
+				Thread.currentThread().interrupt();
+				return;
+			}
+		}
+	}
+}
