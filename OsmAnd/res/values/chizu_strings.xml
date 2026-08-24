@@ -78,5 +78,6 @@
 	<string name="chizu_reset_all">Reset everything to the black-yellow defaults</string>
 	<string name="chizu_reset_all_confirm">Reset all 白い熊 地図 UI settings?</string>
 	<string name="chizu_grant_all_files_access">Grant 白い熊 地図 “All files access”, then set the storage folder again.</string>
+	<string name="chizu_track_not_found">That walk is not in 白い熊 地図 — share it again from the app that sent it.</string>
 	<string name="chizu_restart_note">Changes apply to screens as they are (re)opened; a few deep surfaces pick them up after an app restart.</string>
 </resources>
