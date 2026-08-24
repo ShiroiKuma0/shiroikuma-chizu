@@ -3,6 +3,87 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+025 — 2026-08-24
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only. Covers the unreleased
+`+022`–`+024` builds as well.
+
+### 歩行記録: a walk comes in from 自由作業盤 and goes out as a map
+
+[白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban) drives 白い熊's HUAWEI
+Band 11 Pro without any Huawei software, and decodes a recorded outdoor walk into a GPX. It cannot
+draw a map, and should not try. This release is 地図's end of that contract: hand it the walk, it
+files it as a track and hands back two rendered pictures of it — all with nothing on screen.
+
+- **`shiroikuma.chizu.action.IMPORT_TRACK`**, behind the same switch and the same 24-byte token as
+  the 保存復元 export. The GPX travels inline in `gpx_data` when it is small enough, or by
+  `gpx_path` when it is not; either is accepted and the inline copy wins. Optional `name`,
+  `track_id`, `folder`, `out_dir`, `thumb_w`/`thumb_h`/`map_w`/`map_h` (or a square `thumb_px`/
+  `map_px`), `track_color`, `night`, `show` and `density`. Every numeric extra parses from a string
+  or a number, since the sister apps send string extras only.
+- **What it writes.** OsmAnd's own re-serialization of the track into `tracks/自由作業盤/<name>.gpx`
+  with its row and analysis in the tracks database, selected but hidden so a shared walk never
+  silently redraws the map; then the normalized GPX, a large PNG and a thumbnail into a folder both
+  apps can read — `/sdcard/〇/[666] 私資料/[666][147] tracks` unless the caller names another.
+- **What it answers.** `track_id`, the three paths, `map_detail`, `zoom`, and the numbers OsmAnd
+  computes over the track itself: `distance_m`, `duration_s`, `moving_time_s`, `points`,
+  `start_time`, `end_time`, `elevation_up`, `elevation_down`, `avg_speed`, `max_speed`. Each value
+  travels twice — as its own string extra and packed into `result` behind the `OK:` — so a bridge
+  that surfaces only `result` still receives everything.
+- **Re-sharing corrects rather than duplicates.** The `track_id` is the path relative to the tracks
+  directory; sent back, the same file is rewritten. It is canonicalized first, so a hand-written id
+  carrying a leading `tracks/` or a whole stored path reduces to the same track instead of filing a
+  second copy at `tracks/tracks/…`.
+
+### The map picture, with no map on screen
+
+- **Rendered by the legacy rasterizer**, which turns the installed `.obf` maps into a bitmap on a
+  worker thread. The OpenGL core cannot: it needs a live GL surface, and there is no map view here.
+- **Not upstream's `MapBitmapDrawer`.** That one asks `updateRenderedMapNeeded()` first, which
+  answers "no" for a tile box it has already drawn — and then never calls back, so a repeated
+  request hangs for ever. Every render here is forced, serialized on a lock, and under a timeout, so
+  a request always ends in an answer.
+- **Two renders, never one downscale**, because vector map labels turn to mush when an image is
+  shrunk. Each size is drawn at its own zoom.
+- **Legible on any ground.** Every line is stroked twice — a casing beneath the colour, black under
+  a bright line and white under a dark one, chosen by Rec. 709 luma. Our yellow is luma 226 and so
+  always carries a black casing, which is what keeps it readable on the palest day-style map. The
+  ends carry a filled dot and its inverse, so a walk's direction reads in a 480-pixel cell.
+- **Framed with air.** The zoom walks down from z17 to the tightest one at which the whole track
+  still sits inside a margin, rather than grazing the edge.
+- **Honest about what is underneath.** `map_detail` answers `map`, `basemap` or `none`, so a walk in
+  a region with no offline map is labelled as a missing download rather than reading as a failed
+  render. With no map at all the route is drawn on black, which is cheap and still recognisable.
+- **Pinned to the day style.** These pictures are kept for years and shown side by side in a grid;
+  one drawn after dusk under the night style would read as a broken cell. `MapRenderRepositories`
+  gains a night-mode override, set for the duration of one render and cleared in a `finally` — the
+  rasterizer otherwise takes day or night from the live theme with no way to ask.
+
+### Opening a walk in 地図
+
+- **`shiroikuma.chizu.action.OPEN_TRACK`**, a translucent trampoline activity taking `track_id`.
+  A broadcast receiver has no window, and since Android 10 an app without one may not start an
+  activity — so the older `SHOW_TRACK` could find the walk and never bring the map up. It was
+  defeated, not incomplete. Here the calling app hands over the foreground and this activity holds
+  it, invisibly, until the track is found, waiting out a cold start if it has to. No token: it does
+  nothing a launcher icon cannot, and gating it would break the button silently whenever the token
+  drifted.
+- **The camera actually moves now.** Both paths write the walk into the last known map location,
+  which `MapActivity` restores at the top of every `onResume`. Setting the camera directly does not
+  survive that restore, and neither does the pending target: `onPause` blocks the animation thread,
+  `onResume` spends the target at `readLocationToShow()` and only re-enables animations a hundred
+  lines later, so `startMoving()` returns having done nothing and the cleared target is gone. The
+  pending target is still set, for its other effect — reading it unlinks the map from the GPS fix,
+  so a live recording cannot drag the view off the walk.
+- **`SHOW_TRACK` stays** as the headless path, and now works whichever order the caller uses.
+
+### Internal
+
+- The reply plumbing moves out of `ChizuStateExportReceiver` into a shared `ChizuReplier`,
+  unchanged in behaviour: one terminal reply per request, a fresh broadcast with
+  `FLAG_INCLUDE_STOPPED_PACKAGES`, the ordered result set but never relied on, and never a binder.
+  It now carries named extras alongside `result`.
+
 ## 5.4.0+021 — 2026-08-21
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
