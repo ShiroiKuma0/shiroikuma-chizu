@@ -26,7 +26,9 @@ import java.util.Locale;
  *                           [track_color] [night=day|night|auto] [show] [density]
  *                           → OK:&lt;track_id&gt;|&lt;gpx_path&gt;|&lt;thumb_path&gt;|&lt;map_path&gt;
  *                             |&lt;distance_m&gt;|&lt;duration_s&gt;, and every value again as its
- *                             own string extra
+ *                             own string extra. {@code active_time_s} is the extra worth
+ *                             reading beside the band's own figures: it is the walk minus its
+ *                             gaps, the one number the band measures too.
  * &lt;pkg&gt;.action.SHOW_TRACK    token track_id → OK:&lt;track_id&gt;, and the map comes to the front
  *                           on that walk. The one action here that is not headless.
  * </pre>
@@ -92,6 +94,7 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 			extras.putString("distance_m", decimal(result.distanceM));
 			extras.putString("duration_s", String.valueOf(result.durationS));
 			extras.putString("moving_time_s", String.valueOf(result.movingS));
+			extras.putString("active_time_s", String.valueOf(result.activeS));
 			extras.putString("points", String.valueOf(result.points));
 			extras.putString("start_time", String.valueOf(result.startTime));
 			extras.putString("end_time", String.valueOf(result.endTime));
