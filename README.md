@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless token-gated backup that an automation app can trigger, an always-visible position marker, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless token-gated backup that an automation app can trigger, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+021`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+025`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -35,6 +35,11 @@ The top of the UI page: pick a backup directory once, then export **everything s
 
 ## 🗄️ Backed up headlessly, on a token
 The same export runs **without opening the app**: three exported broadcast actions let a sister automation app ([白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban)) ask this one for its category list — each entry saying whether it **starts ticked**, so the gigabytes of downloadable maps and voice packages come pre-excluded while everything authored comes pre-selected — then have it export itself, writing one ZIP and replying with the path, byte count and human size, and **stop it mid-run**: a cancel unwinds at the next entry boundary and deletes the half-written archive, leaving the backup directory exactly as it found it. Every request is gated by a 24-byte token — generated on the device, compared constant-time, kept out of every backup — behind a switch that is **off by default**, both sitting in the Export / Import section. While it works it broadcasts progress in **real numbers** (`512 MB / 4.2 GB`), never a percentage, and the archive it produces is an ordinary backup that the panel's Import restores.
+
+---
+
+## 🚶 Walks from the band, drawn as maps
+A sister app ([白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban)) pulls a recorded walk off a HUAWEI Band 11 Pro and hands over the GPX; 地図 files it as a track and hands back **two rendered pictures of it** — a thumbnail for the grid and a large map for the detail view — without ever coming to the foreground. The route is stroked over the real offline map by the legacy rasterizer, which needs no map on screen, and it is drawn to be **read**: a casing under every line chosen by luminance, so the yellow survives the palest day-style ground; a filled dot at the start and its inverse at the finish, so direction is clear at 480 pixels; a zoom fitted to the walk with air around it; and each size rendered at its own zoom rather than one image shrunk, because map labels turn to mush when they are downscaled. The reply says plainly whether real streets were underneath, so a walk in a region you have not downloaded is labelled as a missing map rather than looking like a failed render, and it carries 地図's **own** measurements of the route — distance, span, moving time, climb, speeds — as a second opinion beside the band's. One more action opens any walk on the map, framed.
 
 ---
 
