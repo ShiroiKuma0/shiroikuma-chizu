@@ -31,7 +31,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * shiroikuma fork: a map picture of one track, drawn with no map on screen.
+ * shiroikuma fork: a map picture drawn with no map on screen — one walk over the map for
+ * {@code IMPORT_TRACK}, or the bare map of a tile block for {@code EXPORT_BASEMAP}.
  *
  * The legacy rasterizer ({@link MapRenderRepositories}) turns the installed offline maps into
  * a plain {@link Bitmap} on a worker thread — no {@code MapActivity}, no GL surface, which the
@@ -101,34 +102,56 @@ public class ChizuTrackImages {
 			@ColorInt int emptyBackground, @Nullable Boolean nightMode) {
 		synchronized (LOCK) {
 			RotatedTileBox tileBox = fit(gpx.getRect(), width, height, density);
-			Detail detail = Detail.NONE;
-			Bitmap picture = null;
-			Bitmap rendered;
-			MapRenderRepositories renderer = app.getResourceManager().getRenderer();
-			renderer.setNightModeOverride(nightMode);
-			try {
-				rendered = renderMap(tileBox);
-			} finally {
-				renderer.setNightModeOverride(null);
-			}
-			if (rendered != null) {
-				detail = detail(renderer.getCheckedRenderedState());
-				try {
-					// the rasterizer hands back its own live bitmap and reuses it next time
-					picture = rendered.copy(Bitmap.Config.ARGB_8888, true);
-				} catch (Throwable error) {
-					Log.e(TAG, "cannot copy the rendered map", error);
-				}
-			}
-			if (picture == null) {
-				detail = Detail.NONE;
-				picture = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-				picture.eraseColor(emptyBackground);
-			}
-			Canvas canvas = new Canvas(picture);
+			Shot shot = shoot(app, tileBox, emptyBackground, nightMode);
+			Canvas canvas = new Canvas(shot.bitmap);
 			drawTrack(canvas, tileBox, width, height, trackColor);
-			return new Shot(picture, detail, tileBox.getZoom());
+			return shot;
 		}
+	}
+
+	/**
+	 * The map alone, over exactly the box asked for and with nothing laid on top — what
+	 * {@code EXPORT_BASEMAP} hands 自由作業盤 to cache and draw its own walks over. No track,
+	 * no marker, and nothing that reaches this app's own list of tracks.
+	 */
+	@NonNull
+	public static Shot area(@NonNull OsmandApplication app, @NonNull RotatedTileBox tileBox,
+			@ColorInt int emptyBackground, @Nullable Boolean nightMode) {
+		synchronized (LOCK) {
+			return shoot(app, tileBox, emptyBackground, nightMode);
+		}
+	}
+
+	/** The map underneath, on a bitmap of our own. The caller holds {@link #LOCK}. */
+	@NonNull
+	private static Shot shoot(@NonNull OsmandApplication app, @NonNull RotatedTileBox tileBox,
+			@ColorInt int emptyBackground, @Nullable Boolean nightMode) {
+		Detail detail = Detail.NONE;
+		Bitmap picture = null;
+		Bitmap rendered;
+		MapRenderRepositories renderer = app.getResourceManager().getRenderer();
+		renderer.setNightModeOverride(nightMode);
+		try {
+			rendered = renderMap(app, tileBox);
+		} finally {
+			renderer.setNightModeOverride(null);
+		}
+		if (rendered != null) {
+			detail = detail(renderer.getCheckedRenderedState());
+			try {
+				// the rasterizer hands back its own live bitmap and reuses it next time
+				picture = rendered.copy(Bitmap.Config.ARGB_8888, true);
+			} catch (Throwable error) {
+				Log.e(TAG, "cannot copy the rendered map", error);
+			}
+		}
+		if (picture == null) {
+			detail = Detail.NONE;
+			picture = Bitmap.createBitmap(tileBox.getPixWidth(), tileBox.getPixHeight(),
+					Bitmap.Config.ARGB_8888);
+			picture.eraseColor(emptyBackground);
+		}
+		return new Shot(picture, detail, tileBox.getZoom());
 	}
 
 	public static void write(@NonNull Bitmap bitmap, @NonNull File file) throws IOException {
@@ -143,7 +166,7 @@ public class ChizuTrackImages {
 	// ---------- the map underneath ----------
 
 	@Nullable
-	private Bitmap renderMap(@NonNull RotatedTileBox tileBox) {
+	private static Bitmap renderMap(@NonNull OsmandApplication app, @NonNull RotatedTileBox tileBox) {
 		ResourceManager resources = app.getResourceManager();
 		MapRenderRepositories renderer = resources.getRenderer();
 		CountDownLatch done = new CountDownLatch(1);
@@ -183,7 +206,7 @@ public class ChizuTrackImages {
 	}
 
 	@NonNull
-	private Detail detail(int renderedState) {
+	private static Detail detail(int renderedState) {
 		if ((renderedState & 2) != 0) {
 			return Detail.MAP;
 		}
