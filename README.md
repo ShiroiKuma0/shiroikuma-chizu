@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless token-gated backup that an automation app can trigger, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless token-gated backup that an automation app can trigger, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+026`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+027`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -40,6 +40,8 @@ The same export runs **without opening the app**: three exported broadcast actio
 
 ## 🚶 Walks from the band, drawn as maps
 A sister app ([白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban)) pulls a recorded walk off a HUAWEI Band 11 Pro and hands over the GPX; 地図 files it as a track and hands back **two rendered pictures of it** — a thumbnail for the grid and a large map for the detail view — without ever coming to the foreground. The route is stroked over the real offline map by the legacy rasterizer, which needs no map on screen, and it is drawn to be **read**: a casing under every line chosen by luminance, so the yellow survives the palest day-style ground; a filled dot at the start and its inverse at the finish, so direction is clear at 480 pixels; a zoom fitted to the walk with air around it; and each size rendered at its own zoom rather than one image shrunk, because map labels turn to mush when they are downscaled. The reply says plainly whether real streets were underneath, so a walk in a region you have not downloaded is labelled as a missing map rather than looking like a failed render, and it carries 地図's **own** measurements of the route — distance, span, moving time, climb, speeds — as a second opinion beside the band's. One more action opens any walk on the map, framed.
+
+A companion action renders the **area** instead of the walk: hand it a block of standard Web Mercator tiles — `z/x/y` and a size, never a bounding box — and it returns exactly that block as a PNG, with nothing drawn on it and nothing filed here. Because the request is in tiles, both apps derive the same extent from the same published definition and neither has to remember a framing the other chose, so the sister app can cache one cutout per neighbourhood and stroke every walk that fits inside it itself. A hundred walks around the same few streets then cost one map instead of a hundred near-identical pictures, and 地図's own list of tracks stays for the walks 白い熊 actually chose to keep in it.
 
 ---
 
