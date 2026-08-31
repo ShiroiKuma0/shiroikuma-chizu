@@ -31,6 +31,14 @@ import java.util.Locale;
  *                             gaps, the one number the band measures too.
  * &lt;pkg&gt;.action.SHOW_TRACK    token track_id → OK:&lt;track_id&gt;, and the map comes to the front
  *                           on that walk. The one action here that is not headless.
+ * &lt;pkg&gt;.action.EXPORT_BASEMAP
+ *                           token zoom tile_x tile_y tiles_w tiles_h [tile_px] out_path
+ *                           [night=day|night|auto]
+ *                           → OK:&lt;out_path&gt;|&lt;width&gt;|&lt;height&gt;|&lt;map_detail&gt;, and every
+ *                             value again as its own string extra. The map under a block of
+ *                             standard Web Mercator tiles and nothing else — no track, no
+ *                             marker, and nothing added to this app's own list of tracks. See
+ *                             {@link ChizuBaseMap} for why the request is in tiles.
  * </pre>
  *
  * Same switch and same token as the 保存復元 export: {@link ChizuAutomation}. The reply is a
@@ -42,6 +50,7 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 
 	private static final String SUFFIX_IMPORT = ".action.IMPORT_TRACK";
 	private static final String SUFFIX_SHOW = ".action.SHOW_TRACK";
+	private static final String SUFFIX_BASEMAP = ".action.EXPORT_BASEMAP";
 
 	private static final long INIT_TIMEOUT_MS = 180_000;
 
@@ -70,6 +79,9 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 		} else if (action.endsWith(SUFFIX_SHOW)) {
 			String trackId = intent.getStringExtra("track_id");
 			new Thread(() -> runShow(app, replier, trackId), "chizu-show-track").start();
+		} else if (action.endsWith(SUFFIX_BASEMAP)) {
+			ChizuBaseMap.Params params = readBasemap(intent);
+			new Thread(() -> runBasemap(app, replier, params), "chizu-export-basemap").start();
 		} else {
 			replier.send("ERROR:unknown action");
 		}
@@ -167,6 +179,50 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 			Log.e(TAG, "show failed", error);
 			replier.send("ERROR:" + error.getClass().getSimpleName());
 		}
+	}
+
+	// ---------- EXPORT_BASEMAP ----------
+
+	private void runBasemap(@NonNull OsmandApplication app, @NonNull ChizuReplier replier,
+			@NonNull ChizuBaseMap.Params params) {
+		try {
+			awaitInit(app);
+			ChizuBaseMap.Result result = ChizuBaseMap.render(app, params);
+			Bundle extras = new Bundle();
+			extras.putString("out_path", result.outPath);
+			extras.putString("width", String.valueOf(result.width));
+			extras.putString("height", String.valueOf(result.height));
+			extras.putString("map_detail", result.mapDetail);
+			// the request echoed back, so a reply identifies its own cutout without being matched up
+			extras.putString("zoom", String.valueOf(params.zoom));
+			extras.putString("tile_x", String.valueOf(params.tileX));
+			extras.putString("tile_y", String.valueOf(params.tileY));
+			extras.putString("tiles_w", String.valueOf(params.tilesW));
+			extras.putString("tiles_h", String.valueOf(params.tilesH));
+			extras.putString("tile_px", String.valueOf(params.tilePx));
+
+			replier.send("OK:" + result.outPath + "|" + result.width + "|" + result.height
+					+ "|" + result.mapDetail, extras);
+		} catch (ChizuTracks.TrackError error) {
+			replier.send("ERROR:" + error.getMessage());
+		} catch (Throwable error) {
+			Log.e(TAG, "basemap failed", error);
+			replier.send("ERROR:" + error.getClass().getSimpleName());
+		}
+	}
+
+	@NonNull
+	private ChizuBaseMap.Params readBasemap(@NonNull Intent intent) {
+		ChizuBaseMap.Params params = new ChizuBaseMap.Params();
+		params.zoom = number(intent, "zoom", 0);
+		params.tileX = number(intent, "tile_x", -1);
+		params.tileY = number(intent, "tile_y", -1);
+		params.tilesW = number(intent, "tiles_w", 0);
+		params.tilesH = number(intent, "tiles_h", 0);
+		params.tilePx = number(intent, "tile_px", 256);
+		params.outPath = intent.getStringExtra("out_path");
+		params.night = night(intent.getStringExtra("night"));
+		return params;
 	}
 
 	// ---------- extras ----------

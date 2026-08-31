@@ -129,6 +129,8 @@
 
 		<!-- shiroikuma fork: the walk contract - 白い熊 自由作業盤 hands over a track it pulled
 		     off the HUAWEI Band 11 Pro, this app files it, draws it and answers by broadcast.
+		     EXPORT_BASEMAP is the same contract without the walk: the bare map under a block of
+		     Web Mercator tiles, cached over there and drawn on there.
 		     Same switch and same token as the export above; the token is the gate. -->
 		<receiver
 			android:name="net.osmand.plus.chizu.ChizuTrackReceiver"
@@ -136,6 +138,7 @@
 			<intent-filter>
 				<action android:name="${applicationId}.action.IMPORT_TRACK" />
 				<action android:name="${applicationId}.action.SHOW_TRACK" />
+				<action android:name="${applicationId}.action.EXPORT_BASEMAP" />
 			</intent-filter>
 		</receiver>
 
