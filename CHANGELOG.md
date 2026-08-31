@@ -3,6 +3,69 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+027 — 2026-08-31
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+### 歩行記録: the map under a tile block, so a walk needs no picture of its own
+
+`IMPORT_TRACK` renders one picture per walk. Most of 白い熊's walks are the same few streets over
+and over, so that is dozens of near-identical 2.5 MB pictures of one neighbourhood — and each also
+becomes a permanent entry in this app's list of tracks, put there by an automation rather than
+chosen. The new action renders the **area** instead: 自由作業盤 caches the cutout once and strokes
+every walk that fits inside it locally, so a hundred walks around one neighbourhood cost one map
+and no library entries. `IMPORT_TRACK` is untouched and is still the right call for "show me this
+one walk in 地図".
+
+- **`shiroikuma.chizu.action.EXPORT_BASEMAP`**, on the same exported receiver, behind the same
+  switch and the same 24-byte token. Takes `zoom`, `tile_x`, `tile_y`, `tiles_w`, `tiles_h`,
+  `tile_px`, `out_path` and `night`; writes a PNG of the map under that tile block and nothing
+  else. **No track, no marker, no library entry** — the basemap path never touches the tracks
+  database or the selection helper, so that holds by construction rather than by care.
+- **What it answers.** `OK:<out_path>|<width>|<height>|<map_detail>`, with each value again as its
+  own string extra, plus the request echoed back — `zoom`, `tile_x`, `tile_y`, `tiles_w`,
+  `tiles_h`, `tile_px` — so a reply identifies its own cutout without having to be matched up
+  against the request that produced it.
+- **`map_detail` is the point of the reply, not decoration.** `basemap` means only the bundled
+  world map was underneath, so the caller can ask again once the region has been downloaded
+  instead of caching a pale rectangle for ever and never knowing why every walk looks empty. Same
+  `map`/`basemap`/`none` vocabulary, read from the same rendered-state bits, as `IMPORT_TRACK`.
+
+### Why the request is in tiles and never a bounding box
+
+A bounding box would let this app choose a framing, and a framing the caller did not choose is one
+it cannot project onto: every walk drawn over the cutout would need a stored transform kept in step
+with the pixels. `z/x/y` plus a size fully determines the geography, so both apps compute the same
+extent from the same published definition and neither has to remember what the other decided.
+
+- **The grid maps onto the renderer exactly.** OsmAnd's own tile math is already the ordinary
+  slippy-map convention, and `RotatedTileBox` measures `2^zoomFloatPart · 256 · mapDensity` pixels
+  to the tile — so with `mapDensity = tile_px/256`, no rotation and no float zoom, the block lands
+  on the grid: centre from `getLatitudeFromTile(z, tile_y + tiles_h/2)`, size `tiles_w · tile_px`
+  by `tiles_h · tile_px`, which is also the bitmap the rasterizer allocates. Nothing is auto-fitted
+  and nothing is padded anywhere along that path.
+- **`tile_px` rides on the screen density too**, not only the map density. Otherwise labels sized
+  for a phone screen are drawn onto a 256-pixel tile and swamp it. Tied to both, it is a clean
+  scale knob: ask for 512 and the same geography comes back with everything twice the size.
+- **Anything that would move the geography is refused, never quietly corrected** — with the value
+  and the range in the error. A cutout whose extent is not the one asked for cannot be drawn on,
+  and would sit in the caller's cache for months before anyone noticed. That covers a zoom outside
+  1–19, a block that leaves the world at that zoom, a picture over 3072 px a side, and an odd
+  `tile_px`: the tile box centres on a whole pixel, so an odd edge would shift the block half a
+  pixel off the grid.
+- **The ceilings are deliberately looser than the contract asks for** — 8 tiles a side rather than
+  6, `tile_px` from 64 to 1024 — so a later version of the sister app needs no build here.
+
+### The picture takes its name only once it is whole
+
+- **Written beside itself and renamed into place**, replacing whatever held the name before. The
+  caller guards against a blank cutout by checking the file is over 1 kB, which a half-written PNG
+  clears easily — and under the right name it would blank every walk in the area rather than
+  failing visibly.
+- **One rasterizer path for both actions.** The offscreen render moved out of the track drawing
+  into a shared step, so `IMPORT_TRACK` and `EXPORT_BASEMAP` share one lock, one night-mode
+  override and one `map_detail` derivation; the track is simply stroked on afterwards.
+
 ## 5.4.0+026 — 2026-08-24
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
