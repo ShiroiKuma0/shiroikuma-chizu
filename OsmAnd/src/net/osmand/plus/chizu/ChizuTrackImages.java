@@ -25,6 +25,7 @@ import net.osmand.shared.gpx.primitives.WptPt;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -156,10 +157,21 @@ public class ChizuTrackImages {
 
 	public static void write(@NonNull Bitmap bitmap, @NonNull File file) throws IOException {
 		try (FileOutputStream out = new FileOutputStream(file)) {
-			if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-				throw new IOException("PNG compression refused " + file.getName());
+			write(bitmap, out);
+		}
+	}
+
+	/**
+	 * The same picture into a stream the caller owns — a content URI handed to us by 自由作業盤.
+	 * The stream is closed here either way: it is the far app's file descriptor, and leaving one
+	 * open holds a lock on a file that app is waiting to read.
+	 */
+	public static void write(@NonNull Bitmap bitmap, @NonNull OutputStream out) throws IOException {
+		try (OutputStream stream = out) {
+			if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
+				throw new IOException("PNG compression refused");
 			}
-			out.flush();
+			stream.flush();
 		}
 	}
 
