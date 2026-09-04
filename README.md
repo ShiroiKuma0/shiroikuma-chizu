@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless token-gated backup that an automation app can trigger, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless backup an automation app can trigger and a verified-caller data door that survives a wipe, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+028`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+029`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -33,8 +33,14 @@ The top of the UI page: pick a backup directory once, then export **everything s
 
 ---
 
-## 🗄️ Backed up headlessly, on a token
-The same export runs **without opening the app**: three exported broadcast actions let a sister automation app ([白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban)) ask this one for its category list — each entry saying whether it **starts ticked**, so the gigabytes of downloadable maps and voice packages come pre-excluded while everything authored comes pre-selected — then have it export itself, writing one ZIP and replying with the path, byte count and human size, and **stop it mid-run**: a cancel unwinds at the next entry boundary and deletes the half-written archive, leaving the backup directory exactly as it found it. Every request is gated by a 24-byte token — generated on the device, compared constant-time, kept out of every backup — behind a switch that is **off by default**, both sitting in the Export / Import section. While it works it broadcasts progress in **real numbers** (`512 MB / 4.2 GB`), never a percentage, and the archive it produces is an ordinary backup that the panel's Import restores.
+## 🗄️ Backed up headlessly, and restorable onto a wiped phone
+The same export runs **without opening the app**, and there are two doors onto it.
+
+**The broadcast half** lets a sister automation app ([白い熊 自由作業盤](https://github.com/ShiroiKuma0/shiroikuma-jiyusagyoban)) ask this one for its category list — each entry saying whether it **starts ticked**, so the gigabytes of downloadable maps and voice packages come pre-excluded while everything authored comes pre-selected — then have it export itself, writing one ZIP and replying with the path, byte count and human size, and **stop it mid-run**: a cancel unwinds at the next entry boundary and deletes the half-written archive, leaving the backup directory exactly as it found it. While it works it broadcasts progress in **real numbers** (`512 MB / 4.2 GB`), never a percentage, and the archive it produces is an ordinary backup that the panel's Import restores.
+
+**The data door** is what makes a clean-phone restore possible. A ContentProvider hands this app's whole state to a caller — and takes it back — through a **file descriptor the caller opens**, so the bytes never become a file this app drops into someone else's backup directory behind their encryption and their checksums, and the permission to write **expires when the descriptor is closed** rather than outliving its purpose. Restore lives *only* here and never on a broadcast: an import overwrites everything, and the broadcast receivers are exported without a permission. The caller is identified from the framework by three things — its **exact package name**, its **uid as the kernel reports it**, and a **pinned signing certificate** — never by a `shiroikuma.` prefix, which is not an identity at all, since any sideloaded app may name itself one.
+
+The switch sits in the Export / Import section and now ships **on**: a phone that has just been wiped has nobody to turn it on, and that is exactly the phone this exists for. The 24-byte token — generated on the device, compared constant-time, kept out of every backup — became **optional**, asked for only when a second switch says so, and a token sent to an app that is not asking for one is ignored rather than refused.
 
 ---
 
