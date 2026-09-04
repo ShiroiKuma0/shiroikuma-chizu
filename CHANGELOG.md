@@ -3,6 +3,65 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+028 — 2026-09-04
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+### 歩行記録: the hand-over in content URIs, so neither app needs a shared folder
+
+自由作業盤 moved its whole workout archive into its own database, so that everything is covered by
+the app's own export/import. With it went the directory the two apps met in —
+`/sdcard/〇/[666] 私資料/[666][147] tracks`, of which only the 288 KB of raw band data was
+irreplaceable; the GPX and the pictures were both derived. Neither side has a path to name any
+more, so the contract takes content URIs, granted per request and revoked after.
+
+- **`IMPORT_TRACK` accepts `gpx_uri`**, a `content://` URI read through the ContentResolver, in
+  precedence `gpx_uri` → `gpx_data` → `gpx_path`. **`EXPORT_BASEMAP` accepts `out_uri`** in place
+  of `out_path`, written with `openOutputStream(uri, "wt")` — write-and-truncate, so a shorter
+  picture cannot leave a tail of the one before it.
+- **New: `gpx_out_uri`, `thumb_out_uri`, `map_out_uri`** — where the caller wants each artefact
+  put, if it wants it at all.
+- **URI mode.** Any URI extra puts the request in it, and then nothing reaches shared storage:
+  `out_dir` is read and discarded, and an artefact is produced **only** where the caller named a
+  URI to put it. Naming no picture is an ordinary request, not an empty one — since 自由作業盤
+  caches one tile-block cutout per neighbourhood and strokes every route that crosses it, the
+  usual import now files and measures a walk and renders nothing at all.
+- **`out_dir`'s default was the trap.** It is not merely a parameter: absent, it falls back to the
+  very directory 自由作業盤 retired, and `mkdirs()` would put it back. URI mode never reads it.
+- **The path form is untouched**, so neither app had to ship first.
+
+### Read at delivery, because a broadcast's grant does not live long enough
+
+`gpx_uri` is read inside `onReceive`, before the worker thread starts and before the init wait,
+while the caller's grant is youngest. It has to be: the receiver goes async and a cold-started 地図
+waits up to 180 s for the app to initialize before it looks at anything, which is far past the
+broadcast a flag-scoped grant is tied to. For the same reason the caller's own grant must be an
+explicit `grantUriPermission` rather than intent flags. A `SecurityException` on the read is
+reported as `cannot read gpx_uri: no read grant for this app` rather than surfacing raw, because
+that failure otherwise reads as a FileProvider path problem and is not one.
+
+### What a URI costs: the rename into place
+
+`EXPORT_BASEMAP` writes a file beside itself and renames it, so nothing under the real name is ever
+half a picture. A URI cannot be renamed. The bitmap is therefore rendered whole in memory and only
+then written, but past the moment the stream opens **only the reply says whether the bytes are
+complete** — on anything but `OK:` the caller must discard what is at the far end. 自由作業盤
+answers for that at its end: `out_uri` points at a temp file of its own, committed to its database
+only on `OK:`.
+
+### Replies
+
+The field count is unchanged. A destination comes back under the name of the form it took —
+`gpx_path`/`thumb_path`/`map_path`, or `gpx_uri`/`thumb_uri`/`map_uri`, or `out_uri` — and the
+family that does not apply is present but **empty**, so a reader never has to tell "not produced"
+from "extra not sent". `zoom` and `map_detail` come out of the render, so with no picture asked for
+they are empty rather than a `0` that would read as a real zoom. `stored_path` and every
+measurement, `active_time_s` included, are untouched.
+
+Both refusal strings are **reworded deliberately**: `no gpx: pass gpx_uri or gpx_data` and
+`no out_uri or out_path`. 自由作業盤 matches the previous wording to tell 白い熊 that the installed
+地図 predates this contract, so those exact strings had to stop being reachable here.
+
 ## 5.4.0+027 — 2026-08-31
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
