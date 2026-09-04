@@ -108,7 +108,12 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addEximDirRow(1);
 		addEximOpenRow(1);
 		addAutomationSwitchRow(1);
-		addAutomationTokenRow(1);
+		addAutomationRequireTokenRow(1);
+		// hidden when the token is not being asked for: a 48-character secret sitting under an
+		// off switch invites pasting it somewhere it will do nothing
+		if (ChizuAutomation.isTokenRequired(requireContext())) {
+			addAutomationTokenRow(1);
+		}
 
 		// ===== Foundation =====
 		addSection(R.string.chizu_section_foundation, accent);
@@ -287,6 +292,32 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		toggle.setChecked(ChizuAutomation.isEnabled(requireContext()));
 		toggle.setOnCheckedChangeListener(
 				(button, checked) -> ChizuAutomation.setEnabled(requireContext(), checked));
+		row.addView(toggle);
+
+		row.setOnClickListener(v -> toggle.toggle());
+		holder.addView(row);
+	}
+
+	/**
+	 * 「Use authorization token?」 — default OFF. Off means any sister app may drive the automation;
+	 * on means a caller must also present the token below. The data door checks the caller's package
+	 * name, uid and signing certificate either way.
+	 */
+	private void addAutomationRequireTokenRow(int level) {
+		LinearLayout row = tightRow(level);
+		row.addView(stackedLabels(getString(R.string.chizu_automation_require_token),
+				getString(R.string.chizu_automation_require_token_descr)));
+
+		SwitchCompat toggle = new SwitchCompat(requireContext());
+		toggle.setThumbTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.ACCENT)));
+		toggle.setTrackTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.DIVIDER)));
+		toggle.setChecked(ChizuAutomation.isTokenRequired(requireContext()));
+		toggle.setOnCheckedChangeListener((button, checked) -> {
+			ChizuAutomation.setTokenRequired(requireContext(), checked);
+			// the token row appears and disappears with this switch — posted rather than run here,
+			// so the rows are not rebuilt underneath the touch that is still being dispatched
+			row.post(this::buildRows);
+		});
 		row.addView(toggle);
 
 		row.setOnClickListener(v -> toggle.toggle());
