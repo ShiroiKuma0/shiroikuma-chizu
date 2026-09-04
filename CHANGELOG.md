@@ -3,6 +3,78 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+029 — 2026-09-04
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+### 保存復元: the token becomes optional, and a data door that knows its caller
+
+Contract v2. The token was a 48-character secret 白い熊 pasted from this app's settings into the
+caller's, and a pasted secret cannot survive a wipe — which is fatal for the case the family now
+exists to serve: 応用管理 restoring apps *and their data* onto a clean phone, where nothing has been
+configured and nobody has pasted anything. A gate that only works once the phone is already set up
+is no gate for setting the phone up.
+
+- **The switch ships on, the token became optional.** `automation_enabled` now defaults **true** and
+  a new `automation_require_token` defaults **false**. Both checks live in one
+  `ChizuAutomation.refuse()` returning null-to-proceed or the exact `ERROR:` line, and every action
+  routes through it — the export receiver, the track receiver, and the cancel branch that used to
+  test the token inline. **A token sent to an app that does not require one is ignored, never
+  refused**: tokens outlive the setting they were pasted for, and refusing them would turn one
+  switch being turned off into half a batch mysteriously failing. `OPEN_TRACK` stays outside the
+  gate, as it always was.
+- **The three flag writes are `commit()`, not `apply()`.** The gate **fails open** now that the
+  default is true: a lost "turn this app off" does not fall back to off, it falls back to **on** —
+  and the caller force-stops this app with a `SIGKILL`, which runs no shutdown hook for a queued
+  write to finish in. Turning the app off is the one action 白い熊 has to shut a sister app out.
+- **New data door: a `ContentProvider` at `<pkg>.automation`**, exported with no permission,
+  answering `describe` / `export` / `import` / `cancel`. A broadcast cannot tell you who sent it,
+  and the caller supplies the destination — so the door that moves data identifies its caller from
+  the framework instead: **exact package name** (never a `shiroikuma.` prefix, which is not an
+  identity — any sideloaded app may take one, making a prefix check strictly weaker than the token
+  it replaces), **the uid as the kernel reports it** rather than as the caller declares it, and a
+  **pinned signing certificate**, since whichever caller package is absent from a device is a name
+  anyone can take and a clean phone is precisely where not everything is installed yet. Refusals
+  are returned, never thrown across the binder.
+- **The payload is a file descriptor the caller opens** — not a path, not a `content://` URI. A
+  backup is not a stable directory while it is being assembled, its encryption and its
+  `checksums.txt` are built per file the caller knows about, and a file dropped in from outside
+  would sit in plaintext inside an encrypted archive and go unverified rather than
+  verified-and-failing. A descriptor is also a capability that **expires when it is closed**, which
+  is the property the walk contract's URI grants could not give.
+- **`import` exists only on the provider.** It never gets a broadcast action: an import overwrites
+  this app's data, and the automation receivers are exported without a permission, so an import
+  there would let any app on the phone wipe 地図.
+- **`ChizuAutomationDataService`** runs both directions as a `dataSync` foreground service. It goes
+  foreground **before any early return** — once `startForegroundService` has been called the
+  platform requires it whatever the service then decides, so a caller retrying with a stale job id
+  would otherwise kill the very app it is backing up — and drains the descriptor handover **in the
+  same `finally`**, so a refused start cannot strand a caller's descriptor held open. An import is
+  **spooled to a temp file**, never read into memory, because a 地図 archive can carry downloaded
+  regions.
+- **`flushPreferences()` before an import reports success**, committing `chizu_exim`, the theme
+  prefs, `OsmandSettings`' global file **and every `ApplicationMode`'s file**. The caller
+  force-stops this app the instant it hears success — it has to, since a live process writes its
+  cached preferences back out at orderly shutdown and would silently undo the import — and a
+  `SIGKILL` runs no shutdown hook, so anything stock OsmAnd still had queued would die with the
+  process.
+- **`ChizuProgress`**: the progress sender extracted from the export receiver and parameterised
+  rather than copied, so the data door reports in the same §3 shape with the job id as its
+  correlation id, instead of a second implementation drifting apart from the first.
+- **`<queries>` now names both `shiroikuma.jiyusagyoban` and `shiroikuma.oyokanri`.** It named
+  neither — so the reply broadcasts of the walk round trip, proven end to end on `+028` and called
+  done, had been resting on the package visibility Android grants **implicitly** after a prior
+  interaction. That holds right up until it does not, and it would have presented not as an error
+  but as the map request simply going quiet. The dependency on an accident is now gone.
+- Three `<meta-data>` entries (`contract` 2, `format` 1, `min_format` 1) let 応用管理 decide whether
+  this app can be backed up **without waking it**, which matters because a frozen app cannot be
+  asked anything.
+
+**Known limit:** `describe` reports `"requires_launch_first": false`. The data service waits on
+`isApplicationInitializing()` before it collects or imports, which is the right construction, but a
+restore onto a *never-launched* package has not been measured. If one lands wrong on a fresh
+install, that field is the first thing to flip.
+
 ## 5.4.0+028 — 2026-09-04
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
