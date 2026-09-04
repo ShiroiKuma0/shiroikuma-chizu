@@ -21,10 +21,11 @@ import java.util.Locale;
  * HUAWEI Band 11 Pro, this app files it and draws it, headlessly, and answers by broadcast.
  *
  * <pre>
- * &lt;pkg&gt;.action.IMPORT_TRACK  token gpx_data|gpx_path [name] [track_id] [folder] [out_dir]
+ * &lt;pkg&gt;.action.IMPORT_TRACK  token gpx_uri|gpx_data|gpx_path [name] [track_id] [folder]
+ *                           [gpx_out_uri] [thumb_out_uri] [map_out_uri] [out_dir]
  *                           [thumb_w thumb_h map_w map_h | thumb_px map_px]
  *                           [track_color] [night=day|night|auto] [show] [density]
- *                           → OK:&lt;track_id&gt;|&lt;gpx_path&gt;|&lt;thumb_path&gt;|&lt;map_path&gt;
+ *                           → OK:&lt;track_id&gt;|&lt;gpx&gt;|&lt;thumb&gt;|&lt;map&gt;
  *                             |&lt;distance_m&gt;|&lt;duration_s&gt;, and every value again as its
  *                             own string extra. {@code active_time_s} is the extra worth
  *                             reading beside the band's own figures: it is the walk minus its
@@ -32,14 +33,23 @@ import java.util.Locale;
  * &lt;pkg&gt;.action.SHOW_TRACK    token track_id → OK:&lt;track_id&gt;, and the map comes to the front
  *                           on that walk. The one action here that is not headless.
  * &lt;pkg&gt;.action.EXPORT_BASEMAP
- *                           token zoom tile_x tile_y tiles_w tiles_h [tile_px] out_path
- *                           [night=day|night|auto]
- *                           → OK:&lt;out_path&gt;|&lt;width&gt;|&lt;height&gt;|&lt;map_detail&gt;, and every
+ *                           token zoom tile_x tile_y tiles_w tiles_h [tile_px]
+ *                           out_uri|out_path [night=day|night|auto]
+ *                           → OK:&lt;out&gt;|&lt;width&gt;|&lt;height&gt;|&lt;map_detail&gt;, and every
  *                             value again as its own string extra. The map under a block of
  *                             standard Web Mercator tiles and nothing else — no track, no
  *                             marker, and nothing added to this app's own list of tracks. See
  *                             {@link ChizuBaseMap} for why the request is in tiles.
  * </pre>
+ *
+ * <b>URI mode.</b> Any of {@code gpx_uri}, {@code gpx_out_uri}, {@code thumb_out_uri},
+ * {@code map_out_uri} or {@code out_uri} puts the request in it, and then nothing is written to
+ * shared storage at all: {@code out_dir} is read and discarded, and an artefact is produced only
+ * where the caller named a URI to put it. 自由作業盤 keeps its workouts in its own database now
+ * and names none of the pictures, so a walk is filed and measured and no PNG is drawn — it strokes
+ * the route over its own cached {@code EXPORT_BASEMAP} cutout instead. The path form still works
+ * unchanged; neither app had to ship first. Every URI is opened through {@link ChizuUris}, which
+ * carries the note on why the caller's grant must be explicit.
  *
  * Same switch and same token as the 保存復元 export: {@link ChizuAutomation}. The reply is a
  * fresh broadcast, never a Binder — see {@link ChizuReplier}.
@@ -98,11 +108,19 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 			extras.putString("track_id", result.trackId);
 			extras.putString("name", result.name);
 			extras.putString("stored_path", result.storedPath);
-			extras.putString("gpx_path", result.gpxPath);
-			extras.putString("thumb_path", result.thumbPath);
-			extras.putString("map_path", result.mapPath);
-			extras.putString("map_detail", result.mapDetail);
-			extras.putString("zoom", String.valueOf(result.zoom));
+			// where each artefact went, under the name of the form it went there in — both
+			// families always present, and the one that does not apply is empty rather than
+			// missing, so a reader never has to tell "not produced" from "extra not sent"
+			extras.putString("gpx_path", params.uriMode ? "" : text(result.gpxPath));
+			extras.putString("thumb_path", params.uriMode ? "" : text(result.thumbPath));
+			extras.putString("map_path", params.uriMode ? "" : text(result.mapPath));
+			extras.putString("gpx_uri", params.uriMode ? text(result.gpxPath) : "");
+			extras.putString("thumb_uri", params.uriMode ? text(result.thumbPath) : "");
+			extras.putString("map_uri", params.uriMode ? text(result.mapPath) : "");
+			// both come out of the render, so with no picture asked for there is nothing behind
+			// them: empty, never a stale value and never a zero that reads as a real zoom
+			extras.putString("map_detail", text(result.mapDetail));
+			extras.putString("zoom", result.zoom > 0 ? String.valueOf(result.zoom) : "");
 			extras.putString("distance_m", decimal(result.distanceM));
 			extras.putString("duration_s", String.valueOf(result.durationS));
 			extras.putString("moving_time_s", String.valueOf(result.movingS));
@@ -115,9 +133,9 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 			extras.putString("avg_speed", decimal(result.avgSpeed));
 			extras.putString("max_speed", decimal(result.maxSpeed));
 
-			replier.send("OK:" + result.trackId + "|" + result.gpxPath + "|" + result.thumbPath
-					+ "|" + result.mapPath + "|" + decimal(result.distanceM) + "|" + result.durationS,
-					extras);
+			replier.send("OK:" + result.trackId + "|" + text(result.gpxPath) + "|"
+					+ text(result.thumbPath) + "|" + text(result.mapPath) + "|"
+					+ decimal(result.distanceM) + "|" + result.durationS, extras);
 		} catch (ChizuTracks.TrackError error) {
 			replier.send("ERROR:" + error.getMessage());
 		} catch (Throwable error) {
@@ -129,6 +147,24 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 	@NonNull
 	private ChizuTracks.Params read(@NonNull OsmandApplication app, @NonNull Intent intent) {
 		ChizuTracks.Params params = new ChizuTracks.Params();
+		params.gpxUri = ChizuUris.value(intent.getStringExtra("gpx_uri"));
+		params.gpxOutUri = ChizuUris.value(intent.getStringExtra("gpx_out_uri"));
+		params.thumbOutUri = ChizuUris.value(intent.getStringExtra("thumb_out_uri"));
+		params.mapOutUri = ChizuUris.value(intent.getStringExtra("map_out_uri"));
+		params.uriMode = params.gpxUri != null || params.gpxOutUri != null
+				|| params.thumbOutUri != null || params.mapOutUri != null;
+		if (params.gpxUri != null) {
+			// here and not on the worker: this runs at delivery, while the caller's grant is
+			// youngest, and the walk is 150–220 KB — nothing to hesitate over on the main thread.
+			// The worker starts by waiting up to three minutes for the app to initialize, which is
+			// far past any grant scoped to the broadcast.
+			try {
+				params.gpxBytes = ChizuUris.read(app, params.gpxUri);
+			} catch (Throwable error) {
+				Log.e(TAG, "cannot read " + params.gpxUri, error);
+				params.gpxError = "cannot read gpx_uri: " + ChizuUris.reason(error);
+			}
+		}
 		params.gpxData = intent.getStringExtra("gpx_data");
 		params.gpxPath = intent.getStringExtra("gpx_path");
 		params.name = intent.getStringExtra("name");
@@ -189,7 +225,9 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 			awaitInit(app);
 			ChizuBaseMap.Result result = ChizuBaseMap.render(app, params);
 			Bundle extras = new Bundle();
-			extras.putString("out_path", result.outPath);
+			boolean uriMode = params.outUri != null;
+			extras.putString("out_path", uriMode ? "" : result.outPath);
+			extras.putString("out_uri", uriMode ? result.outPath : "");
 			extras.putString("width", String.valueOf(result.width));
 			extras.putString("height", String.valueOf(result.height));
 			extras.putString("map_detail", result.mapDetail);
@@ -220,6 +258,7 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 		params.tilesW = number(intent, "tiles_w", 0);
 		params.tilesH = number(intent, "tiles_h", 0);
 		params.tilePx = number(intent, "tile_px", 256);
+		params.outUri = ChizuUris.value(intent.getStringExtra("out_uri"));
 		params.outPath = intent.getStringExtra("out_path");
 		params.night = night(intent.getStringExtra("night"));
 		return params;
@@ -291,6 +330,12 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 			return null;
 		}
 		return "night".equals(clean) || "true".equals(clean) || "1".equals(clean);
+	}
+
+	/** Empty, never null: an absent value in this contract is a string with nothing in it. */
+	@NonNull
+	private String text(@Nullable String value) {
+		return value != null ? value : "";
 	}
 
 	private int clamp(int size) {
