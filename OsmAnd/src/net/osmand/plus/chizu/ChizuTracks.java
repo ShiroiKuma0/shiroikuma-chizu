@@ -27,7 +27,10 @@ import net.osmand.util.Algorithms;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -36,8 +39,15 @@ import java.nio.charset.StandardCharsets;
  * two pictures of it.
  *
  * Everything here runs with no UI: the file lands in this app's own tracks folder and its row in
- * the tracks database, a normalized copy and the two PNGs land in a folder both apps can read,
- * and the numbers we compute travel back beside the band's own — never merged with them.
+ * the tracks database, and the numbers we compute travel back beside the band's own — never merged
+ * with them.
+ *
+ * <p>What else is produced depends on how the walk arrived. The original form named a folder both
+ * apps could read and always left a normalized GPX and two PNGs in it. 自由作業盤 has since moved
+ * its archive into its own database, so there is no shared folder left: a request carrying a
+ * content URI produces only what the caller named a URI for, and nothing at all reaches shared
+ * storage. It names none of the pictures — it strokes each walk over its own cached base-map
+ * cutout — so the usual import now draws nothing and simply files and measures the walk.
  */
 public class ChizuTracks {
 
@@ -76,8 +86,24 @@ public class ChizuTracks {
 
 	public static class Params {
 
+		/** The walk itself, already read off {@code gpx_uri} at delivery. */
+		public byte[] gpxBytes;
+		/** Where {@link #gpxBytes} came from, for the log and the reply. */
+		public String gpxUri;
+		/** Why {@code gpx_uri} could not be read, if it could not; reported by the worker. */
+		public String gpxError;
 		public String gpxData;
 		public String gpxPath;
+		/** Where the caller wants our normalized copy, if it wants one at all. */
+		public String gpxOutUri;
+		public String thumbOutUri;
+		public String mapOutUri;
+		/**
+		 * Set by any URI extra in the request. In URI mode nothing is written to shared storage,
+		 * {@link #outDir} is ignored, and a picture is drawn only if it was asked for by URI —
+		 * 自由作業盤 asks for none, because a walk is now drawn over its own cached tile block.
+		 */
+		public boolean uriMode;
 		public String name;
 		public String trackId;
 		public String folder = DEFAULT_FOLDER;
@@ -99,6 +125,11 @@ public class ChizuTracks {
 		public String trackId;
 		public String name;
 		public String storedPath;
+		/**
+		 * Where each artefact went — a path in the shared folder, or the content URI it was
+		 * written into. Null when it was not produced at all, which in URI mode is the normal
+		 * case: only what the caller named a URI for is made.
+		 */
 		public String gpxPath;
 		public String thumbPath;
 		public String mapPath;
@@ -126,7 +157,9 @@ public class ChizuTracks {
 		}
 		String relative = relativePath(app, params);
 		File stored = app.getAppPath(IndexConstants.GPX_INDEX_DIR + relative);
-		File outDir = outDir(app, params.outDir);
+		// in URI mode there is no shared folder to make, and out_dir is read and discarded: its
+		// default is the very directory 自由作業盤 retired, and mkdirs() would put it back
+		File outDir = params.uriMode ? null : outDir(app, params.outDir);
 
 		boolean existed = stored.exists();
 		Algorithms.createParentDirsForFile(stored);
@@ -148,10 +181,67 @@ public class ChizuTracks {
 		result.storedPath = stored.getAbsolutePath();
 		fill(result, analysis, gpx);
 
-		String base = stripExtension(stored.getName());
-		result.gpxPath = copy(stored, new File(outDir, base + ".gpx"));
-		draw(app, gpx, params, outDir, base, result);
+		if (params.uriMode) {
+			if (params.gpxOutUri != null) {
+				result.gpxPath = copyTo(app, stored, params.gpxOutUri);
+			}
+			drawToUris(app, gpx, params, result);
+		} else {
+			String base = stripExtension(stored.getName());
+			result.gpxPath = copy(stored, new File(outDir, base + ".gpx"));
+			draw(app, gpx, params, outDir, base, result);
+		}
 		return result;
+	}
+
+	/**
+	 * The pictures, when the caller named URIs for them — and only the ones it named. Asking for
+	 * neither is an ordinary request, not an empty one: 自由作業盤 caches one base map per
+	 * neighbourhood and strokes every walk that crosses it itself, so a per-walk PNG would be a
+	 * megabyte of a street it already has a picture of.
+	 */
+	private static void drawToUris(@NonNull OsmandApplication app, @NonNull GpxFile gpx,
+			@NonNull Params params, @NonNull Result result) throws TrackError {
+		if (params.mapOutUri == null && params.thumbOutUri == null) {
+			return;
+		}
+		ChizuTrackImages images = new ChizuTrackImages(app, gpx);
+		if (params.mapOutUri != null) {
+			ChizuTrackImages.Shot large = images.draw(params.mapWidth, params.mapHeight,
+					params.density, params.color, EMPTY_BACKGROUND, params.night);
+			write(large, params.mapOutUri, app);
+			result.mapPath = params.mapOutUri;
+			result.mapDetail = large.detail.name().toLowerCase();
+			result.zoom = large.zoom;
+		}
+		if (params.thumbOutUri != null) {
+			ChizuTrackImages.Shot thumb = images.draw(params.thumbWidth, params.thumbHeight,
+					params.density, params.color, EMPTY_BACKGROUND, params.night);
+			write(thumb, params.thumbOutUri, app);
+			result.thumbPath = params.thumbOutUri;
+			if (result.mapDetail == null) {
+				// asked for the thumbnail alone: it is what was under the walk, so it answers for it
+				result.mapDetail = thumb.detail.name().toLowerCase();
+				result.zoom = thumb.zoom;
+			}
+		}
+	}
+
+	/**
+	 * One picture into one URI. The bitmap is whole before the stream is opened — that is the
+	 * whole of what we can promise, since a URI cannot be renamed into place the way
+	 * {@link ChizuBaseMap} renames its file: past this point only the reply says whether the
+	 * bytes at the far end are complete.
+	 */
+	private static void write(@NonNull ChizuTrackImages.Shot shot, @NonNull String uri,
+			@NonNull OsmandApplication app) throws TrackError {
+		try {
+			ChizuTrackImages.write(shot.bitmap, ChizuUris.write(app, uri));
+		} catch (IOException error) {
+			throw new TrackError("cannot write " + uri + ": " + ChizuUris.reason(error));
+		} finally {
+			shot.bitmap.recycle();
+		}
 	}
 
 	/** The map picture and its thumbnail, each drawn at its own size — never one downscaled. */
@@ -185,7 +275,13 @@ public class ChizuTracks {
 	@NonNull
 	private static GpxFile load(@NonNull Params params) throws TrackError {
 		GpxFile gpx;
-		if (params.gpxData != null && !params.gpxData.trim().isEmpty()) {
+		if (params.gpxError != null) {
+			// read at delivery and failed there; reported here, where there is someone to reply to
+			throw new TrackError(params.gpxError);
+		}
+		if (params.gpxBytes != null) {
+			gpx = SharedUtil.loadGpxFile(new ByteArrayInputStream(params.gpxBytes));
+		} else if (params.gpxData != null && !params.gpxData.trim().isEmpty()) {
 			gpx = SharedUtil.loadGpxFile(
 					new ByteArrayInputStream(params.gpxData.getBytes(StandardCharsets.UTF_8)));
 		} else if (params.gpxPath != null && !params.gpxPath.trim().isEmpty()) {
@@ -195,7 +291,9 @@ public class ChizuTracks {
 			}
 			gpx = SharedUtil.loadGpxFile(source);
 		} else {
-			throw new TrackError("no gpx: pass gpx_data or gpx_path");
+			// deliberately not the wording the pre-URI build used: 自由作業盤 matches that one to
+			// tell 白い熊 the hand-over predates this build, and it must stop being reachable here
+			throw new TrackError("no gpx: pass gpx_uri or gpx_data");
 		}
 		if (gpx.getError() != null) {
 			throw new TrackError("gpx unreadable: " + reason(gpx.getError()));
@@ -297,6 +395,23 @@ public class ChizuTracks {
 			throw new TrackError("not a directory: " + dir.getAbsolutePath());
 		}
 		return dir;
+	}
+
+	/**
+	 * Our stored copy into a URI the caller owns — the normalized GPX, the one with the colour
+	 * set. 自由作業盤 does not ask for it (it regenerates its own from the band's raw
+	 * {@code track.bin}), but the contract takes it on the same footing as the pictures.
+	 */
+	@NonNull
+	private static String copyTo(@NonNull OsmandApplication app, @NonNull File source,
+			@NonNull String uri) throws TrackError {
+		try (InputStream in = new FileInputStream(source); OutputStream out = ChizuUris.write(app, uri)) {
+			Algorithms.streamCopy(in, out);
+			out.flush();
+		} catch (IOException error) {
+			throw new TrackError("cannot write " + uri + ": " + ChizuUris.reason(error));
+		}
+		return uri;
 	}
 
 	@NonNull
