@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import android.provider.DocumentsContract;
 
@@ -13,8 +14,13 @@ import androidx.documentfile.provider.DocumentFile;
 
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.plus.settings.backend.ApplicationMode;
 import net.osmand.plus.settings.backend.ExportCategory;
+import net.osmand.plus.settings.backend.OsmandSettings;
+import net.osmand.plus.settings.backend.backup.FileSettingsHelper;
 import net.osmand.plus.settings.backend.backup.FileSettingsHelper.SettingsExportListener;
+import net.osmand.plus.settings.backend.backup.SettingsHelper.CollectListener;
+import net.osmand.plus.settings.backend.backup.SettingsHelper.ImportListener;
 import net.osmand.plus.settings.backend.backup.exporttype.ExportType;
 import net.osmand.plus.settings.backend.backup.items.FileSettingsItem;
 import net.osmand.plus.settings.backend.backup.items.SettingsItem;
@@ -434,6 +440,93 @@ public class ChizuBackup {
 		}
 	}
 
+	/**
+	 * The data door's destination: bytes go straight into a descriptor the caller opened.
+	 *
+	 * <p>Not a path and not a {@code content://} URI, because a backup is not a stable directory
+	 * while it is being written. 応用管理 writes into a temporary path and renames on commit, and
+	 * encrypts and checksums <b>per file it knows about</b> — so a file this app dropped in itself
+	 * would be renamed out from under it, would sit in plaintext inside an otherwise encrypted
+	 * backup, and would be unverified rather than verified-and-failing. A descriptor is also a
+	 * capability that <b>expires when it is closed</b>, which is precisely the property a URI grant
+	 * could not give us on the walk contract, where the revoke needed a five-minute floor.
+	 *
+	 * <p>{@link #length()} is counted on the way past rather than stat'ed afterwards: the caller
+	 * owns the file and we may not be able to see it at all — it can be an anonymous pipe, or a
+	 * descriptor into a directory this app cannot list.
+	 */
+	public static class FdDest implements Dest {
+
+		private final ParcelFileDescriptor fd;
+		@Nullable
+		private CountingStream stream;
+
+		public FdDest(@NonNull ParcelFileDescriptor fd) {
+			this.fd = fd;
+		}
+
+		@NonNull
+		@Override
+		public OutputStream open() {
+			CountingStream counting =
+					new CountingStream(new ParcelFileDescriptor.AutoCloseOutputStream(fd));
+			stream = counting;
+			return counting;
+		}
+
+		@Override
+		public long length() {
+			return stream != null ? stream.written : 0;
+		}
+
+		/**
+		 * Nothing to delete — the caller owns the file. A cancelled or failed export answers
+		 * {@code ERROR:} and the caller discards what it opened; this app never had a name for it.
+		 */
+		@Override
+		public void delete() {
+		}
+
+		@NonNull
+		@Override
+		public String path() {
+			return "(descriptor)";
+		}
+	}
+
+	/** Counts bytes on their way into the caller's descriptor. */
+	private static class CountingStream extends OutputStream {
+
+		private final OutputStream out;
+		private long written;
+
+		CountingStream(@NonNull OutputStream out) {
+			this.out = out;
+		}
+
+		@Override
+		public void write(int b) throws IOException {
+			out.write(b);
+			written++;
+		}
+
+		@Override
+		public void write(@NonNull byte[] b, int off, int len) throws IOException {
+			out.write(b, off, len);
+			written += len;
+		}
+
+		@Override
+		public void flush() throws IOException {
+			out.flush();
+		}
+
+		@Override
+		public void close() throws IOException {
+			out.close();
+		}
+	}
+
 	// ---------- progress + result ----------
 
 	/** Real numbers, never a percentage: {@code text} is what a caller displays. */
@@ -715,6 +808,115 @@ public class ChizuBackup {
 		}
 	}
 
+	// ---------- the headless import (the data door's restore half) ----------
+
+	/** How long one headless import may take before it is called a failure rather than waited on. */
+	private static final long IMPORT_TIMEOUT_MS = 15 * 60 * 1000L;
+
+	/**
+	 * Restores one archive written by {@link #export}, with no UI and no user interaction.
+	 *
+	 * <p>Reached only from {@link ChizuAutomationProvider}. An import overwrites this app's data,
+	 * and the automation receivers are exported without a permission — an import there would let
+	 * any app on the phone wipe 地図, which is why the contract puts it behind the door that knows
+	 * who is calling.
+	 *
+	 * <p>Everything the archive carries is restored: the caller chose what to put in it, and a
+	 * restore that silently dropped part of a backup is worse than one that refused. Items are
+	 * marked {@code shouldReplace} because a restore is a restore, not a merge.
+	 *
+	 * <p>The 白い熊 地図 sidecar alone is a real restore — an archive of nothing but UI settings
+	 * collects no stock items, and reporting that as a failure would fail every restore of an app
+	 * whose only customisation is ours.
+	 *
+	 * <p>{@link Result#categories} is how many items were restored; {@link Result#path} is empty,
+	 * since the archive belongs to the caller and has no path of ours.
+	 */
+	@NonNull
+	public static Result importArchive(@NonNull OsmandApplication app, @NonNull File archive) {
+		boolean chizuApplied = applySidecar(app, archive);
+
+		CountDownLatch latch = new CountDownLatch(1);
+		boolean[] ok = {false};
+		int[] restored = {0};
+		// both stock helpers are AsyncTasks — start them from the main thread, as the panel does
+		app.runInUIThread(() -> {
+			FileSettingsHelper helper = app.getFileSettingsHelper();
+			CollectListener collectListener = (succeed, empty, items) -> {
+				if (!succeed || empty || items == null || items.isEmpty()) {
+					latch.countDown();
+					return;
+				}
+				List<SettingsItem> selected = new ArrayList<>();
+				for (SettingsItem item : items) {
+					item.setShouldReplace(true);
+					selected.add(item);
+				}
+				restored[0] = selected.size();
+				helper.importSettings(archive, selected, "", 1, new ImportListener() {
+					@Override
+					public void onImportFinished(boolean importOk, boolean needRestart,
+							@NonNull List<SettingsItem> finishedItems) {
+						ok[0] = importOk;
+						latch.countDown();
+					}
+				});
+			};
+			helper.collectSettings(archive, "", 1, collectListener);
+		});
+		try {
+			// bounded: a heartbeat keeps the caller waiting, so a step that can block must have an
+			// end — an import that hangs while still ticking holds its slot until the full timeout
+			if (!latch.await(IMPORT_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+				return Result.error("import timed out");
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return Result.error("interrupted");
+		}
+		if (!ok[0] && !chizuApplied) {
+			return Result.error("import failed");
+		}
+		// Everything on disk BEFORE the caller is told it worked — see flushPreferences.
+		flushPreferences(app);
+		int count = (ok[0] ? restored[0] : 0) + (chizuApplied ? 1 : 0);
+		return Result.ok("", archive.length(), count);
+	}
+
+	/**
+	 * Force every preferences file this app writes out to disk, synchronously.
+	 *
+	 * <p>応用管理 force-stops this app with a <b>SIGKILL</b> the instant an import reports success.
+	 * It has to: a live process writes its cached {@link SharedPreferences} back out at orderly
+	 * shutdown and would silently undo the import that just happened. But a SIGKILL runs no
+	 * shutdown hook, so anything the framework still has queued behind us dies with the process —
+	 * and the restore would be half-applied with nobody the wiser.
+	 *
+	 * <p>An empty {@code commit()} per file blocks until that queue is on disk. It is done for
+	 * every file this app writes, not only the ones we wrote ourselves: the stock import walks
+	 * OsmAnd's own global and per-mode preferences, and those are queued by code we do not own.
+	 */
+	private static void flushPreferences(@NonNull OsmandApplication app) {
+		Set<String> names = new LinkedHashSet<>();
+		names.add(PREFS_NAME);
+		names.add(ChizuTheme.PREFS_NAME);
+		try {
+			names.add(OsmandSettings.getSharedPreferencesName(null));
+			for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+				names.add(OsmandSettings.getSharedPreferencesName(mode));
+			}
+		} catch (Exception ignored) {
+			// a mode list we cannot read is not a reason to skip the files we can
+		}
+		for (String name : names) {
+			try {
+				//noinspection ApplySharedPref
+				app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().commit();
+			} catch (Exception ignored) {
+			}
+		}
+	}
+
 	// ---------- the 白い熊 地図 UI sidecar ----------
 
 	private static void writeSidecarEntries(@NonNull OsmandApplication app,
@@ -830,7 +1032,9 @@ public class ChizuBackup {
 					break;
 			}
 		}
-		editor.apply();
+		// commit(), not apply(): the caller SIGKILLs this app the moment the import reports success
+		//noinspection ApplySharedPref
+		editor.commit();
 	}
 
 	// ---------- display ----------
