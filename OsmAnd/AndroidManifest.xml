@@ -80,6 +80,15 @@
 		<package android:name="com.android.gpstest.osmdroid" />
 		<package android:name="com.dsi.ant.plugins.antplus" />
 
+		<!-- shiroikuma fork: the two sister apps that drive the automation contract. Without these
+		     entries Android 11+ package visibility makes setPackage() on our reply broadcast fail
+		     SILENTLY — the export runs, writes correctly and is never heard of — and the data door
+		     cannot read a caller's signing certificate, so a legitimate call is refused as
+		     "signature unreadable". 自由作業盤 drives the 保存復元 batch and the walk contract;
+		     応用管理 backs this app up with its data. -->
+		<package android:name="shiroikuma.jiyusagyoban" />
+		<package android:name="shiroikuma.oyokanri" />
+
 		<intent>
 			<action android:name="android.intent.action.TTS_SERVICE" />
 		</intent>
@@ -114,9 +123,12 @@
 				android:resource="@xml/paths" />
 		</provider>
 
-		<!-- shiroikuma fork: the 保存復元 state-export contract — 白い熊 自由作業盤 fires a
-		     token-gated intent, this app exports itself headlessly and replies by broadcast.
-		     No android:permission: the caller cannot hold one, the token is the gate. -->
+		<!-- shiroikuma fork: the 保存復元 state-export contract — 白い熊 自由作業盤 fires an intent,
+		     this app exports itself headlessly and replies by broadcast.
+		     No android:permission, and none of these is token-gated by default (contract v2): this is
+		     the UNAUTHENTICATED half of the surface, deliberately. It only ever writes where it was
+		     told to and reports what it did. Anything that moves data through a caller-supplied
+		     descriptor lives behind the provider below, which knows who is calling. -->
 		<receiver
 			android:name="net.osmand.plus.chizu.ChizuStateExportReceiver"
 			android:exported="true">
@@ -131,7 +143,7 @@
 		     off the HUAWEI Band 11 Pro, this app files it, draws it and answers by broadcast.
 		     EXPORT_BASEMAP is the same contract without the walk: the bare map under a block of
 		     Web Mercator tiles, cached over there and drawn on there.
-		     Same switch and same token as the export above; the token is the gate. -->
+		     Same gate as the export above: the switch, and the token only when it is asked for. -->
 		<receiver
 			android:name="net.osmand.plus.chizu.ChizuTrackReceiver"
 			android:exported="true">
@@ -156,6 +168,38 @@
 				<category android:name="android.intent.category.DEFAULT" />
 			</intent-filter>
 		</activity>
+
+		<!-- shiroikuma fork: the data door — 保存復元 contract §2a. 白い熊 応用管理 backs this app
+		     up WITH its data and puts it back on a wiped phone; the payload moves through a
+		     ParcelFileDescriptor the caller opens, never a path and never a URI.
+
+		     No android:permission, and for a real reason: a custom permission would have to be
+		     "normal" (any app may hold it) or "signature" (impossible — every app in this family has
+		     its own keystore). Neither buys anything the caller check does not. The provider
+		     identifies its caller from the framework instead — exact package name, a uid cross-check
+		     and a pinned signing certificate; see ChizuAutomationCallers.
+
+		     import lives ONLY here. It never gets a broadcast action: an import overwrites this app's
+		     data, and the automation receivers above are exported without a permission. -->
+		<provider
+			android:name="net.osmand.plus.chizu.ChizuAutomationProvider"
+			android:authorities="${applicationId}.automation"
+			android:exported="true" />
+
+		<!-- dataSync, not specialUse: the app already declares FOREGROUND_SERVICE_DATA_SYNC and
+		     already runs a dataSync service, so this needs no new permission. -->
+		<service
+			android:name="net.osmand.plus.chizu.ChizuAutomationDataService"
+			android:exported="false"
+			android:foregroundServiceType="dataSync" />
+
+		<!-- Capability discovery, readable without waking this app — 応用管理 builds its list across
+		     every installed package with MATCH_UNINSTALLED_PACKAGES | MATCH_DISABLED_COMPONENTS,
+		     because a frozen app cannot be asked anything and 白い熊 freezes aggressively. An app
+		     without these entries is simply not offered for data backup or restore. -->
+		<meta-data android:name="shiroikuma.automation.contract" android:value="2" />
+		<meta-data android:name="shiroikuma.automation.format" android:value="1" />
+		<meta-data android:name="shiroikuma.automation.min_format" android:value="1" />
 
 		<receiver android:name="net.osmand.plus.mapcontextmenu.other.ShareSheetReceiver" android:exported="false" />
 		<receiver android:name="net.osmand.plus.notifications.NotificationDismissReceiver" android:exported="false" />

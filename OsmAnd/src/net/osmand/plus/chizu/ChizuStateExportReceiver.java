@@ -11,22 +11,25 @@ import androidx.annotation.Nullable;
 import androidx.documentfile.provider.DocumentFile;
 
 import net.osmand.plus.OsmandApplication;
-import net.osmand.plus.R;
 
 import java.io.File;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * shiroikuma fork: the 保存復元 state-export contract — 白い熊 自由作業盤 fires a
- * token-gated broadcast, this app exports itself headlessly and replies with the written
- * path and size.
+ * shiroikuma fork: the 保存復元 state-export contract — 白い熊 自由作業盤 fires a broadcast,
+ * this app exports itself headlessly and replies with the written path and size.
+ *
+ * <p>v2: this is the <b>unauthenticated</b> half of the automation surface, and deliberately so.
+ * It only ever writes where it was told to and reports what it did; everything that moves data
+ * through a caller-supplied descriptor lives behind {@link ChizuAutomationProvider}, which knows
+ * who is calling. The switch and the optional token are both {@link ChizuAutomation#refuse}.
  *
  * <pre>
- * &lt;pkg&gt;.action.LIST_CATEGORIES  token → OK: + one "id\tlabel\tparent\ton|off" line per
+ * &lt;pkg&gt;.action.LIST_CATEGORIES  [token] → OK: + one "id\tlabel\tparent\ton|off" line per
  *                              category; the fourth field says whether it starts ticked
- * &lt;pkg&gt;.action.EXPORT_STATE     token [path] [items] [progress_action]
+ * &lt;pkg&gt;.action.EXPORT_STATE     [token] [path] [items] [progress_action]
  *                              → OK:&lt;path&gt;|&lt;bytes&gt;|&lt;human size&gt;|&lt;n&gt; categories
- * &lt;pkg&gt;.action.CANCEL_EXPORT    token [reply_id] → nothing at all; the export it stops
+ * &lt;pkg&gt;.action.CANCEL_EXPORT    [token] [reply_id] → nothing at all; the export it stops
  *                              answers its own request with ERROR:cancelled
  * </pre>
  *
@@ -52,7 +55,6 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 
 	/** How long a cold-started process may wait for the app to finish initializing. */
 	private static final long INIT_TIMEOUT_MS = 180_000;
-	private static final long PROGRESS_INTERVAL_MS = 500;
 
 	@Override
 	public void onReceive(@NonNull Context context, @NonNull Intent intent) {
@@ -77,18 +79,17 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 			// Fire-and-forget: never answered — not on success, not on a bad token, not when
 			// nothing is running. Safe to send at any time; the export it stops sends the one
 			// terminal reply (ERROR:cancelled) for the request that started it.
-			if (ChizuAutomation.isEnabled(app) && ChizuAutomation.matches(app, token)) {
+			if (ChizuAutomation.refuse(app, token) == null) {
 				ChizuBackup.cancelRunning(replyId);
 			}
 			replier.finishSilently();
 			return;
 		}
-		if (!ChizuAutomation.isEnabled(app)) {
-			replier.send("ERROR:automation disabled");
-			return;
-		}
-		if (!ChizuAutomation.matches(app, token)) {
-			replier.send("ERROR:bad token");
+		// One gate for the whole contract — the switch, and the token only when this app asks
+		// for one. A token sent to an app that does not require one is ignored, never refused.
+		String refusal = ChizuAutomation.refuse(app, token);
+		if (refusal != null) {
+			replier.send(refusal);
 			return;
 		}
 		if (action.endsWith(SUFFIX_LIST)) {
@@ -157,9 +158,8 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 			if (dest == null) {
 				return; // resolveDest replied already
 			}
-			ChizuBackup.Progress progress = progressAction != null && replyPackage != null
-					? new ProgressSender(app, progressAction, replyPackage, replyId)
-					: null;
+			ChizuBackup.Progress progress =
+					ChizuProgress.forRequest(app, progressAction, replyPackage, replyId);
 			ChizuBackup.Result result =
 					ChizuBackup.export(app, selection, dest, progress, cancelled);
 			if (!result.ok) {
@@ -223,50 +223,6 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				return;
-			}
-		}
-	}
-
-	// ---------- progress ----------
-
-	/** Real numbers, never a percentage; at most one broadcast every 500 ms plus a final one. */
-	private static class ProgressSender implements ChizuBackup.Progress {
-
-		private final OsmandApplication app;
-		private final String progressAction;
-		private final String replyPackage;
-		private final String replyId;
-		private long lastSent;
-
-		ProgressSender(@NonNull OsmandApplication app, @NonNull String progressAction,
-				@NonNull String replyPackage, @Nullable String replyId) {
-			this.app = app;
-			this.progressAction = progressAction;
-			this.replyPackage = replyPackage;
-			this.replyId = replyId;
-		}
-
-		@Override
-		public void onProgress(long current, long total, @NonNull String unit, @NonNull String text) {
-			long now = SystemClock.elapsedRealtime();
-			boolean last = total > 0 && current >= total;
-			if (!last && now - lastSent < PROGRESS_INTERVAL_MS) {
-				return;
-			}
-			lastSent = now;
-			try {
-				Intent intent = new Intent(progressAction);
-				intent.setPackage(replyPackage);
-				intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-				intent.putExtra(EXTRA_REPLY_ID, replyId != null ? replyId : "");
-				intent.putExtra("app", app.getString(R.string.app_name));
-				intent.putExtra("text", text);
-				intent.putExtra("current", current);
-				intent.putExtra("total", total);
-				intent.putExtra("unit", unit);
-				app.sendBroadcast(intent);
-			} catch (Exception e) {
-				Log.e(TAG, "progress broadcast failed", e);
 			}
 		}
 	}

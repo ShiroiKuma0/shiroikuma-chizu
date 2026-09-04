@@ -30,7 +30,12 @@
 	<string name="chizu_exim_restart_later">Later</string>
 
 	<string name="chizu_automation">Automation export</string>
-	<string name="chizu_automation_descr">Let sister-app tasks trigger this app\'s export through the token-gated intent.</string>
+	<string name="chizu_automation_descr">Let sister apps trigger this app\'s export, and back its data up, without opening it.</string>
+	<string name="chizu_automation_require_token">Use authorization token?</string>
+	<string name="chizu_automation_require_token_descr">Off: any sister app may drive the automation. On: a caller must also present the token below. Either way the data door checks the caller\'s package name and signature.</string>
+	<string name="chizu_automation_data_channel">Automation data</string>
+	<string name="chizu_automation_data_exporting">Backing up 白い熊 地図…</string>
+	<string name="chizu_automation_data_importing">Restoring 白い熊 地図…</string>
 	<string name="chizu_automation_token">Automation token</string>
 	<string name="chizu_automation_token_copied">Automation token copied to the clipboard.</string>
 	<string name="chizu_automation_regenerate">Regenerate</string>
