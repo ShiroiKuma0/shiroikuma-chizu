@@ -75,12 +75,12 @@ public class ChizuTrackReceiver extends BroadcastReceiver {
 				intent.getStringExtra("reply_action"), intent.getStringExtra("reply_package"),
 				intent.getStringExtra("reply_id"));
 
-		if (!ChizuAutomation.isEnabled(app)) {
-			replier.send("ERROR:automation disabled");
-			return;
-		}
-		if (!ChizuAutomation.matches(app, intent.getStringExtra("token"))) {
-			replier.send("ERROR:bad token");
+		// The same one gate as the export receiver: the switch, and the token only when this app
+		// asks for one. OPEN_TRACK stays outside it entirely — that lives on
+		// ChizuShowTrackActivity, and opening the app at a track is what a launcher icon does.
+		String refusal = ChizuAutomation.refuse(app, intent.getStringExtra("token"));
+		if (refusal != null) {
+			replier.send(refusal);
 			return;
 		}
 		if (action.endsWith(SUFFIX_IMPORT)) {
