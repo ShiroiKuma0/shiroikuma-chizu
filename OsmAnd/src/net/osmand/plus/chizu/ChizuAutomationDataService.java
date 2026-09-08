@@ -32,6 +32,7 @@ import java.io.OutputStream;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -76,6 +77,32 @@ public class ChizuAutomationDataService extends Service {
 	private static final String IMPORT_TEMP_NAME = "chizu_automation_import.zip";
 	private static final long SPOOL_REPORT_BYTES = 1L << 20;
 
+	/** How often a running import says it is still alive. See {@link #runImport}. */
+	private static final long HEARTBEAT_MS = 5_000;
+
+	/**
+	 * A claimed job waiting for its service: the descriptor, and where to answer if it never comes.
+	 *
+	 * <p>The reply address travels <b>with</b> the descriptor rather than only in the Intent,
+	 * because the paths that lose the Intent are exactly the paths that must still answer.
+	 */
+	private static final class Pending {
+
+		@NonNull
+		final ParcelFileDescriptor fd;
+		@Nullable
+		final String replyAction;
+		@Nullable
+		final String replyPackage;
+
+		Pending(@NonNull ParcelFileDescriptor fd, @Nullable String replyAction,
+				@Nullable String replyPackage) {
+			this.fd = fd;
+			this.replyAction = replyAction;
+			this.replyPackage = replyPackage;
+		}
+	}
+
 	/**
 	 * The descriptor's way across, because an Intent is the wrong vehicle for one.
 	 *
@@ -84,8 +111,7 @@ public class ChizuAutomationDataService extends Service {
 	 * the job id keeps exactly one open descriptor with exactly one owner — this service, which
 	 * closes it in a {@code finally}.
 	 */
-	private static final ConcurrentHashMap<String, ParcelFileDescriptor> HANDOVER =
-			new ConcurrentHashMap<>();
+	private static final ConcurrentHashMap<String, Pending> HANDOVER = new ConcurrentHashMap<>();
 
 	private static final ScheduledExecutorService REAPER =
 			Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -117,14 +143,17 @@ public class ChizuAutomationDataService extends Service {
 	@Nullable
 	static String start(@NonNull Context context, @NonNull String jobId,
 			@NonNull ParcelFileDescriptor fd, boolean importing, @Nullable Bundle extras) {
-		HANDOVER.put(jobId, fd);
+		HANDOVER.put(jobId, new Pending(fd,
+				extras != null ? extras.getString(ChizuAutomationProvider.KEY_REPLY_ACTION) : null,
+				extras != null ? extras.getString(ChizuAutomationProvider.KEY_REPLY_PACKAGE) : null));
 		try {
 			ContextCompat.startForegroundService(context, intentFor(context, jobId, importing, extras));
 			// A start can also be ACCEPTED and never DELIVERED — the system drops it, the process is
 			// killed between the two, EMUI decides otherwise. Nothing throws, so the catch below
 			// never fires, and the caller's descriptor would sit here held open for the life of the
 			// process while the caller waits for a reply that cannot come.
-			REAPER.schedule(() -> abandon(jobId), UNDELIVERED_SECONDS, TimeUnit.SECONDS);
+			Context appContext = context.getApplicationContext();
+			REAPER.schedule(() -> abandon(appContext, jobId), UNDELIVERED_SECONDS, TimeUnit.SECONDS);
 			return null;
 		} catch (Exception e) {
 			// A provider call() is a BACKGROUND start, and API 31+ refuses one with
@@ -142,15 +171,52 @@ public class ChizuAutomationDataService extends Service {
 	/**
 	 * Reclaim a descriptor whose service never arrived. A no-op in the normal case, where
 	 * {@link #onStartCommand} drained the entry within milliseconds.
+	 *
+	 * <p><b>And answer.</b> Reclaiming used to happen in silence, which is the worst shape this
+	 * failure can take: the caller is holding an {@code OK:<job id>} for work that will now never
+	 * run, so it waits out its own watchdog — ten minutes, in 応用管理's case — and then reports
+	 * that this app went quiet. Which is true, and tells 白い熊 nothing. An app that knows its job
+	 * is dead says so.
 	 */
-	private static void abandon(@NonNull String jobId) {
-		ParcelFileDescriptor stranded = HANDOVER.remove(jobId);
+	private static void abandon(@NonNull Context context, @NonNull String jobId) {
+		Pending stranded = HANDOVER.remove(jobId);
 		if (stranded == null) {
 			return;
 		}
 		Log.w(TAG, "reclaiming an undelivered descriptor for job " + jobId);
-		close(stranded);
+		close(stranded.fd);
 		ChizuAutomationJobs.finish(jobId);
+		sendReply(context, stranded.replyAction, stranded.replyPackage, jobId,
+				"ERROR:the data service was never delivered");
+	}
+
+	/**
+	 * The one terminal-reply sender, shared by the service and by {@link #abandon} — a second copy
+	 * is how the two drift apart, and the reaper's answer must carry exactly what a normal one does.
+	 *
+	 * <p>No package to aim at means nobody can hear it: since API 26 an implicit broadcast reaches
+	 * no manifest-declared receiver, so {@code setPackage(null)} is not a wider send, it is no send.
+	 * Skip it rather than pretending.
+	 */
+	private static void sendReply(@NonNull Context context, @Nullable String replyAction,
+			@Nullable String replyPackage, @NonNull String jobId, @NonNull String result) {
+		if (replyAction == null || replyAction.isEmpty()
+				|| replyPackage == null || replyPackage.isEmpty()) {
+			return;
+		}
+		try {
+			Intent answer = new Intent(replyAction);
+			answer.setPackage(replyPackage);
+			// without this a backgrounded caller — or one never launched on a clean phone —
+			// never hears the answer
+			answer.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+			answer.putExtra(ChizuAutomationProvider.KEY_JOB_ID, jobId);
+			answer.putExtra(ChizuReplier.EXTRA_REPLY_ID, jobId);
+			answer.putExtra(ChizuReplier.EXTRA_RESULT, result);
+			context.sendBroadcast(answer);
+		} catch (Exception e) {
+			Log.e(TAG, "reply broadcast failed", e);
+		}
 	}
 
 	@NonNull
@@ -193,7 +259,7 @@ public class ChizuAutomationDataService extends Service {
 		// throws, the throw lands before the descriptor is taken out of the map and it stays held
 		// open with nothing alive to close it.
 		boolean wentForeground = false;
-		ParcelFileDescriptor claimed = null;
+		Pending claimed = null;
 		try {
 			ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(importing),
 					ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
@@ -206,8 +272,9 @@ public class ChizuAutomationDataService extends Service {
 			}
 		}
 
-		if (jobId == null || claimed == null) {
-			// nothing to run — a stale or already-drained job id. We still had to go foreground.
+		if (jobId == null) {
+			// A bare restart carrying no job: nothing to run, and nobody to answer — there is no
+			// id to answer under. We still had to go foreground.
 			return stop(startId);
 		}
 
@@ -216,7 +283,6 @@ public class ChizuAutomationDataService extends Service {
 		String progressAction = intent.getStringExtra(ChizuAutomationProvider.KEY_PROGRESS_ACTION);
 		String items = intent.getStringExtra(ChizuAutomationProvider.KEY_ITEMS);
 
-		ParcelFileDescriptor fd = claimed;
 		String job = jobId;
 		AtomicBoolean replied = new AtomicBoolean();
 		Reply reply = result -> {
@@ -226,27 +292,18 @@ public class ChizuAutomationDataService extends Service {
 				return;
 			}
 			Log.i(TAG, "data door " + job + ": " + result);
-			// No package to aim at means nobody can hear it: since API 26 an implicit broadcast
-			// reaches no manifest-declared receiver, so setPackage(null) is not a wider send, it is
-			// no send. Skip it rather than pretending.
-			if (replyAction == null || replyAction.isEmpty()
-					|| replyPackage == null || replyPackage.isEmpty()) {
-				return;
-			}
-			try {
-				Intent answer = new Intent(replyAction);
-				answer.setPackage(replyPackage);
-				// without this a backgrounded caller — or one never launched on a clean phone —
-				// never hears the answer
-				answer.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-				answer.putExtra(ChizuAutomationProvider.KEY_JOB_ID, job);
-				answer.putExtra(ChizuReplier.EXTRA_REPLY_ID, job);
-				answer.putExtra(ChizuReplier.EXTRA_RESULT, result);
-				sendBroadcast(answer);
-			} catch (Exception e) {
-				Log.e(TAG, "reply broadcast failed", e);
-			}
+			sendReply(this, replyAction, replyPackage, job, result);
 		};
+
+		if (claimed == null) {
+			// The descriptor is gone: the reaper took it, or this start was delivered twice. The
+			// caller is still holding an OK:<job id>, so say so — stopping in silence here leaves
+			// it waiting out its whole watchdog for an answer that was never coming.
+			reply.send("ERROR:the job was already reclaimed");
+			return stop(startId);
+		}
+
+		ParcelFileDescriptor fd = claimed.fd;
 
 		if (!wentForeground) {
 			// The descriptor has left the handover by now, so nothing else would ever close it —
@@ -335,6 +392,15 @@ public class ChizuAutomationDataService extends Service {
 			reply.send("ERROR:cancelled");
 			return;
 		}
+		// A RESTORE ON A CLEAN PHONE MUST SUCCEED. It is the case this contract exists for, and it
+		// is the one where nothing is granted yet: the archive now carries pointers and settings
+		// rather than the shared folder's files (see ChizuBackup#withoutSharedFolderFiles), so
+		// there is nothing here that needs storage permission to land. The pointers resolve later,
+		// once 白い熊 grants All-files access — which the map screen asks for on start.
+		//
+		// An older archive that still carries files is imported as it always was. It may land in a
+		// fallback directory if the configured folder is out of reach, and that is the lesser evil
+		// against refusing to restore at all.
 		ChizuProgress progress = ChizuProgress.forJob(app, progressAction, replyPackage, jobId);
 		File temp = new File(FileUtils.getTempDir(app), IMPORT_TEMP_NAME);
 		long spooled = 0;
@@ -367,12 +433,48 @@ public class ChizuAutomationDataService extends Service {
 			reply.send("ERROR:empty archive");
 			return;
 		}
+		// The last point a cancel can still be honoured: past here the stock helpers own the run
+		// and there is nothing of ours left to poll. A caller that gave up during the spool —
+		// 応用管理 cancels before it walks away — must not have its archive written in anyway.
+		if (cancelled.get()) {
+			//noinspection ResultOfMethodCallIgnored
+			temp.delete();
+			reply.send("ERROR:cancelled");
+			return;
+		}
+		// A HEARTBEAT THAT CLIMBS, for the whole of the import — not a courtesy.
+		//
+		// 応用管理 decides an app is dead when it is BOTH silent and burning no CPU, and the stock
+		// import is exactly that shape for minutes at a stretch: two AsyncTasks that report nothing
+		// and spend most of their time waiting on I/O. So something must speak on a fixed beat. But
+		// a beat that repeats one standing number is barely better than silence — 白い熊 watched
+		// twenty minutes of an unchanging 4,328,639,284/4,328,639,284 and read it as a hang.
+		//
+		// So the ticker measures what has LANDED: the archive's entry table gives every file it
+		// will unpack and how big each is, and each beat sums what those destinations now hold.
+		long bytes = spooled;
+		ChizuLanded landed = ChizuLanded.forArchive(app, temp);
+		ScheduledFuture<?> heartbeat = progress == null ? null
+				: REAPER.scheduleWithFixedDelay(() -> {
+					// Never skip a beat, whatever goes wrong in here: a thrown ticker is a silent
+					// app, and silence is what gets the transfer killed.
+					try {
+						if (landed != null && landed.total > 0) {
+							progress.onProgress(landed.landedBytes(), landed.total, "bytes",
+									landed.describe());
+							return;
+						}
+					} catch (Exception ignored) {
+					}
+					progress.onProgress(bytes, bytes, "bytes",
+							"Restoring " + ChizuBackup.formatSize(bytes));
+				}, HEARTBEAT_MS, HEARTBEAT_MS, TimeUnit.MILLISECONDS);
 		try {
 			if (progress != null) {
 				progress.onProgress(spooled, spooled, "bytes",
 						"Restoring " + ChizuBackup.formatSize(spooled));
 			}
-			ChizuBackup.Result result = ChizuBackup.importArchive(app, temp);
+			ChizuBackup.Result result = ChizuBackup.importArchive(app, temp, progress);
 			if (!result.ok) {
 				reply.send("ERROR:" + (result.error != null ? result.error : "import failed"));
 				return;
@@ -382,6 +484,9 @@ public class ChizuAutomationDataService extends Service {
 			// would silently undo the import that just happened. That guarantee lives on its side.
 			reply.send("OK:" + result.categories + " restored");
 		} finally {
+			if (heartbeat != null) {
+				heartbeat.cancel(false);
+			}
 			//noinspection ResultOfMethodCallIgnored
 			temp.delete();
 		}
