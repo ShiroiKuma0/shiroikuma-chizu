@@ -10,7 +10,7 @@ A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+029`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+039`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -56,8 +56,14 @@ The location and navigation markers always use the crisp 2D icons — never the 
 
 ---
 
-## 🗂 Main storage in a shared folder
+## 🗂 Main storage in a shared folder — and a backup that knows it
 Declares All-files access (as stock builds do), so the main storage can point at any shared folder — including one used by the official OsmAnd, sharing the downloaded maps between both installs.
+
+A folder like that is **not this app's data**. It lives in a tree that already travels between machines by its own means, and 地図 merely points into it — so a backup carries the **pointers**, not four gigabytes of maps and cached tiles the target phone already has. Every file-backed category is dropped when the folder in use lies outside the app's own directories, and what travels is the settings, the favourites and `selected_gpx`, the pointer saying which tracks are drawn. Put main storage back inside the app and the files are the app's own again, nothing else preserves them, and the full archive returns. The test asks where the resources are **now**, not what the setting says — those two disagree exactly when a missing permission has already pushed the app onto a fallback directory.
+
+The folder itself travels too, which no OsmAnd backup has ever managed: it lives in raw preference keys the stock exporter does not walk, so a restored phone used to come up on whatever it picked on its first run, with every restored pointer resolving to nothing. It now rides in the archive's own sidecar, independent of any tickbox. And because that folder needs a permission no backup can carry — All-files access is an app-op, not a runtime permission — the map screen asks for it on start whenever the configured folder is out of reach, rather than falling back in silence and looking healthy.
+
+What cannot travel is never offered: the categories whose files live in the shared folder are absent from the automation list and greyed in the Export / Import panel, under a line saying where they actually are.
 
 ---
 
