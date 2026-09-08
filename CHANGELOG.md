@@ -3,6 +3,113 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+039 — 2026-09-08
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+### A 地図 backup carries the pointers, not the shared folder
+
+Main storage on 白い熊's phones is `/storage/emulated/0/〇/[60] 地図` — a folder that lives in a tree
+already carried between machines by its own means. Its files are not this app's to back up, and
+copying them made the archive **4.3 GB across 24,953 entries**, of which 24,856 were cached raster
+tiles. Restoring it wrote a second copy of a tree the target phone already had.
+
+- **The export drops file-backed items when the folder in use lies outside this app's own
+  directories** — every `.obf`, wiki, srtm and geotiff, the colour palettes, the tile caches and the
+  tracks: 69 `FILE` items and 6 `GPX` in that archive. What travels instead is what is genuinely
+  ours: settings, profiles, quick actions, favourites, search history, the 地図 UI sidecar, and
+  `selected_gpx` — the pointer saying which tracks are drawn. On the far side those pointers find
+  the files already sitting in the shared folder.
+- **Decided from where the resources are now, not from the configured storage type.** Those two
+  disagree in exactly the case that matters: with Main storage set to a shared folder but All-files
+  access missing, the type still reads SPECIFIED while the app has already fallen back to a private
+  directory and is genuinely working there — where its files *are* the only copy and *do* belong in
+  a backup. The test compares the directory actually in use against every private root the platform
+  gives the app.
+
+### The Main storage folder itself, which no backup had ever contained
+
+`general_settings.json` carries `media_storage_type` and `media_storage_manual_uri` — but those are
+the setting for photo and video **notes**. Main storage lives in `external_storage_dir_V19` and
+`external_storage_dir_type_V19`, raw preference keys rather than registered `OsmandPreference`s, so
+the stock exporter never walks them.
+
+- **The folder now rides in a `chizu_storage.json` sidecar entry**, restored through
+  `setExternalStorageDirectoryV19`. Without it a restored phone came up on whatever
+  `initExternalStorageDirectory` chose on its first run — normally `Android/data/…/files` — and
+  every restored pointer resolved to nothing: six tracks present, none drawn.
+- **It travels regardless of the 地図 UI tickbox.** It is not a UI preference, and a correct restore
+  must not depend on remembering to tick something. The export re-zips whenever there is a folder to
+  record, not only when the sidecar was asked for.
+- **Restored without checking the folder exists**: on a phone that has not been granted All-files
+  access the folder is unreadable and would fail an existence test while being perfectly present.
+
+### Fifteen minutes of silence in the middle of every import
+
+`applySidecar` looked for two small entries with a `ZipInputStream`, which has no index and can only
+walk an archive from the front, inflating everything it passes.
+
+- **`ZipFile` instead — the central directory, not a full decompression pass.** Measured on the
+  phone at **15 minutes 17 seconds of one core at 100 %**, silent, uncancellable, before the stock
+  import had begun; the 15-minute import bound only ever covered the stage *after* it, so the
+  timeout fired on work that had barely started. It is also the correct reader: a local file header
+  may omit the UTF-8 name flag the central directory sets — OsmAnd's own export does exactly that
+  for the `favorites-*.gpx` entries — so a stream reader saw those names as mojibake.
+
+### Every exit from the data door answers
+
+Two paths stopped without a word, leaving a caller to burn its ten-minute watchdog and report that
+this app had gone quiet.
+
+- **The 60-second reaper** that reclaims a descriptor whose service was never delivered now sends
+  `ERROR:the data service was never delivered`. The reply address travels with the descriptor so it
+  can answer under the right job id.
+- **The early return for an already-drained job id** answers instead of calling `stopSelf` silently.
+- **One shared sender** for both, so the reaper's answer cannot drift from a normal one.
+- **The progress label reached nobody.** It travelled as `text` where the contract says `result`, so
+  every stage line was discarded on arrival — a long import showed an unmoving byte pair and nothing
+  else. Sent under both names now.
+
+### Progress that climbs
+
+- **A five-second heartbeat for the whole import**, because a caller treats an app that is both
+  silent and burning no CPU as dead — and the stock import is exactly that shape for minutes at a
+  stretch, being two AsyncTasks that report nothing.
+- **It reports bytes that have landed**, read off the archive's entry table up front and summed from
+  the destinations each beat, with the file being written named. Clamped to a high-water mark so it
+  can never fall — a falling count is read as a deliberate "second pass" marker — and every failure
+  path falls back to the standing figure rather than skipping a beat. A proxy, not a measurement:
+  some settings items are preferences and never appear on disk.
+
+### What is offered is what can be delivered
+
+- **`LIST_CATEGORIES` omits a category whose files cannot travel** rather than marking it off. "Off"
+  means *not recommended*, which a caller may legitimately override — and ticking Maps then promised
+  a backup this app would not perform. A group heading goes when nothing under it survives.
+- **`describe()`'s `contains` follows the same test**, so a caller counting the header against an
+  export cannot report "all 7" for an archive holding three.
+- **The Export / Import panel greys those rows**, unticked and disabled, under a line naming the
+  folder they actually live in.
+- **An export that would carry nothing says so** instead of writing a sidecar nobody asked for and
+  reporting it as *n* categories.
+
+### The permission no backup can carry
+
+- **The map screen asks for All-files access on start** when the configured Main storage folder is
+  out of reach, going straight to the system toggle with a toast giving the reason. The grant is an
+  app-op, not a runtime permission, so no restore contract can supply it — a freshly restored phone
+  came up configured for a folder it could not open and said nothing at all.
+- **A clean-phone restore never fails for want of it.** The archive now carries nothing that needs
+  storage permission to land.
+
+### Packaging
+
+- **No Google Play Billing components.** The library arrives transitively through upstream's
+  purchase code and contributes `ProxyBillingActivity` and `ProxyBillingActivityV2` to the merged
+  manifest, which 白い熊 応用管理 lists as trackers — Play-store plumbing in an app that is
+  sideloaded, has no Play install to talk to and sells nothing. Removed in the flavour manifest
+  rather than by dropping the dependency, so an upstream rebase does not have to be re-reconciled.
+
 ## 5.4.0+029 — 2026-09-04
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
