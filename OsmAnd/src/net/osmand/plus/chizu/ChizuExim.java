@@ -231,6 +231,18 @@ public class ChizuExim {
 		// so this sheet and 保存復元's automation picker open on the same selection
 		List<ChizuBackup.Cat> catalogue = ChizuBackup.catalogue(app);
 
+		// Why half the rows below are greyed: the shared folder is not this app's to back up.
+		if (ChizuStorage.isStorageFolderShared(app)) {
+			TextView note = new TextView(ctx);
+			note.setText(app.getString(R.string.chizu_exim_shared_folder_note,
+					app.getAppPath(null).getAbsolutePath()));
+			note.setTextSize(13);
+			note.setTextColor(text);
+			note.setAlpha(0.7f);
+			note.setPadding(0, dp(6), 0, dp(2));
+			list.addView(note);
+		}
+
 		// Maps — a separate block at the very beginning, deselected by default
 		CheckBox mapsMaster = addCheck(list, ctx, app.getString(R.string.chizu_exim_maps),
 				ChizuBackup.startsTicked(catalogue, ChizuBackup.GROUP_MAPS), true, 0, accent, text);
@@ -239,15 +251,24 @@ public class ChizuExim {
 			if (type.isAvailable() && !type.isHidden()) {
 				CheckBox cb = addCheck(list, ctx, type.getTitle(ctx),
 						ChizuBackup.startsTicked(catalogue, type), false, 24, accent, text);
+				greyOutIfItCannotTravel(cb, type);
 				typeChecks.put(type, cb);
 				mapTypeChecks.put(type, cb);
 			}
 		}
 		mapsMaster.setOnCheckedChangeListener((button, isChecked) -> {
 			for (CheckBox cb : mapTypeChecks.values()) {
-				cb.setChecked(isChecked);
+				if (cb.isEnabled()) {
+					cb.setChecked(isChecked);
+				}
 			}
 		});
+		// a master over rows that can all do nothing is itself a promise it cannot keep
+		if (!ChizuBackup.travels(app, ExportType.STANDARD_MAPS)) {
+			mapsMaster.setChecked(false);
+			mapsMaster.setEnabled(false);
+			mapsMaster.setAlpha(0.45f);
+		}
 		startMapSizeCount(mapTypeChecks, mapsMaster);
 
 		// The stock categories — all selected by default but the downloadable voice packages
@@ -261,6 +282,7 @@ public class ChizuExim {
 				if (!type.isMap() && !type.isHidden()) {
 					CheckBox cb = addCheck(list, ctx, type.getTitle(ctx),
 							ChizuBackup.startsTicked(catalogue, type), false, 0, accent, text);
+					greyOutIfItCannotTravel(cb, type);
 					typeChecks.put(type, cb);
 				}
 			}
@@ -372,6 +394,25 @@ public class ChizuExim {
 		wrap.addView(rule);
 
 		list.addView(wrap);
+	}
+
+	/**
+	 * Greys out a category that cannot travel, so a row never promises a backup that will not
+	 * happen.
+	 *
+	 * <p>With Main storage on a shared folder the export carries pointers and settings, not that
+	 * folder's files ({@link ChizuBackup#travels}). Leaving those rows tickable would let 白い熊 tick
+	 * "Maps" and get an archive with no maps in it, silently — the same false positive the
+	 * automation picker was just taught to avoid. Unticked as well as disabled, so nothing that
+	 * cannot travel is ever in the selection.
+	 */
+	private void greyOutIfItCannotTravel(@NonNull CheckBox cb, @Nullable ExportType type) {
+		if (ChizuBackup.travels(app, type)) {
+			return;
+		}
+		cb.setChecked(false);
+		cb.setEnabled(false);
+		cb.setAlpha(0.45f);
 	}
 
 	private CheckBox addCheck(@NonNull LinearLayout list, @NonNull Context ctx, @NonNull String label,
