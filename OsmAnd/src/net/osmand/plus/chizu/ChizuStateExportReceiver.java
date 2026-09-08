@@ -13,6 +13,9 @@ import androidx.documentfile.provider.DocumentFile;
 import net.osmand.plus.OsmandApplication;
 
 import java.io.File;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -107,17 +110,51 @@ public class ChizuStateExportReceiver extends BroadcastReceiver {
 
 	// ---------- LIST_CATEGORIES ----------
 
+	/**
+	 * The categories a caller may choose from — <b>only the ones that can actually be delivered</b>.
+	 *
+	 * <h3>Offered means available, not merely recommended</h3>
+	 *
+	 * A category whose files live outside this app's own directories is not offered at all
+	 * ({@link ChizuBackup#travels}). Marking it "off" was the first attempt and it was not enough:
+	 * the fourth field means "the app does not recommend this", which a caller is entitled to
+	 * override — and a person who ticks Maps and presses Save then gets a row that promises a backup
+	 * this app will not perform. 白い熊, 2026-09-08: if they are external they should not be
+	 * selectable, so they should not be offered.
+	 *
+	 * <p>A group row goes only when nothing under it survives, so a caller never draws an empty
+	 * heading.
+	 *
+	 * <p><b>Decided fresh on every call</b>, because it is a fact about where the resources are
+	 * right now, not a property of the category. Move Main storage back inside the app and the same
+	 * rows reappear, offered and off by default exactly as before.
+	 */
 	@NonNull
 	private String listCategories(@NonNull OsmandApplication app) {
+		List<ChizuBackup.Cat> catalogue = ChizuBackup.catalogue(app);
+		Set<String> groupsWithParts = new LinkedHashSet<>();
+		for (ChizuBackup.Cat cat : catalogue) {
+			if (cat.parent != null && ChizuBackup.travels(app, cat.type)) {
+				groupsWithParts.add(cat.parent);
+			}
+		}
+
 		StringBuilder builder = new StringBuilder("OK:");
 		boolean first = true;
-		for (ChizuBackup.Cat cat : ChizuBackup.catalogue(app)) {
+		for (ChizuBackup.Cat cat : catalogue) {
+			boolean offered = cat.parent == null
+					? groupsWithParts.contains(cat.id)
+					: ChizuBackup.travels(app, cat.type);
+			if (!offered) {
+				continue;
+			}
 			if (!first) {
 				builder.append('\n');
 			}
 			first = false;
 			// id ⇥ label ⇥ parent ⇥ on|off — the third field stays empty for a group row,
-			// so the fourth keeps its position
+			// so the fourth keeps its position. Everything reaching here can be delivered, so the
+			// fourth field carries its plain meaning again: the app's own recommendation.
 			builder.append(cat.id).append('\t').append(oneLine(cat.label))
 					.append('\t').append(cat.parent != null ? cat.parent : "")
 					.append('\t').append(cat.defaultSelected ? "on" : "off");

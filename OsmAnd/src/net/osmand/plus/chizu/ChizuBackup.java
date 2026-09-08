@@ -40,6 +40,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -52,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
@@ -81,6 +83,31 @@ public class ChizuBackup {
 
 	private static final String SIDECAR_ENTRY = "chizu_ui.json";
 	private static final String SIDECAR_FONTS_PREFIX = "chizu_fonts/";
+
+	/**
+	 * The Main storage folder, which <b>OsmAnd's own settings export does not carry</b>.
+	 *
+	 * <p>It looks as if it does. {@code general_settings.json} contains {@code media_storage_type}
+	 * and {@code media_storage_manual_uri}, and on 白い熊's phone the latter even holds the tree URI
+	 * of {@code 〇/[60] 地図} — but those two are the setting for photo and video <i>notes</i>. The
+	 * Main storage folder lives in {@code external_storage_dir_V19} and
+	 * {@code external_storage_dir_type_V19}, which are raw preference keys rather than registered
+	 * {@code OsmandPreference}s, so the exporter never walks them and no backup has ever contained
+	 * them.
+	 *
+	 * <p>What that costs: a restored phone comes up on whatever
+	 * {@code OsmandSettings#initExternalStorageDirectory} chose on its very first run — normally
+	 * {@code Android/data/…/files} — and every restored pointer into the real folder resolves to
+	 * nothing. Measured 2026-09-08: the new phone showed "External storage 1" where the old one
+	 * showed "Manually specified · /storage/emulated/0/〇/[60] 地図", and no amount of restoring
+	 * settings would ever have changed that.
+	 *
+	 * <p>Restored unconditionally, without checking that the folder exists: on a phone that has not
+	 * been granted All-files access yet, the folder is unreadable and would fail an existence test
+	 * while being perfectly present. The app falls back on its own if the path is truly wrong, and
+	 * {@link ChizuStorage#askForStorageAccessOnStart} then asks for the permission that fixes it.
+	 */
+	private static final String SIDECAR_STORAGE_ENTRY = "chizu_storage.json";
 
 	/** Category id of the 白い熊 地図 UI sidecar (sub-option of the Settings group). */
 	public static final String ID_CHIZU_UI = "settings.chizu_ui";
@@ -213,6 +240,29 @@ public class ChizuBackup {
 			}
 		}
 		return list;
+	}
+
+	/**
+	 * Whether a category will actually put something in an archive written <b>now</b>.
+	 *
+	 * <p>Since the export stopped copying a shared Main storage folder's files
+	 * ({@link #withoutSharedFolderFiles}), the file-backed categories deliver nothing on 白い熊's
+	 * phones — and a header that still advertised them would not merely be untidy. 応用管理 counts
+	 * what {@code describe()} offers against what an export actually carries, and shows the answer
+	 * on its backup dialog before anything runs; an over-claiming header makes it report "all 7"
+	 * for an archive holding the settings and not one map, which is precisely the mistake that
+	 * badge exists to catch. So the header must describe the archive, not the app's conceptual
+	 * contents.
+	 *
+	 * <p>File-backed is read off the stock type rather than listed here, so a category upstream
+	 * adds is classified without this fork being edited.
+	 */
+	public static boolean travels(@NonNull OsmandApplication app, @Nullable ExportType type) {
+		if (type == null || !ChizuStorage.isStorageFolderShared(app)) {
+			return true;
+		}
+		String item = type.getItemName();
+		return !("FILE".equals(item) || "GPX".equals(item) || "GPX_DIR".equals(item));
 	}
 
 	/** Whether the category with this id starts ticked; an id we do not know starts ticked. */
@@ -635,6 +685,7 @@ public class ChizuBackup {
 			items = selection.types.isEmpty()
 					? new ArrayList<>()
 					: app.getFileSettingsHelper().getFilteredSettingsItems(selection.types, true, false, false);
+			items = withoutSharedFolderFiles(app, items);
 		} catch (Exception e) {
 			return Result.error("collect failed");
 		}
@@ -643,10 +694,20 @@ public class ChizuBackup {
 		}
 
 		if (items.isEmpty()) {
-			// nothing but the 白い熊 地図 UI sidecar — write the archive directly
+			// Nothing but the 白い熊 地図 UI sidecar — write the archive directly.
+			//
+			// Reaching here USED to mean the caller had asked for the sidecar alone. Since the
+			// filter above can empty the list on its own, it can now also mean "everything asked
+			// for was files in a folder this app does not own". Writing a sidecar nobody requested
+			// and reporting it as <n> categories would be a success message for an archive holding
+			// none of them — say so instead, in the caller's own grammar.
+			if (!selection.withChizu && !hasStorageToRecord(app)) {
+				return Result.error("nothing to export: every category selected lives in the "
+						+ "shared storage folder, which this app does not back up");
+			}
 			try (OutputStream out = dest.open()) {
 				ZipOutputStream zout = new ZipOutputStream(out);
-				writeSidecarEntries(app, zout, cancelled);
+				writeSidecarEntries(app, zout, cancelled, selection.withChizu);
 				zout.finish();
 			} catch (Exception e) {
 				// a cancelled run leaves the backup directory exactly as it found it
@@ -655,7 +716,9 @@ public class ChizuBackup {
 			}
 			long written = dest.length();
 			report(progress, written, written, UNIT_BYTES, formatSize(written) + " / " + formatSize(written));
-			return Result.ok(dest.path(), written, selection.count);
+			// one, not selection.count: the sidecar is the only thing in this archive, whether the
+			// caller asked for it alone or asked for more and the rest turned out not to travel
+			return Result.ok(dest.path(), written, 1);
 		}
 
 		long totalBytes = 0;
@@ -675,10 +738,14 @@ public class ChizuBackup {
 
 		long tempLength = temp.length();
 		long[] copied = {0, 0};
+		// Re-zip whenever anything of ours has to ride inside the stock archive. That is the UI
+		// sidecar when it was asked for, and the Main storage folder ALWAYS — the plain copy is a
+		// straight stream of the stock file and has nowhere to put an extra entry.
+		boolean addOurOwnEntries = selection.withChizu || hasStorageToRecord(app);
 		// the plain copy moves archive bytes, the re-zip moves the entries' own (uncompressed) bytes
-		long copyTotal = selection.withChizu && totalBytes > 0 ? totalBytes : tempLength;
+		long copyTotal = addOurOwnEntries && totalBytes > 0 ? totalBytes : tempLength;
 		try (OutputStream raw = dest.open()) {
-			if (!selection.withChizu) {
+			if (!addOurOwnEntries) {
 				try (InputStream in = new FileInputStream(temp)) {
 					copy(in, raw, progress, copied, copyTotal, cancelled);
 				}
@@ -693,7 +760,7 @@ public class ChizuBackup {
 						copy(zin, zout, progress, copied, copyTotal, cancelled);
 						zout.closeEntry();
 					}
-					writeSidecarEntries(app, zout, cancelled);
+					writeSidecarEntries(app, zout, cancelled, selection.withChizu);
 					zout.finish();
 				}
 			}
@@ -711,6 +778,43 @@ public class ChizuBackup {
 		long written = dest.length();
 		report(progress, written, written, UNIT_BYTES, formatSize(written) + " / " + formatSize(written));
 		return Result.ok(dest.path(), written, selection.count);
+	}
+
+	/**
+	 * Drops the items that are <b>files in a folder this app does not own</b>, keeping the pointers.
+	 *
+	 * <h3>Why a backup of 地図 is not four gigabytes</h3>
+	 *
+	 * 白い熊's Main storage is a shared folder — {@code /storage/emulated/0/〇/[60] 地図} — sitting in
+	 * a tree that already travels between phones by its own means. The maps, the raster tile cache,
+	 * the terrain data and the recorded tracks live <i>there</i>, not in this app's directories, and
+	 * this app only points at them. Copying them into the archive backed up somebody else's files:
+	 * the 2026-09-08 backup was 4.3 GB across 24,953 entries, of which 24,856 were cached tiles, and
+	 * restoring it wrote a second copy of a tree the target phone already had.
+	 *
+	 * <p>So the archive carries what is genuinely this app's: the settings, the profiles, the quick
+	 * actions, the favourites, the 白い熊 地図 sidecar — and {@code selected_gpx}, the pointer that
+	 * says which tracks are drawn. On the far side those pointers find the files that are already in
+	 * the shared folder. A restore then moves kilobytes instead of gigabytes, needs no storage
+	 * permission to land, and cannot half-write a duplicate tree.
+	 *
+	 * <p><b>Only when the folder is shared.</b> With Main storage inside this app's own directories
+	 * the files are ours, nothing else preserves them, and the full archive is written as before —
+	 * see {@link ChizuStorage#isStorageFolderShared}.
+	 */
+	@NonNull
+	private static List<SettingsItem> withoutSharedFolderFiles(@NonNull OsmandApplication app,
+			@NonNull List<SettingsItem> items) {
+		if (!ChizuStorage.isStorageFolderShared(app)) {
+			return items;
+		}
+		List<SettingsItem> kept = new ArrayList<>();
+		for (SettingsItem item : items) {
+			if (!(item instanceof FileSettingsItem)) {
+				kept.add(item);
+			}
+		}
+		return kept;
 	}
 
 	/** Runs the stock export task into the temp file; returns null on success, a failure otherwise. */
@@ -834,7 +938,21 @@ public class ChizuBackup {
 	 */
 	@NonNull
 	public static Result importArchive(@NonNull OsmandApplication app, @NonNull File archive) {
+		return importArchive(app, archive, null);
+	}
+
+	/**
+	 * @param progress told when a stage begins, so a caller that is watching for silence can tell
+	 *                 a working import from a wedged one. Never a percentage: the stock helpers
+	 *                 report no progress of their own, so what travels is which stage we are in.
+	 */
+	@NonNull
+	public static Result importArchive(@NonNull OsmandApplication app, @NonNull File archive,
+			@Nullable Progress progress) {
+		long total = archive.length();
+		report(progress, total, total, UNIT_BYTES, "Reading the 地図 settings");
 		boolean chizuApplied = applySidecar(app, archive);
+		report(progress, total, total, UNIT_BYTES, "Collecting what the archive holds");
 
 		CountDownLatch latch = new CountDownLatch(1);
 		boolean[] ok = {false};
@@ -853,6 +971,7 @@ public class ChizuBackup {
 					selected.add(item);
 				}
 				restored[0] = selected.size();
+				report(progress, total, total, UNIT_BYTES, "Restoring " + selected.size() + " items");
 				helper.importSettings(archive, selected, "", 1, new ImportListener() {
 					@Override
 					public void onImportFinished(boolean importOk, boolean needRestart,
@@ -919,8 +1038,24 @@ public class ChizuBackup {
 
 	// ---------- the 白い熊 地図 UI sidecar ----------
 
+	/**
+	 * @param withUi whether the caller asked for the 白い熊 地図 UI category. The Main storage folder
+	 *               is written either way: it is not a UI preference, it is the one thing without
+	 *               which every other restored pointer is meaningless, and hanging it off a
+	 *               tickbox would make a correct restore depend on remembering to tick it.
+	 */
 	private static void writeSidecarEntries(@NonNull OsmandApplication app,
-			@NonNull ZipOutputStream zout, @NonNull AtomicBoolean cancelled) throws Exception {
+			@NonNull ZipOutputStream zout, @NonNull AtomicBoolean cancelled, boolean withUi)
+			throws Exception {
+		JSONObject storage = storageJson(app);
+		if (storage != null) {
+			zout.putNextEntry(new ZipEntry(SIDECAR_STORAGE_ENTRY));
+			zout.write(storage.toString(2).getBytes("UTF-8"));
+			zout.closeEntry();
+		}
+		if (!withUi) {
+			return;
+		}
 		zout.putNextEntry(new ZipEntry(SIDECAR_ENTRY));
 		zout.write(chizuPrefsJson(app).toString(2).getBytes("UTF-8"));
 		zout.closeEntry();
@@ -941,27 +1076,75 @@ public class ChizuBackup {
 		}
 	}
 
-	/** Extracts and applies the 白い熊 地図 UI sidecar; true when it was found and applied. */
+	/**
+	 * Extracts and applies the 白い熊 地図 UI sidecar; true when it was found and applied.
+	 *
+	 * <h3>Read the index, never the whole archive</h3>
+	 *
+	 * <b>{@link ZipFile}, not {@link ZipInputStream}</b> — the difference is the whole cost of a
+	 * restore. A {@code ZipInputStream} has no index: it can only walk the archive from the front,
+	 * inflating every entry it passes, so finding two small entries meant decompressing the entire
+	 * backup. Measured on 白い熊's phone (2026-09-08, a 4.3 GB / 24,958-entry 地図 archive
+	 * handed over by 応用管理): <b>15 minutes 17 seconds of one core at 100 %</b>, before the stock
+	 * import had begun — with nothing written, nothing reported and no way to cancel. That is what
+	 * made a restore look dead: 応用管理 treats silence as death, and this was fifteen silent
+	 * minutes in the middle of it.
+	 *
+	 * <p>{@code ZipFile} reads the central directory, so listing names costs nothing and only the
+	 * sidecar entries are ever inflated. Same result, milliseconds instead of a quarter of an hour.
+	 *
+	 * <p>It is also the <b>correct</b> reader. A local file header may omit the UTF-8 name flag
+	 * that the central directory sets — OsmAnd's own export does exactly that for the
+	 * {@code favorites-*.gpx} entries — and a stream reader, which sees only local headers, then
+	 * decodes those names as mojibake. The central directory is the authoritative name list.
+	 *
+	 * <p>The streaming walk survives only as a fallback for an archive whose central directory
+	 * cannot be opened at all, where slow beats not reading it.
+	 */
 	static boolean applySidecar(@NonNull OsmandApplication app, @NonNull File archive) {
+		try (ZipFile zip = new ZipFile(archive)) {
+			boolean applied = false;
+			ZipEntry ui = zip.getEntry(SIDECAR_ENTRY);
+			if (ui != null) {
+				try (InputStream in = zip.getInputStream(ui)) {
+					applied = applySidecarPrefs(app, in);
+				}
+			}
+			ZipEntry storage = zip.getEntry(SIDECAR_STORAGE_ENTRY);
+			if (storage != null) {
+				try (InputStream in = zip.getInputStream(storage)) {
+					applied |= applySidecarStorage(app, in);
+				}
+			}
+			Enumeration<? extends ZipEntry> entries = zip.entries();
+			while (entries.hasMoreElements()) {
+				ZipEntry entry = entries.nextElement();
+				if (entry.isDirectory() || !entry.getName().startsWith(SIDECAR_FONTS_PREFIX)) {
+					continue;
+				}
+				try (InputStream in = zip.getInputStream(entry)) {
+					applied |= applySidecarFont(app, entry.getName(), in);
+				}
+			}
+			return applied;
+		} catch (Exception e) {
+			return applySidecarByScan(app, archive);
+		}
+	}
+
+	/** The pre-index fallback: only for an archive whose central directory will not open. */
+	private static boolean applySidecarByScan(@NonNull OsmandApplication app, @NonNull File archive) {
 		boolean applied = false;
 		try (ZipInputStream zin = new ZipInputStream(new FileInputStream(archive))) {
 			ZipEntry entry;
 			while ((entry = zin.getNextEntry()) != null) {
 				String name = entry.getName();
 				if (SIDECAR_ENTRY.equals(name)) {
-					ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-					streamCopy(zin, buffer);
-					applyChizuPrefsJson(app, new JSONObject(buffer.toString("UTF-8")));
-					applied = true;
-				} else if (name.startsWith(SIDECAR_FONTS_PREFIX) && !entry.isDirectory()) {
-					String fontName = name.substring(SIDECAR_FONTS_PREFIX.length());
-					if (!fontName.isEmpty() && !fontName.contains("/") && !fontName.contains("..")) {
-						File target = new File(ChizuFonts.getFontsDir(app), fontName);
-						try (OutputStream out = new FileOutputStream(target)) {
-							streamCopy(zin, out);
-						}
-						applied = true;
-					}
+					applied |= applySidecarPrefs(app, zin);
+				} else if (SIDECAR_STORAGE_ENTRY.equals(name)) {
+					applied |= applySidecarStorage(app, zin);
+				} else if (!entry.isDirectory() && name.startsWith(SIDECAR_FONTS_PREFIX)) {
+					applied |= applySidecarFont(app, name, zin);
 				}
 				zin.closeEntry();
 			}
@@ -969,6 +1152,76 @@ public class ChizuBackup {
 			return applied;
 		}
 		return applied;
+	}
+
+	private static boolean applySidecarPrefs(@NonNull OsmandApplication app,
+			@NonNull InputStream in) throws Exception {
+		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+		streamCopy(in, buffer);
+		applyChizuPrefsJson(app, new JSONObject(buffer.toString("UTF-8")));
+		return true;
+	}
+
+	private static boolean applySidecarStorage(@NonNull OsmandApplication app,
+			@NonNull InputStream in) throws Exception {
+		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+		streamCopy(in, buffer);
+		return applyStorageJson(app, new JSONObject(buffer.toString("UTF-8")));
+	}
+
+	private static boolean applySidecarFont(@NonNull OsmandApplication app, @NonNull String entryName,
+			@NonNull InputStream in) throws Exception {
+		String fontName = entryName.substring(SIDECAR_FONTS_PREFIX.length());
+		if (fontName.isEmpty() || fontName.contains("/") || fontName.contains("..")) {
+			return false;
+		}
+		File target = new File(ChizuFonts.getFontsDir(app), fontName);
+		try (OutputStream out = new FileOutputStream(target)) {
+			streamCopy(in, out);
+		}
+		return true;
+	}
+
+	/** Whether this phone has a Main storage folder worth recording in the archive. */
+	private static boolean hasStorageToRecord(@NonNull OsmandApplication app) {
+		try {
+			return storageJson(app) != null;
+		} catch (Exception e) {
+			return false;
+		}
+	}
+
+	/** The Main storage folder as this phone has it, or null when it was never chosen. */
+	@Nullable
+	private static JSONObject storageJson(@NonNull OsmandApplication app) throws Exception {
+		OsmandSettings settings = app.getSettings();
+		if (!settings.isExternalStorageDirectoryTypeSpecifiedV19()
+				|| !settings.isExternalStorageDirectorySpecifiedV19()) {
+			return null;
+		}
+		String dir = settings.getExternalStorageDirectoryV19();
+		if (dir == null || dir.isEmpty()) {
+			return null;
+		}
+		JSONObject json = new JSONObject();
+		json.put("type", settings.getExternalStorageDirectoryTypeV19());
+		json.put("dir", dir);
+		return json;
+	}
+
+	/** Puts the Main storage folder back. Takes effect at the next app start, not mid-import. */
+	private static boolean applyStorageJson(@NonNull OsmandApplication app, @NonNull JSONObject json) {
+		try {
+			String dir = json.optString("dir", "");
+			int type = json.optInt("type", -1);
+			if (dir.isEmpty() || type < 0) {
+				return false;
+			}
+			app.getSettings().setExternalStorageDirectoryV19(type, dir);
+			return true;
+		} catch (Exception e) {
+			return false;
+		}
 	}
 
 	@NonNull

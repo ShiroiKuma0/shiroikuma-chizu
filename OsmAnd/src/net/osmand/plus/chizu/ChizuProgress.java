@@ -38,7 +38,8 @@ public class ChizuProgress implements ChizuBackup.Progress {
 	private final String correlationId;
 	@Nullable
 	private final String jobId;
-	private long lastSent;
+	/** Volatile: the import's heartbeat ticks on its own thread while the worker reports stages. */
+	private volatile long lastSent;
 
 	private ChizuProgress(@NonNull OsmandApplication app, @NonNull String progressAction,
 			@NonNull String replyPackage, @NonNull String correlationId, @Nullable String jobId) {
@@ -91,6 +92,12 @@ public class ChizuProgress implements ChizuBackup.Progress {
 				intent.putExtra(ChizuAutomationProvider.KEY_JOB_ID, jobId);
 			}
 			intent.putExtra("app", app.getString(R.string.app_name));
+			// The label goes in "result", which is what the contract names and what 応用管理 reads
+			// (AppDataContract.EXTRA_RESULT). It used to travel only as "text" — the same word the
+			// terminal reply already got right — so every stage line this app sends was dropped on
+			// arrival and a long import showed nothing but an unmoving byte pair. "text" is kept
+			// beside it for the older receivers in the family.
+			intent.putExtra(ChizuReplier.EXTRA_RESULT, text);
 			intent.putExtra("text", text);
 			intent.putExtra("current", current);
 			intent.putExtra("total", total);

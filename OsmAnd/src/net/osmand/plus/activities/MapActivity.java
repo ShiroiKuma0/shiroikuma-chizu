@@ -777,6 +777,10 @@ public class MapActivity extends OsmandActionBarActivity implements DownloadEven
 			disableDrawer();
 		}
 
+		// shiroikuma fork: the Main storage folder is a shared one and needs All-files access,
+		// which no backup can carry. Ask on start when it is missing — see ChizuStorage.
+		net.osmand.plus.chizu.ChizuStorage.askForStorageAccessOnStart(this);
+
 		if (showWelcomeScreen && FirstUsageWizardFragment.showInstance(this)) {
 			SecondSplashScreenFragment.SHOW = false;
 		} else if (SendAnalyticsBottomSheetDialogFragment.shouldShowDialog(app)) {
