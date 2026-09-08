@@ -187,7 +187,9 @@ public class ChizuAutomationProvider extends ContentProvider {
 			for (ChizuBackup.Cat cat : ChizuBackup.catalogue(app)) {
 				if (cat.parent == null) {
 					groups.put(cat.id, cat.label);
-				} else if (cat.defaultSelected) {
+				} else if (cat.defaultSelected && ChizuBackup.travels(app, cat.type)) {
+					// what the archive will actually hold, not what the app conceptually holds —
+					// 応用管理 counts this against the export and shows the difference before it runs
 					ticked.add(cat.parent);
 				}
 			}

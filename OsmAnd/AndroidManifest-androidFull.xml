@@ -4,4 +4,23 @@
 
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- shiroikuma fork: no Google Play Billing components.
+
+         The Play Billing library arrives as a transitive dependency of OsmAnd's purchase code and
+         contributes two activities to the merged manifest. 白い熊 応用管理 lists both as trackers,
+         and it is right to: they are Play-store plumbing in an app that is sideloaded, has no Play
+         install to talk to, and sells nothing. Removed here rather than by dropping the dependency,
+         because the purchase classes are upstream's and stubbing them out would be a large fork
+         layer that has to be re-reconciled on every rebase — this is two lines that survive one.
+
+         com.android.vending.BILLING is likewise upstream's; the components are what is exposed. -->
+    <application>
+        <activity
+            android:name="com.android.billingclient.api.ProxyBillingActivity"
+            tools:node="remove" />
+        <activity
+            android:name="com.android.billingclient.api.ProxyBillingActivityV2"
+            tools:node="remove" />
+    </application>
+
 </manifest>
