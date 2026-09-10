@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	shiroikuma fork: the window background of every alert dialog, dark theme.
+
+	Upstream's dialog is a black panel on a dimmed black map, and the dim alone is not an edge:
+	on 白い熊's screen the dialog and the background behind it are the same colour, so the panel
+	has no visible boundary at all (2026-09-10, the Map source dialog). The yellow stroke is the
+	boundary — the same yellow the fork uses for every other outline.
+
+	Rounded to the same radius the what's-new card has drawn since the fork began, so that every
+	dialog in the app is the same shape rather than one rounded panel among square ones.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+	android:shape="rectangle">
+	<solid android:color="@color/card_and_list_background_dark" />
+	<corners android:radius="@dimen/chizu_dialog_corner_radius" />
+	<stroke
+		android:width="@dimen/chizu_dialog_border_width"
+		android:color="@color/chizu_dialog_border" />
+</shape>
