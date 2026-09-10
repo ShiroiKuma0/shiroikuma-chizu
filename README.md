@@ -10,7 +10,7 @@ A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+039`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.4.0+042`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -18,6 +18,8 @@ Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
 ## 🖤💛 Black-yellow everywhere
 The dark theme is the default and means it: pure-black backgrounds, cards, app bars and map buttons, with yellow text, icons, accents and dividers. The splash is black with the traced-pin logo — no wordmarks — and the launcher icon is a yellow edge-traced pin on black.
+
+Dialogs get an edge of their own. Upstream paints its panel dark grey over a lighter map, so the dim behind it reads as a boundary; on a black panel over a black map it does not, and a dialog appeared to float with nothing marking where it began or ended. Every alert dialog now takes a yellow-stroked, rounded window background — including the what's-new notes on first launch, whose title and body Material paints straight from the theme and which therefore arrived in stock's near-white until the fork's theme claimed them.
 
 Anything drawn **on** the yellow accent — the trip-recording Start button, every primary dialog button, the navigation Go button, accent-filled FABs — takes a contrasting dark label rather than stock's near-white, which would be unreadable. That contrast is derived, not hard-coded: change the accent to a dark color in the theming page and the labels flip to white on their own, by relative luminance.
 
@@ -64,6 +66,8 @@ A folder like that is **not this app's data**. It lives in a tree that already t
 The folder itself travels too, which no OsmAnd backup has ever managed: it lives in raw preference keys the stock exporter does not walk, so a restored phone used to come up on whatever it picked on its first run, with every restored pointer resolving to nothing. It now rides in the archive's own sidecar, independent of any tickbox. And because that folder needs a permission no backup can carry — All-files access is an app-op, not a runtime permission — the map screen asks for it on start whenever the configured folder is out of reach, rather than falling back in silence and looking healthy.
 
 What cannot travel is never offered: the categories whose files live in the shared folder are absent from the automation list and greyed in the Export / Import panel, under a line saying where they actually are.
+
+And what *does* travel, travels whole. OsmAnd's own exporter omits preferences without saying so — a built-in profile's name, icon and colour among them — so the archive carries every key of the global and per-profile preference files verbatim, applied after the stock import and merged rather than replacing. A restore also **moves the running app** to the folder it just restored, instead of writing the setting and leaving the live process reading the directory it started with: that looked exactly like a map that had lost its data, tracks and favourites still drawn over an empty world.
 
 ---
 
