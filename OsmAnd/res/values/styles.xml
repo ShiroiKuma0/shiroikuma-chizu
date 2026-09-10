@@ -93,6 +93,8 @@
     </style>
 
     <style name="Theme.MaterialComponents.Dialog.Alert.NoAnimation">
+        <!-- shiroikuma fork: the visible edge, see chizu_dialog_styles.xml -->
+        <item name="android:windowBackground">@drawable/chizu_dialog_background</item>
         <item name="buttonBarNegativeButtonStyle">@style/DialogButtonStyleDark</item>
         <item name="buttonBarPositiveButtonStyle">@style/DialogButtonStyleDark</item>
         <item name="buttonBarNeutralButtonStyle">@style/DialogButtonStyleDark</item>
@@ -100,6 +102,8 @@
     </style>
 
     <style name="Theme.MaterialComponents.Light.Dialog.Alert.NoAnimation">
+        <!-- shiroikuma fork: the visible edge, see chizu_dialog_styles.xml -->
+        <item name="android:windowBackground">@drawable/chizu_dialog_background_light</item>
         <item name="buttonBarNegativeButtonStyle">@style/DialogButtonStyleLight</item>
         <item name="buttonBarPositiveButtonStyle">@style/DialogButtonStyleLight</item>
         <item name="buttonBarNeutralButtonStyle">@style/DialogButtonStyleLight</item>

@@ -68,6 +68,8 @@
     </style>
 
     <style name="OsmandLightTheme" parent="Theme.MaterialComponents.Light">
+        <!-- shiroikuma fork: alert dialogs need a visible edge, see chizu_dialog_styles.xml -->
+        <item name="alertDialogTheme">@style/ChizuAlertDialogLight</item>
         <item name="alert_dialog_theme">@style/OsmandLightTheme</item>
         <item name="android:buttonStyle">@style/Widget.AppCompat.Button.Colored</item>
         <item name="buttonStyle">@style/Widget.AppCompat.Button.Colored</item>

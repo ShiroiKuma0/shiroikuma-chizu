@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	shiroikuma fork: the window background of every alert dialog, light theme.
+	Same border as the dark one — see chizu_dialog_background.xml for why it exists.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+	android:shape="rectangle">
+	<solid android:color="@color/card_and_list_background_light" />
+	<corners android:radius="@dimen/chizu_dialog_corner_radius" />
+	<stroke
+		android:width="@dimen/chizu_dialog_border_width"
+		android:color="@color/chizu_dialog_border" />
+</shape>

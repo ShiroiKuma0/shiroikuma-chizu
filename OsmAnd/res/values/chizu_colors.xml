@@ -16,4 +16,11 @@
 	-->
 	<color name="chizu_on_accent_dark">#000000</color>
 	<color name="chizu_on_accent_light">#FFFFFF</color>
+	<!--
+		The edge of every alert dialog. Upstream draws a black panel on a dimmed black map, which
+		on this fork's palette leaves the dialog with no visible boundary; this is that boundary.
+		Kept as its own name rather than reusing a divider colour so that recolouring dividers
+		cannot silently erase the outline of every dialog in the app.
+	-->
+	<color name="chizu_dialog_border">#FFFF00</color>
 </resources>

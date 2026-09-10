@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	shiroikuma fork: alert dialogs get a visible edge.
+
+	The problem, measured 2026-09-10 on 白い熊's phone: the fork's palette paints the dialog panel
+	black and the screen behind it black, so a dialog such as "Map source" has no boundary — the
+	radio list appears to float on the map with nothing marking where the dialog begins or ends.
+	Upstream never hits this because its panel is dark grey on a lighter map.
+
+	Where these are wired in. Upstream sets `alertDialogTheme` only on the *.NoAnimation variants
+	of the two main themes, and OsmandApplication.applyTheme picks those only when the profile's
+	`do_not_use_animations` is on — which 白い熊's is not. So the plain themes must carry it too, or
+	the border would appear for everyone except the person who asked for it. Both paths are wired:
+	the plain themes point here, and the NoAnimation ones take the same background directly.
+-->
+<resources xmlns:android="http://schemas.android.com/apk/res/android">
+
+	<dimen name="chizu_dialog_border_width">2dp</dimen>
+	<!-- Matches the what's-new card, which has drawn its own rounded panel since the fork began. -->
+	<dimen name="chizu_dialog_corner_radius">8dp</dimen>
+
+	<style name="ChizuAlertDialogDark" parent="Theme.MaterialComponents.Dialog.Alert">
+		<item name="android:windowBackground">@drawable/chizu_dialog_background</item>
+		<!--
+			A dialog's own title and message are not painted by the fork's colour overrides: those
+			reach code that goes through ColorUtilities, and Material resolves dialog text straight
+			from the theme instead. Without these the "What's new" dialog came up with upstream's
+			near-white text on our black panel (白い熊, 2026-09-10).
+		-->
+		<item name="android:textColorPrimary">@color/text_color_primary_dark</item>
+		<item name="android:textColorSecondary">@color/text_color_secondary_dark</item>
+		<item name="buttonBarNegativeButtonStyle">@style/DialogButtonStyleDark</item>
+		<item name="buttonBarPositiveButtonStyle">@style/DialogButtonStyleDark</item>
+		<item name="buttonBarNeutralButtonStyle">@style/DialogButtonStyleDark</item>
+	</style>
+
+	<style name="ChizuAlertDialogLight" parent="Theme.MaterialComponents.Light.Dialog.Alert">
+		<item name="android:windowBackground">@drawable/chizu_dialog_background_light</item>
+		<item name="android:textColorPrimary">@color/text_color_primary_light</item>
+		<item name="android:textColorSecondary">@color/text_color_secondary_light</item>
+		<item name="buttonBarNegativeButtonStyle">@style/DialogButtonStyleLight</item>
+		<item name="buttonBarPositiveButtonStyle">@style/DialogButtonStyleLight</item>
+		<item name="buttonBarNeutralButtonStyle">@style/DialogButtonStyleLight</item>
+	</style>
+
+</resources>
