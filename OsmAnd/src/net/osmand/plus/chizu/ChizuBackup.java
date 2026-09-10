@@ -7,6 +7,7 @@ import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import android.provider.DocumentsContract;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -63,13 +64,19 @@ import java.util.zip.ZipOutputStream;
  * Callable headlessly: the 白い熊 地図 UI panel ({@link ChizuExim}) and the automation
  * receiver ({@link ChizuStateExportReceiver}) are two thin callers of {@link #export}.
  * The archive is the stock .osf settings ZIP (all selected stock export types, maps
- * included) plus the 白い熊 地図 UI sidecar (colors, fonts, sizes and the imported font
- * files) as extra entries inside the very same ZIP — one file per backup, always.
+ * included) plus our own sidecar entries inside the very same ZIP — one file per backup,
+ * always: the 白い熊 地図 UI ({@link #SIDECAR_ENTRY}, with the imported font files), the Main
+ * storage folder ({@link #SIDECAR_STORAGE_ENTRY}) and the raw preference snapshot
+ * ({@link #SIDECAR_PREFS_ENTRY}). The last two exist because the stock export silently
+ * drops what they carry.
  *
  * The backup directory and the automation token live in their own device-local prefs
  * file ({@link #PREFS_NAME}), which is never part of any export.
  */
 public class ChizuBackup {
+
+	/** The family's one logcat tag, so a whole 保存復元 run filters as a single stream. */
+	private static final String TAG = "ChizuAutomation";
 
 	/** Device-local prefs: backup directory + automation token. Never exported. */
 	static final String PREFS_NAME = "chizu_exim";
@@ -108,6 +115,47 @@ public class ChizuBackup {
 	 * {@link ChizuStorage#askForStorageAccessOnStart} then asks for the permission that fixes it.
 	 */
 	private static final String SIDECAR_STORAGE_ENTRY = "chizu_storage.json";
+
+	/**
+	 * Every preference this app has actually written, verbatim — the entry that makes a restore
+	 * complete rather than nearly complete.
+	 *
+	 * <h3>Why a raw snapshot on top of the stock export</h3>
+	 *
+	 * The stock export does not carry all of the settings, and it fails <b>silently</b>: a
+	 * preference it drops looks exactly like one that was never set. Two measured on 白い熊's two
+	 * phones, 2026-09-10, both 5.4.0+039:
+	 *
+	 * <ul>
+	 * <li><b>{@code map_underlay}</b> — the Google Earth aerial layer. Absent from the old phone's
+	 *     own export while that phone was visibly drawing it, so it was never in the archive and no
+	 *     import could have brought it back. A restored phone comes up on the plain vector map.</li>
+	 * <li><b>The car profile's name, icon and colour.</b> {@code ProfileSettingsItem}'s writer
+	 *     skips every id in {@code ApplicationModeBean.getAppModeBeanPrefsIds} — they travel in
+	 *     {@code items.json}'s {@code appMode} bean instead — and for a built-in mode that already
+	 *     exists on the target the bean does not put them back. "Driving" came back unnamed.</li>
+	 * </ul>
+	 *
+	 * <p>Both are the same shape of bug, and there is no reason to believe those two are the last
+	 * of them: {@code writeToJson} skips a preference unless {@code isSetForMode} says the mode's
+	 * file contains it, {@code isExportAvailableForPref} drops every non-shared global, and each of
+	 * those gates is upstream's to change. Chasing them one at a time means finding each one the
+	 * way these two were found — on a phone 白い熊 had already moved to.
+	 *
+	 * <p>So this entry does not try to be clever about which preferences matter. It is every key in
+	 * the global preferences file and in each profile's file, with its type, written whenever the
+	 * Settings group travels, and applied <b>after</b> the stock import so that whatever upstream
+	 * did or did not restore, the values that land are the ones the source phone held. It is a few
+	 * tens of kilobytes against an archive whose point is that it is small.
+	 *
+	 * <p><b>Merged, not replacing.</b> Every key in the snapshot is written; keys the target has
+	 * and the source did not are left alone. 白い熊's rule, 2026-09-10, is that nothing may be lost
+	 * on transfer — clearing the files first could only ever lose something.
+	 */
+	private static final String SIDECAR_PREFS_ENTRY = "chizu_prefs.json";
+
+	/** How long the snapshot may wait for the main thread before a restore gives up on it. */
+	private static final long PREFS_SNAPSHOT_TIMEOUT_MS = 60_000;
 
 	/** Category id of the 白い熊 地図 UI sidecar (sub-option of the Settings group). */
 	public static final String ID_CHIZU_UI = "settings.chizu_ui";
@@ -308,6 +356,23 @@ public class ChizuBackup {
 			this.types = types;
 			this.withChizu = withChizu;
 			this.count = count;
+		}
+
+		/**
+		 * Whether this selection carries OsmAnd's own settings, and therefore whether the raw
+		 * preference snapshot belongs in the archive ({@link #SIDECAR_PREFS_ENTRY}).
+		 *
+		 * <p>Asked of the categories rather than hung off a tickbox of its own: the snapshot is not
+		 * a category, it is the same settings the caller already asked for, written in a form that
+		 * does not lose any of them. A caller exporting only My Places gets no snapshot.
+		 */
+		public boolean carriesSettings() {
+			for (ExportType type : types) {
+				if (type == ExportType.PROFILE || type == ExportType.GLOBAL) {
+					return true;
+				}
+			}
+			return false;
 		}
 	}
 
@@ -701,13 +766,13 @@ public class ChizuBackup {
 			// for was files in a folder this app does not own". Writing a sidecar nobody requested
 			// and reporting it as <n> categories would be a success message for an archive holding
 			// none of them — say so instead, in the caller's own grammar.
-			if (!selection.withChizu && !hasStorageToRecord(app)) {
+			if (!selection.withChizu && !selection.carriesSettings() && !hasStorageToRecord(app)) {
 				return Result.error("nothing to export: every category selected lives in the "
 						+ "shared storage folder, which this app does not back up");
 			}
 			try (OutputStream out = dest.open()) {
 				ZipOutputStream zout = new ZipOutputStream(out);
-				writeSidecarEntries(app, zout, cancelled, selection.withChizu);
+				writeSidecarEntries(app, zout, cancelled, selection);
 				zout.finish();
 			} catch (Exception e) {
 				// a cancelled run leaves the backup directory exactly as it found it
@@ -741,7 +806,8 @@ public class ChizuBackup {
 		// Re-zip whenever anything of ours has to ride inside the stock archive. That is the UI
 		// sidecar when it was asked for, and the Main storage folder ALWAYS — the plain copy is a
 		// straight stream of the stock file and has nowhere to put an extra entry.
-		boolean addOurOwnEntries = selection.withChizu || hasStorageToRecord(app);
+		boolean addOurOwnEntries =
+				selection.withChizu || selection.carriesSettings() || hasStorageToRecord(app);
 		// the plain copy moves archive bytes, the re-zip moves the entries' own (uncompressed) bytes
 		long copyTotal = addOurOwnEntries && totalBytes > 0 ? totalBytes : tempLength;
 		try (OutputStream raw = dest.open()) {
@@ -760,7 +826,7 @@ public class ChizuBackup {
 						copy(zin, zout, progress, copied, copyTotal, cancelled);
 						zout.closeEntry();
 					}
-					writeSidecarEntries(app, zout, cancelled, selection.withChizu);
+					writeSidecarEntries(app, zout, cancelled, selection);
 					zout.finish();
 				}
 			}
@@ -993,11 +1059,17 @@ public class ChizuBackup {
 			Thread.currentThread().interrupt();
 			return Result.error("interrupted");
 		}
-		if (!ok[0] && !chizuApplied) {
+		// Last, and deliberately so: the snapshot is what makes the restore complete, and it can
+		// only do that from behind the stock import's own queued writes. See applyPrefsSnapshot.
+		report(progress, total, total, UNIT_BYTES, "Restoring the settings 地図 keeps itself");
+		boolean prefsApplied = applyPrefsSnapshot(app, archive);
+		if (!ok[0] && !chizuApplied && !prefsApplied) {
 			return Result.error("import failed");
 		}
 		// Everything on disk BEFORE the caller is told it worked — see flushPreferences.
 		flushPreferences(app);
+		// …and the app working in the folder it was just told to use — see alignStorageFolder.
+		alignStorageFolder(app);
 		int count = (ok[0] ? restored[0] : 0) + (chizuApplied ? 1 : 0);
 		return Result.ok("", archive.length(), count);
 	}
@@ -1016,18 +1088,7 @@ public class ChizuBackup {
 	 * OsmAnd's own global and per-mode preferences, and those are queued by code we do not own.
 	 */
 	private static void flushPreferences(@NonNull OsmandApplication app) {
-		Set<String> names = new LinkedHashSet<>();
-		names.add(PREFS_NAME);
-		names.add(ChizuTheme.PREFS_NAME);
-		try {
-			names.add(OsmandSettings.getSharedPreferencesName(null));
-			for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
-				names.add(OsmandSettings.getSharedPreferencesName(mode));
-			}
-		} catch (Exception ignored) {
-			// a mode list we cannot read is not a reason to skip the files we can
-		}
-		for (String name : names) {
+		for (String name : prefsFileNames(app)) {
 			try {
 				//noinspection ApplySharedPref
 				app.getSharedPreferences(name, Context.MODE_PRIVATE).edit().commit();
@@ -1045,12 +1106,18 @@ public class ChizuBackup {
 	 *               tickbox would make a correct restore depend on remembering to tick it.
 	 */
 	private static void writeSidecarEntries(@NonNull OsmandApplication app,
-			@NonNull ZipOutputStream zout, @NonNull AtomicBoolean cancelled, boolean withUi)
-			throws Exception {
+			@NonNull ZipOutputStream zout, @NonNull AtomicBoolean cancelled,
+			@NonNull Selection selection) throws Exception {
+		boolean withUi = selection.withChizu;
 		JSONObject storage = storageJson(app);
 		if (storage != null) {
 			zout.putNextEntry(new ZipEntry(SIDECAR_STORAGE_ENTRY));
 			zout.write(storage.toString(2).getBytes("UTF-8"));
+			zout.closeEntry();
+		}
+		if (selection.carriesSettings()) {
+			zout.putNextEntry(new ZipEntry(SIDECAR_PREFS_ENTRY));
+			zout.write(prefsSnapshotJson(app).toString(2).getBytes("UTF-8"));
 			zout.closeEntry();
 		}
 		if (!withUi) {
@@ -1209,7 +1276,20 @@ public class ChizuBackup {
 		return json;
 	}
 
-	/** Puts the Main storage folder back. Takes effect at the next app start, not mid-import. */
+	/**
+	 * Puts the Main storage folder back, <b>into the running app</b> and not merely onto disk.
+	 *
+	 * <p>This used to write the preference only, and leave the rest to the next app start. That is
+	 * what blanked 白い熊's map on 2026-09-10: the restore landed, the preference was correct, and
+	 * the live process carried on reading the folder it had been started with — where the only map
+	 * is {@code World_basemap_mini.obf}. Tracks and favourites still drew, because those come from
+	 * the restored pointers, so it looked precisely like a map that had lost its data.
+	 *
+	 * <p>{@link OsmandApplication#setExternalStorageDirectory} is upstream's own answer, and what
+	 * the storage settings screen calls when 白い熊 changes the folder by hand: it writes the
+	 * preference, refreshes the cached path and resets the resource manager's store directory. The
+	 * app stops looking at the old path at that moment rather than at the next start.
+	 */
 	private static boolean applyStorageJson(@NonNull OsmandApplication app, @NonNull JSONObject json) {
 		try {
 			String dir = json.optString("dir", "");
@@ -1217,17 +1297,67 @@ public class ChizuBackup {
 			if (dir.isEmpty() || type < 0) {
 				return false;
 			}
-			app.getSettings().setExternalStorageDirectoryV19(type, dir);
+			app.setExternalStorageDirectory(type, dir);
 			return true;
 		} catch (Exception e) {
 			return false;
 		}
 	}
 
+	/**
+	 * Last check of a restore: make sure the app is working in the folder it is configured for.
+	 *
+	 * <h3>Why this is asked again at the end</h3>
+	 *
+	 * {@link #applyStorageJson} has already pointed the app at the right folder, but it is not the
+	 * only thing that moves during an import — the stock import writes OsmAnd's own preferences,
+	 * and the raw snapshot writes them again. Rather than trust that nothing disagreed, the
+	 * question is simply asked once more of the app itself: where do writes go
+	 * ({@link OsmandApplication#getAppPath}), and where were they configured to go? That is exactly
+	 * {@link ChizuStorage#unreachableStorageFolder}, and a restore is the moment it exists for.
+	 *
+	 * <p><b>Only when the configured folder is genuinely usable.</b> If it is not writable the app
+	 * is on its fallback for a good reason — normally a missing All-files access grant, which no
+	 * backup can carry — and forcing it back would trade a working fallback for a broken path.
+	 * {@link ChizuStorage#askForStorageAccessOnStart} asks for the grant on the next start instead.
+	 *
+	 * <p>The re-index is fired and not waited for. 応用管理 SIGKILLs this app the moment an import
+	 * reports success, so it will usually be killed part-way — which costs nothing, since the next
+	 * start indexes the correct folder anyway. It matters in the case that actually went wrong: an
+	 * import whose caller does <i>not</i> kill the app, where without it 白い熊 is left looking at
+	 * an empty map until they think to restart it.
+	 */
+	private static void alignStorageFolder(@NonNull OsmandApplication app) {
+		try {
+			File configured = ChizuStorage.unreachableStorageFolder(app);
+			if (configured == null) {
+				return;
+			}
+			if (!FileUtils.isWritable(configured)) {
+				Log.w(TAG, "configured storage folder is not reachable, staying on the fallback: "
+						+ configured.getAbsolutePath());
+				return;
+			}
+			Log.w(TAG, "app was working outside its configured storage folder, moving it to "
+					+ configured.getAbsolutePath());
+			app.setExternalStorageDirectory(app.getSettings().getExternalStorageDirectoryTypeV19(),
+					configured.getAbsolutePath());
+			app.getResourceManager().reloadIndexesAsync(null, null);
+		} catch (Exception e) {
+			Log.e(TAG, "could not align the storage folder", e);
+		}
+	}
+
 	@NonNull
 	private static JSONObject chizuPrefsJson(@NonNull OsmandApplication app) throws Exception {
+		return prefsJson(app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE));
+	}
+
+	/** One preferences file as typed JSON — {@code {"key": {"t": "s", "v": "…"}}}. */
+	@NonNull
+	private static JSONObject prefsJson(@NonNull SharedPreferences prefs) throws Exception {
 		JSONObject json = new JSONObject();
-		Map<String, ?> all = app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE).getAll();
+		Map<String, ?> all = prefs.getAll();
 		for (Map.Entry<String, ?> entry : all.entrySet()) {
 			Object value = entry.getValue();
 			JSONObject typed = new JSONObject();
@@ -1253,8 +1383,16 @@ public class ChizuBackup {
 
 	private static void applyChizuPrefsJson(@NonNull OsmandApplication app, @NonNull JSONObject json)
 			throws Exception {
-		SharedPreferences.Editor editor =
-				app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE).edit();
+		applyPrefsJson(app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE), json);
+	}
+
+	/**
+	 * Writes one file's worth of typed JSON back into a preferences file, merging: every key in
+	 * {@code json} is set, anything already there and not named is left alone.
+	 */
+	private static void applyPrefsJson(@NonNull SharedPreferences prefs, @NonNull JSONObject json)
+			throws Exception {
+		SharedPreferences.Editor editor = prefs.edit();
 		Iterator<String> keys = json.keys();
 		while (keys.hasNext()) {
 			String key = keys.next();
@@ -1288,6 +1426,157 @@ public class ChizuBackup {
 		// commit(), not apply(): the caller SIGKILLs this app the moment the import reports success
 		//noinspection ApplySharedPref
 		editor.commit();
+	}
+
+	// ---------- the raw preference snapshot ----------
+
+	/**
+	 * Every preferences file this app writes: OsmAnd's global one, one per application mode, and
+	 * our own two. What {@link #flushPreferences} forces to disk — everything, since flushing is a
+	 * local act and can no more leak a file than saving it could.
+	 */
+	@NonNull
+	private static Set<String> prefsFileNames(@NonNull OsmandApplication app) {
+		Set<String> names = new LinkedHashSet<>();
+		names.add(PREFS_NAME);
+		names.add(ChizuTheme.PREFS_NAME);
+		names.addAll(osmandPrefsFileNames(app));
+		return names;
+	}
+
+	/**
+	 * The subset the snapshot may carry: OsmAnd's global preferences file and one per application
+	 * mode. <b>Neither of our own two files belongs here</b>, and for different reasons.
+	 *
+	 * <ul>
+	 * <li>{@link #PREFS_NAME} is device-local by definition — the backup directory's SAF tree URI
+	 *     and the automation token. The URI is a per-install grant that means nothing on another
+	 *     phone, and the token is a secret that has no business travelling. This class promises in
+	 *     its own header that the file is never part of any export; the snapshot does not get to
+	 *     be the exception.</li>
+	 * <li>{@link ChizuTheme#PREFS_NAME} already travels, as {@code chizu_ui.json}, under the
+	 *     category 白い熊 ticks for it. Carrying it here as well would put it in the archive of a
+	 *     caller who deliberately left that category out — a tickbox quietly overruled.</li>
+	 * </ul>
+	 */
+	@NonNull
+	private static Set<String> osmandPrefsFileNames(@NonNull OsmandApplication app) {
+		Set<String> names = new LinkedHashSet<>();
+		try {
+			names.add(OsmandSettings.getSharedPreferencesName(null));
+			for (ApplicationMode mode : ApplicationMode.allPossibleValues()) {
+				names.add(OsmandSettings.getSharedPreferencesName(mode));
+			}
+		} catch (Exception ignored) {
+			// a mode list we cannot read is not a reason to skip the files we can
+		}
+		return names;
+	}
+
+	/** {@code {"files": {"<preferences file>": {"<key>": {"t": …, "v": …}}}}}. */
+	@NonNull
+	private static JSONObject prefsSnapshotJson(@NonNull OsmandApplication app) throws Exception {
+		JSONObject files = new JSONObject();
+		for (String name : osmandPrefsFileNames(app)) {
+			try {
+				JSONObject one = prefsJson(app.getSharedPreferences(name, Context.MODE_PRIVATE));
+				if (one.length() > 0) {
+					files.put(name, one);
+				}
+			} catch (Exception ignored) {
+				// one unreadable file must not cost the archive all the others
+			}
+		}
+		return new JSONObject().put("files", files);
+	}
+
+	/**
+	 * Whether a name in an archive is a preferences file the snapshot may write.
+	 *
+	 * <p>The name comes out of an archive, and an archive comes from a caller. A file name is not a
+	 * path — {@code getSharedPreferences} confines it to this app's own directory either way — but
+	 * an entry naming one of our own two files would let an archive rewrite the backup directory,
+	 * the automation token, or the UI colours behind the category that owns them. Only the OsmAnd
+	 * settings family passes, which is exactly what {@link #prefsSnapshotJson} writes.
+	 */
+	private static boolean isSnapshotPrefsFile(@NonNull OsmandApplication app, @NonNull String name) {
+		try {
+			String base = OsmandSettings.getSharedPreferencesName(null);
+			return name.equals(base) || name.startsWith(base + ".");
+		} catch (Exception e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Puts the snapshot back, on the main thread and only once the stock import has had its turn.
+	 *
+	 * <h3>Why last, and why on the main thread</h3>
+	 *
+	 * {@code GlobalSettingsItem}'s reader does not write its preferences where it is called: it
+	 * posts them to the main thread ({@code getApp().runInUIThread(…)}) and returns, so the stock
+	 * import can report finished with its own writes still queued. Anything this app wrote first
+	 * would then be overwritten <i>after</i> the import claimed to be done. Posting the snapshot to
+	 * the same thread puts it behind that queue, which is the only ordering the framework offers.
+	 *
+	 * <p>Bounded, like the import itself: a snapshot that never gets its turn on a wedged main
+	 * thread must not hold a restore open, and the reply says what happened either way.
+	 *
+	 * @return true when a snapshot was found and applied.
+	 */
+	private static boolean applyPrefsSnapshot(@NonNull OsmandApplication app, @NonNull File archive) {
+		JSONObject files;
+		try (ZipFile zip = new ZipFile(archive)) {
+			ZipEntry entry = zip.getEntry(SIDECAR_PREFS_ENTRY);
+			if (entry == null) {
+				return false;
+			}
+			ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+			try (InputStream in = zip.getInputStream(entry)) {
+				streamCopy(in, buffer);
+			}
+			files = new JSONObject(buffer.toString("UTF-8")).optJSONObject("files");
+		} catch (Exception e) {
+			Log.e(TAG, "prefs snapshot unreadable", e);
+			return false;
+		}
+		if (files == null || files.length() == 0) {
+			return false;
+		}
+		CountDownLatch latch = new CountDownLatch(1);
+		boolean[] applied = {false};
+		app.runInUIThread(() -> {
+			try {
+				Iterator<String> names = files.keys();
+				while (names.hasNext()) {
+					String name = names.next();
+					if (!isSnapshotPrefsFile(app, name)) {
+						Log.w(TAG, "prefs snapshot: ignoring foreign file " + name);
+						continue;
+					}
+					JSONObject one = files.optJSONObject(name);
+					if (one == null) {
+						continue;
+					}
+					applyPrefsJson(app.getSharedPreferences(name, Context.MODE_PRIVATE), one);
+					applied[0] = true;
+				}
+			} catch (Exception e) {
+				Log.e(TAG, "prefs snapshot failed", e);
+			} finally {
+				latch.countDown();
+			}
+		});
+		try {
+			if (!latch.await(PREFS_SNAPSHOT_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+				Log.e(TAG, "prefs snapshot timed out");
+				return false;
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+		return applied[0];
 	}
 
 	// ---------- display ----------
