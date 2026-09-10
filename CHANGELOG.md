@@ -3,6 +3,92 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.4.0+042 — 2026-09-10
+
+Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
+
+Measured across 白い熊's two phones with both attached: a backup taken on the old one, restored onto
+the new one, and the result compared preference by preference against its source.
+
+### Every preference travels, because the stock export drops some without saying so
+
+OsmAnd's settings export omits preferences, and it fails **silently** — one it skips is
+indistinguishable from one that was never set. The proven casualty was a built-in profile's **name,
+icon and colour**: `ProfileSettingsItem`'s writer skips every id in
+`ApplicationModeBean.getAppModeBeanPrefsIds`, because those ride in `items.json`'s `appMode` bean
+instead, and for a built-in mode that already exists on the target the bean does not put them back.
+The car profile, named *Driving* with its own colour, arrived unnamed.
+
+There was no reason to think that was the last of them. `writeToJson` skips a preference unless
+`isSetForMode` finds it in the mode's own file; `isExportAvailableForPref` drops every non-shared
+global; both gates are upstream's to move at any sync.
+
+- **`chizu_prefs.json` carries the preferences verbatim** — every key in OsmAnd's global preferences
+  file and in each application mode's file, with its type, rather than a curated list of the ones
+  that seemed to matter. A few tens of kilobytes against an archive whose whole point is that it is
+  small.
+- **Applied after the stock import, from the main thread.** `GlobalSettingsItem`'s reader does not
+  write where it is called: it posts to the main thread and returns, so the stock import can report
+  *finished* with its own writes still queued. Anything written earlier would be overwritten after
+  the import claimed to be done. Posting the snapshot to the same thread puts it behind that queue.
+- **Merged, never clearing.** Every key in the snapshot is written; keys the target has and the
+  source did not are left alone. Nothing may be lost on a transfer, and clearing the files first
+  could only ever lose something.
+- **Two files are deliberately excluded.** `chizu_exim` is device-local by definition — the backup
+  directory's SAF tree URI, which is a per-install grant meaningless elsewhere, and the automation
+  token, which has no business travelling. `chizu_ui` already travels as its own sidecar under the
+  category 白い熊 ticks for it; carrying it here as well would put it in the archive of a caller who
+  deliberately left that category out.
+
+Hand-added raster tile source definitions were never affected and continue to travel in
+`map_sources.json` — verified byte-identical on both phones.
+
+### A restore no longer leaves the app reading the folder it came from
+
+The Main storage folder was written to disk and left to take effect at the next app start. A live
+process therefore carried on reading the directory it had been started with — where the only map is
+`World_basemap_mini.obf` — while tracks and favourites still drew from the restored pointers. The
+result looked exactly like a map that had lost its data.
+
+- **`applyStorageJson` now calls `OsmandApplication.setExternalStorageDirectory`**, which is what the
+  storage settings screen calls when the folder is changed by hand: it writes the preference,
+  refreshes the cached path and resets the resource manager's store directory, so the app stops
+  reading the old path at the moment of the restore rather than at the next start.
+- **The import ends by checking.** Rather than trusting that nothing disagreed, it asks the app
+  where its writes actually go (`getAppPath`) against where they were configured to go, and moves it
+  when those differ — re-indexing in the background. This is exactly what
+  `ChizuStorage.unreachableStorageFolder` exists to answer, and a restore is the moment for it.
+- **It declines to move onto an unreachable folder.** If the configured one is not writable the app
+  is on its fallback for a good reason — normally a missing All-files grant, which no backup can
+  carry — and forcing it would trade a working fallback for a broken path.
+
+### Dialogs have an edge of their own
+
+On this palette a dialog had no boundary. Upstream paints the panel dark grey over a lighter map, so
+the dim alone reads as an edge; ours is black on black, and the Map source list appeared to float
+with nothing marking where the dialog began or ended.
+
+- **Every alert dialog takes a yellow-stroked window background**, rounded to the same radius the
+  what's-new card has drawn itself since the fork began — so the dialogs are one shape rather than
+  one rounded panel among square ones.
+- **Wired into both theme paths, which is what makes it visible at all.** Upstream sets
+  `alertDialogTheme` only on the `*.NoAnimation` variants of its two themes, and
+  `OsmandApplication.applyTheme` reaches those only when a profile has `do_not_use_animations` on.
+  Wiring only where upstream already points would have given the border to every profile except the
+  one that asked for it.
+- **The border colour is its own name**, not a reused divider, so that recolouring dividers in the
+  theming page cannot silently erase the outline of every dialog in the app.
+
+### The release notes in yellow
+
+The what's-new dialog on first launch came up with upstream's near-white title and body on the
+fork's black card. Material paints a dialog's title and message straight from the theme, so the
+fork's colour overrides — which reach only what goes through `ColorUtilities` — never touched them.
+The fork's alert-dialog theme now sets `textColorPrimary` and `textColorSecondary`, and
+`WhatsNewDialogFragment` also colours its own title and message beside the buttons it already
+coloured. Its AppCompat title id is resolved by name at runtime, since a compile-time reference to
+another library's internal id is the kind that breaks on the next dependency bump.
+
 ## 5.4.0+039 — 2026-09-08
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
