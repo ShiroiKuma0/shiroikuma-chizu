@@ -59,7 +59,7 @@ public class WhatsNewDialogFragment extends BaseAlertDialogFragment {
 		return builder.create();
 	}
 
-	// shiroikuma fork: black card with a yellow border, yellow buttons
+	// shiroikuma fork: black card with a yellow border, yellow buttons, yellow text
 	@Override
 	public void onStart() {
 		super.onStart();
@@ -80,6 +80,28 @@ public class WhatsNewDialogFragment extends BaseAlertDialogFragment {
 					alertDialog.getButton(which).setTextColor(accent);
 				}
 			}
+			// The release notes are this dialog's whole content, and they were the one part still
+			// arriving in upstream's near-white: the title and message are painted by Material from
+			// the dialog theme rather than through ColorUtilities, so the fork's overrides never
+			// reached them. chizu_dialog_styles.xml now sets those colours for every alert dialog;
+			// this stays because it is the dialog 白い熊 named, and it costs two lines to be sure.
+			int text = net.osmand.plus.chizu.ChizuTheme.getColor(app, net.osmand.plus.chizu.ChizuTheme.Slot.TEXT);
+			// The title id belongs to AppCompat's alert layout, not to this app and not to the
+			// framework, so it is looked up by name: a compile-time reference to another library's
+			// internal id is the kind of thing that breaks on an upstream dependency bump.
+			paintText(dialog, getResources().getIdentifier("alertTitle", "id",
+					requireContext().getPackageName()), text);
+			paintText(dialog, android.R.id.message, text);
+		}
+	}
+
+	private void paintText(@NonNull Dialog dialog, int viewId, int color) {
+		if (viewId == 0) {
+			return;
+		}
+		android.view.View view = dialog.findViewById(viewId);
+		if (view instanceof android.widget.TextView) {
+			((android.widget.TextView) view).setTextColor(color);
 		}
 	}
 
