@@ -101,7 +101,7 @@ public class NominatimPoiFilter extends PoiUIFilter {
 			}
 			log.info("Online search: " + urlq);
 			URLConnection connection = NetworkUtils.getHttpURLConnection(urlq); //$NON-NLS-1$
-			connection.setRequestProperty("User-Agent", Version.getFullVersion(app));
+			connection.setRequestProperty("User-Agent", Version.getUserAgent(app));
 
 			InputStream stream = connection.getInputStream();
 			XmlPullParser parser = PlatformUtil.newXMLPullParser();
