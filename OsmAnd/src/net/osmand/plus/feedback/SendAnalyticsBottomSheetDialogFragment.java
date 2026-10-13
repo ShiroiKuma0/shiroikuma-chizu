@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
 import net.osmand.PlatformUtil;
+import net.osmand.plus.chizu.ChizuTelemetry;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.base.MenuBottomSheetDialogFragment;
@@ -151,6 +152,10 @@ public class SendAnalyticsBottomSheetDialogFragment extends MenuBottomSheetDialo
 	}
 
 	public static boolean shouldShowDialog(@NonNull OsmandApplication app) {
+		// shiroikuma fork: never ask to send usage data to osmand.net
+		if (ChizuTelemetry.DISABLED) {
+			return false;
+		}
 		OsmandSettings settings = app.getSettings();
 		if (app.getAppCustomization().isFeatureEnabled(FRAGMENT_SEND_ANALYTICS_ID)) {
 			int requestsCount = settings.SEND_ANONYMOUS_DATA_REQUESTS_COUNT.get();

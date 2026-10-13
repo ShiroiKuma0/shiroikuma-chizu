@@ -143,6 +143,14 @@ public class FeedbackHelper {
 
 	// zip of exception.log and the newest system crash traces (tombstones, ANR traces) uploaded to osmand.net
 	public void sendCrashReport(@Nullable CallbackWithObject<Boolean> callback) {
+		// shiroikuma fork: nothing is uploaded to osmand.net — crash logs stay on the device
+		if (callback != null) {
+			callback.processResult(false);
+		}
+	}
+
+	@SuppressWarnings("unused")
+	private void uploadCrashReport(@Nullable CallbackWithObject<Boolean> callback) {
 		Map<String, String> params = new LinkedHashMap<>();
 		PackageInfo info = getPackageInfo();
 		params.put("platform", "android");
