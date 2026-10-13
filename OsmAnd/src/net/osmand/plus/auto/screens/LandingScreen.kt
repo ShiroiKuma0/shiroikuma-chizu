@@ -36,7 +36,8 @@ class LandingScreen(
                 app.carNavigationSession?.updateCarNavigation(app.locationProvider.lastKnownLocation)
                 movingSinceTime = 0
                 autoFreeRideStarted = false
-                app.locationProvider.addLocationListener(this@LandingScreen)
+                // shiroikuma fork: no auto Free ride from the menu — the session already opens in
+                // Free ride, so reaching this screen means 白い熊 asked for the menu; keep it up
             }
 
             override fun onPause(owner: LifecycleOwner) {
