@@ -10,6 +10,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.FragmentManager;
 
 import net.osmand.aidlapi.OsmAndCustomizationConstants;
+import net.osmand.plus.chizu.ChizuTelemetry;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.activities.MapActivity;
@@ -45,6 +46,10 @@ public class CrashBottomSheetDialogFragment extends MenuBottomSheetDialogFragmen
 
 	public static boolean shouldShow(@Nullable OsmandSettings settings, @NonNull MapActivity activity) {
 		OsmandApplication app = activity.getApp();
+		// shiroikuma fork: no "send the crash report to osmand.net" prompt
+		if (ChizuTelemetry.DISABLED) {
+			return false;
+		}
 		if (app.getAppCustomization().isFeatureEnabled(FRAGMENT_CRASH_ID)) {
 			if (app.getRoutingHelper().isFollowingMode()) {
 				return false;
