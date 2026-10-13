@@ -3,6 +3,69 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+001 — 2026-10-13
+
+**Rebased onto OsmAnd 5.5.0** (`master` at `998211b87d`, from `7c597b19bd` — 1,826 upstream
+commits). All 47 fork commits carried over; the build counter restarts at `+001`.
+
+### What 5.5.0 brings from upstream
+
+- **Spatial search** finished and on by default: street, city and POI combinations, “did you mean”
+  for typos, per-language abbreviation rules; address lookup unified into one service.
+- **Routing**: boat routing along fairways and open water; better alternative routes and shortcut
+  corrections in fast routing; a native memory budget that stops a calculation before it runs out.
+- **Navigation**: lane guidance where `turn:lanes=none`, directions for intermediate points,
+  follow-track fixes; a travel-speed screen whose ETA can follow the measured average speed;
+  Google Assistant / Gemini actions (`geo.action:`).
+- **Plugins**: OsmAnd AI Connector, Panoramax street-level imagery, a Media tab in My Places, a BLE
+  power-meter sensor, AIS on Material 3 with NMEA as a location source.
+- **Map**: dashed and dotted track lines, folder default styles, per-track show/hide quick action;
+  coordinate-grid formats; uphill contour labels; 3D buildings out of the SRTM plugin.
+- **Android Auto**: a car-only day/night map mode, the separate car map magnifier back, leak fixes.
+- **Storage**: a “Visible external storage” option; a folder that cannot be written is refused with
+  the reason, and a failed move is no longer reported as success.
+- **Platform**: compile/target SDK 36, AGP 8.10.1, Gradle 8.11.1; much of the core mirrored to
+  Kotlin Multiplatform; Material 3 dropdowns and date picker; ~500 translation updates.
+
+### Android Auto opens straight onto the map
+
+- **The session opens in Free ride**, not on the destinations menu. The menu is pushed underneath,
+  so the map's list button still brings it back. With a route already calculated, the session goes
+  straight to navigation instead of offering “Continue navigation”.
+- **The menu stays up when asked for.** 5.5.0 added a switch from the menu to Free ride after 15 s
+  above 5 km/h (#25783), re-armed every time the menu resumes. Since the session already starts in
+  Free ride, reaching the menu means it was wanted; the switch is not armed.
+
+### The car map stays 3D
+
+The car map could drop to flat 2D mid-route — after a recalculation, a lost fix, or the offscreen
+renderer being set up again from the per-profile saved angle — and stay flat until the 3D button
+was tapped. `SurfaceRenderer` now treats 2D as something only the 2D/3D button may choose: any
+other arrival at the flat angle is tilted back to the zoom's 3D angle after 0.4 s, and the renderer
+set-up checks the angle it starts from, so every session begins in 3D.
+
+### Nothing goes to osmand.net on its own
+
+5.5.0 uploads crash reports (ANR and native traces, logcat, a heap and state summary) to
+`osmand.net/api/crash-report` and logs `screen_open` usage events for `submit_analytics`. A single
+switch, `ChizuTelemetry.DISABLED`, turns off:
+
+- the crash-report upload, and the “send the crash report” sheet after a crash;
+- the usage-analytics upload, and the periodic prompt asking to opt in.
+
+Crash logs and the local analytics database stay on the device; Help can still email a crash log by
+hand.
+
+### Carried through the rebase
+
+- **Storage folder**: upstream's new write check explains a refused folder in a dialog; the fork's
+  All-files-access prompt now runs inside that check, first, when the grant is the reason.
+- **Position marker**: still the yellow 2D icon with a black border, keeping upstream's new
+  broken-model reset.
+- **Flashes**: the black-yellow card now draws on the display context upstream moved toasts to.
+- **Car screens**: the black-yellow actions and icons applied to upstream's new header layouts.
+- **Walk pictures**: the night-mode override kept on upstream's new night-mode call.
+
 ## 5.4.0+042 — 2026-09-10
 
 Base unchanged (OsmAnd `master` at `7c597b19bd`). Fork-side only.
