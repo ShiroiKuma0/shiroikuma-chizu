@@ -320,6 +320,13 @@ public class NavigationSession extends Session implements NavigationListener, Os
 		} else if (!isLocationPermissionAvailable()) {
 			getScreenManager().push(landingScreen);
 			screenToReturn = new RequestPermissionScreen(getCarContext(), locationPermissionGrantedCallback);
+		} else if (routingHelper.isRouteCalculated()) {
+			// shiroikuma fork: open straight into Free ride (or the running navigation), never
+			// the menu. The menu stays underneath — the list button on the map brings it back.
+			app.runInUIThread(this::startNavigationScreen);
+		} else {
+			getScreenManager().push(landingScreen);
+			screenToReturn = new NavigationScreen(getCarContext(), settingsAction, this);
 		}
 
 		Uri uri = intent.getData();
