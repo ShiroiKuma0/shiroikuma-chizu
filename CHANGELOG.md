@@ -3,6 +3,26 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+002 — 2026-10-13
+
+Base unchanged (OsmAnd 5.5.0, `master` at `998211b87d`). Fork-side only.
+
+### Map downloads work again: an ASCII User-Agent
+
+Maps & Resources → Updates → **Update all** started every map and downloaded nothing. Each item
+ended in `I/O error: File was not fully read`. The storage folder and All-files access were fine,
+and so was the network.
+
+- **The cause:** every request sent the app's display name as its HTTP User-Agent —
+  `白い熊 地図 5.5.0+001` — and `download.osmand.net` answers a non-ASCII User-Agent with
+  **HTTP 400**. `DownloadFileHelper` retries a non-200 response without logging it, then reports
+  only that the file was not fully read. Reproduced against the live server: the same request with
+  an ASCII User-Agent is redirected to a mirror and gets `206 Partial Content`.
+- **The fix:** a new `Version.getUserAgent` returns `shiroikuma-chizu <version>`. All seven
+  User-Agent call sites use it: map downloads, the shared `AndroidNetworkUtils` requests, OSM
+  editing, OSM notes, online routing and Nominatim search. The name shown in the app and the
+  `osmandver` URL parameter are unchanged.
+
 ## 5.5.0+001 — 2026-10-13
 
 **Rebased onto OsmAnd 5.5.0** (`master` at `998211b87d`, from `7c597b19bd` — 1,826 upstream
