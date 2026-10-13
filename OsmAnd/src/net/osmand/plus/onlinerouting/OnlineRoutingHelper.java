@@ -136,7 +136,7 @@ public class OnlineRoutingHelper {
 		long tm = System.currentTimeMillis();
 		LOG.info("Calling online routing: " + url);
 		HttpURLConnection connection = NetworkUtils.getHttpURLConnection(url);
-		connection.setRequestProperty("User-Agent", Version.getFullVersion(app));
+		connection.setRequestProperty("User-Agent", Version.getUserAgent(app));
 		connection.setRequestMethod(method);
 		connection.setConnectTimeout(AndroidNetworkUtils.CONNECT_TIMEOUT);
 		connection.setReadTimeout(AndroidNetworkUtils.READ_TIMEOUT);

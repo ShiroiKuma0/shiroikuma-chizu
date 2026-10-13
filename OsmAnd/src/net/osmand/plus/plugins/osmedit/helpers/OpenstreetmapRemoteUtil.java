@@ -150,7 +150,7 @@ public class OpenstreetmapRemoteUtil implements OpenstreetmapUtil {
 		connection.setConnectTimeout(AndroidNetworkUtils.CONNECT_TIMEOUT);
 		connection.setReadTimeout(AndroidNetworkUtils.READ_TIMEOUT);
 		connection.setRequestMethod(requestMethod);
-		connection.setRequestProperty("User-Agent", Version.getFullVersion(app)); //$NON-NLS-1$
+		connection.setRequestProperty("User-Agent", Version.getUserAgent(app)); //$NON-NLS-1$
 		StringBuilder responseBody = new StringBuilder();
 		String token = plugin.OSM_USER_NAME_OR_EMAIL.get() + ":" + plugin.OSM_USER_PASSWORD.get(); //$NON-NLS-1$
 		connection.addRequestProperty("Authorization", "Basic " + Base64.encode(token.getBytes("UTF-8"))); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
