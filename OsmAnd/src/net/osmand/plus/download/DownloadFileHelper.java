@@ -114,7 +114,7 @@ public class DownloadFileHelper {
 							}
 						}
 						HttpURLConnection conn = NetworkUtils.getHttpURLConnection(url);
-						conn.setRequestProperty("User-Agent", Version.getFullVersion(ctx)); //$NON-NLS-1$
+						conn.setRequestProperty("User-Agent", Version.getUserAgent(ctx)); //$NON-NLS-1$
 						conn.setReadTimeout(AndroidNetworkUtils.READ_TIMEOUT);
 						if (fileread > 0) {
 							String range = "bytes="+fileread + "-" + (length -1); //$NON-NLS-1$ //$NON-NLS-2$

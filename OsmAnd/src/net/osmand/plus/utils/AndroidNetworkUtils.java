@@ -497,7 +497,7 @@ public class AndroidNetworkUtils {
 	                                                   @Nullable String contentType, boolean post) throws IOException {
 		HttpURLConnection connection = NetworkUtils.getHttpURLConnection(url);
 		connection.setRequestProperty("Accept-Charset", "UTF-8");
-		connection.setRequestProperty("User-Agent", app != null ? Version.getFullVersion(app) : "OsmAnd");
+		connection.setRequestProperty("User-Agent", app != null ? Version.getUserAgent(app) : "OsmAnd");
 		connection.setConnectTimeout(CONNECT_TIMEOUT);
 		connection.setReadTimeout(READ_TIMEOUT);
 		if (body != null && post) {
@@ -566,7 +566,7 @@ public class AndroidNetworkUtils {
 		Bitmap res = null;
 		try {
 			URLConnection connection = NetworkUtils.getHttpURLConnection(url);
-			connection.setRequestProperty("User-Agent", Version.getFullVersion(ctx));
+			connection.setRequestProperty("User-Agent", Version.getUserAgent(ctx));
 			connection.setConnectTimeout(CONNECT_TIMEOUT);
 			connection.setReadTimeout(READ_TIMEOUT);
 			BufferedInputStream inputStream = new BufferedInputStream(connection.getInputStream(), 8 * 1024);
