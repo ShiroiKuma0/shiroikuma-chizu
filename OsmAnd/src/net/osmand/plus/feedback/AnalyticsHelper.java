@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import net.osmand.PlatformUtil;
+import net.osmand.plus.chizu.ChizuTelemetry;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.Version;
 import net.osmand.plus.settings.backend.ApplicationMode;
@@ -196,6 +197,10 @@ public class AnalyticsHelper extends SQLiteOpenHelper {
 	}
 
 	public boolean submitCollectedDataAsync() {
+		// shiroikuma fork: usage data never leaves the device
+		if (ChizuTelemetry.DISABLED) {
+			return false;
+		}
 		if (app.getSettings().isInternetConnectionAvailable()) {
 			List<Integer> allowedTypes = new ArrayList<>();
 			if (app.getSettings().SEND_ANONYMOUS_MAP_DOWNLOADS_DATA.get()) {
