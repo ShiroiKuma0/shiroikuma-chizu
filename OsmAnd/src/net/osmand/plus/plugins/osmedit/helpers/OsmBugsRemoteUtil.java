@@ -145,7 +145,7 @@ public class OsmBugsRemoteUtil implements OsmBugsUtil {
 		connection.setConnectTimeout(AndroidNetworkUtils.CONNECT_TIMEOUT);
 		connection.setReadTimeout(AndroidNetworkUtils.READ_TIMEOUT);
 		connection.setRequestMethod(requestMethod);
-		connection.setRequestProperty("User-Agent", Version.getFullVersion(app));
+		connection.setRequestProperty("User-Agent", Version.getUserAgent(app));
 		if (!anonymous) {
 			String token = plugin.OSM_USER_NAME_OR_EMAIL.get() + ":" + plugin.OSM_USER_PASSWORD.get();
 			connection.addRequestProperty("Authorization", "Basic " + Base64.encode(token.getBytes(StandardCharsets.UTF_8)));
