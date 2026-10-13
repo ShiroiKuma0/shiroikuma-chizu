@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless backup an automation app can trigger and a verified-caller data door that survives a wipe, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, and the same look carried into Android Auto.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless backup an automation app can trigger and a verified-caller data door that survives a wipe, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, nothing reported to osmand.net, and an Android Auto that opens straight onto a 3D map in the same colors.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.4.0+042`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.5.0+001`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -76,10 +76,19 @@ In-app toasts are no longer the unthemable white system pill: they render as bla
 
 ---
 
-## 🚗 Android Auto, in the same colors
+## 🚗 Android Auto: straight to the map, in 3D, in the same colors
+Plug in and you are on the map. The car session opens directly in **Free ride** — or straight into the running navigation, if a route is already set — instead of stock's menu of destinations that had to be tapped through first. The menu is still underneath, one tap away on the map's list button, and when you open it on purpose it stays open: upstream 5.5's switch back to Free ride after 15 s of driving is off.
+
+The map **stays 3D**. Stock could drop the car map to flat 2D mid-route — after a recalculation, a lost fix, or a renderer re-setup reading the saved flat angle — and leave it there until the 3D button was tapped again. Here, only the 2D/3D button can flatten it; any other return to 2D is tilted back within half a second, and every session starts in 3D.
+
 The car screen is black and yellow as far as the car API reaches. Stock declares no car theme at all, so the host picked its own grey for everything — including the card behind the turn instructions, which OsmAnd was asking the host to colour for it. This fork declares one, and paints the rest itself: black navigation card, yellow glyphs on every action, filled yellow buttons for Stop / Start / Apply / Allow / permission and purchase prompts, yellow row subtitles, yellow ETA and distance, yellow destination pin and map pins. The launcher icon renders full-bleed (no white rim) and car flashes are dark navigation alerts rather than white toast pills.
 
 The colours come from the same theming page as the rest of the app, so recolouring there recolours the car — except for the few the host resolves for itself out of the manifest theme, the ETA numbers among them, which hold the fork's own yellow. What the car API keeps to itself stays host-drawn — row **titles** cannot take a colour span at all, and neither can the list background or header bar. The map keeps the full OpenGL 3D renderer, with a self-healing guard that re-enables it after a crash-loop auto-disable.
+
+---
+
+## 🔒 Nothing sent home
+OsmAnd 5.5 uploads crash reports — system traces, logcat, a state summary — and screen-by-screen usage events to osmand.net. In this fork both uploads, and the prompts that ask for them, are switched off at one place in the code. Crash logs and the local usage log stay on the phone, where the Help screen can still email a crash log by hand.
 
 ---
 
