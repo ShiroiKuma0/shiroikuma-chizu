@@ -53,6 +53,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	private static final double VISIBLE_AREA_Y_MIN_DETECTION_SIZE = 1.025;
 	private static final int MAP_RENDER_MESSAGE = OsmAndConstants.UI_HANDLER_MAP_VIEW + 7;
 	private static final int MAX_FRAME_RATE = 20;
+	private static final long KEEP_3D_DELAY_MS = 400;
 	public static final int PINCH_TO_ZOOM_ITERATION_DELAY = 200;
 
 	private final CarContext carContext;
@@ -80,6 +81,12 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	private boolean darkMode;
 
 	private SurfaceRendererCallback callback;
+
+	// shiroikuma fork: the car map stays 3D. Only the 2D/3D button may flatten it; any other
+	// path back to 2D (a recalculation, a lost fix, a renderer re-setup reading the flat
+	// per-profile angle) is tilted back. Reset on every new session, so it always starts in 3D.
+	private boolean flatByUser;
+	private final Runnable keep3D = this::keep3D;
 
 	private static final float surfaceWidthMultiply = 0.5f;
 	private int surfaceAdditionalWidth = 0;
@@ -330,6 +337,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 			if (mapView != null && mapView.getAnimatedDraggingThread() != null && offscreenMapRendererView != null) {
 				int adjustedTiltAngle = mapView.getAdjustedTiltAngle(mapView.getZoom(), true);
 				float newAngle = mapView.getElevationAngle() < DEFAULT_ELEVATION_ANGLE ? DEFAULT_ELEVATION_ANGLE : adjustedTiltAngle;
+				flatByUser = newAngle >= DEFAULT_ELEVATION_ANGLE;
 				getApp().getSettings().setLastKnownMapElevation(newAngle);
 				mapView.getAnimatedDraggingThread().startTilting(newAngle, 0.0f);
 			}
@@ -454,6 +462,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 							mapView.setMapRenderer(offscreenMapRendererView, false);
 							mapView.setElevationAngle(elevationAngle);
 							mapView.addElevationListener(this);
+							onElevationChanging(mapView.getElevationAngle()); // shiroikuma fork: start in 3D
 							getApp().getOsmandMap().getMapLayers().updateMapSource(mapView, null);
 							PluginsHelper.refreshLayers(getApp(), null);
 							offscreenMapRendererView.addListener(this);
@@ -590,6 +599,24 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 		SurfaceRendererCallback callback = this.callback;
 		if (callback != null) {
 			callback.onElevationChanging(angle);
+		}
+		if (angle >= DEFAULT_ELEVATION_ANGLE && !flatByUser) {
+			getApp().runInUIThread(keep3D, KEEP_3D_DELAY_MS);
+		}
+	}
+
+	private void keep3D() {
+		synchronized (this) {
+			OsmandMapTileView mapView = this.mapView;
+			if (flatByUser || mapView == null || offscreenMapRendererView == null
+					|| mapView.getMapRenderer() != offscreenMapRendererView
+					|| mapView.getElevationAngle() < DEFAULT_ELEVATION_ANGLE
+					|| mapView.getAnimatedDraggingThread() == null) {
+				return;
+			}
+			float angle = mapView.getAdjustedTiltAngle(mapView.getZoom(), true);
+			getApp().getSettings().setLastKnownMapElevation(angle);
+			mapView.getAnimatedDraggingThread().startTilting(angle, 0.0f);
 		}
 	}
 
