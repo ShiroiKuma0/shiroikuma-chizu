@@ -114,6 +114,14 @@ public class Version {
 		return version.appName + " " + version.appVersion;
 	}
 
+	/**
+	 * shiroikuma fork: the HTTP User-Agent. The display name is 白い熊 地図, and download.osmand.net
+	 * answers a non-ASCII User-Agent with 400 — so every request sends an ASCII one instead.
+	 */
+	public static String getUserAgent(@NonNull OsmandApplication app) {
+		return "shiroikuma-chizu " + getAppVersion(app);
+	}
+
 	public static String getAppVersion(@NonNull OsmandApplication app) {
 		Version version = getVersion(app);
 		return version.appVersion;
