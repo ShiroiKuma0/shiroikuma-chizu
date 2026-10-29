@@ -3,6 +3,57 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+006 — 2026-10-29
+
+Base unchanged (OsmAnd 5.5.0, `master` at `998211b87d`). Fork-side only.
+
+### 渋滞回避 — route choice around traffic jams
+
+Stock routing ignores traffic, so a route went straight through streets the Google traffic overlay
+showed red. 地図 now reads that traffic itself and routes around it, offline.
+
+- **Traffic sampling.** A car route is sampled every 15 m (20 m kept clear of each junction) on
+  Google’s `m,traffic` tiles at z15, styled to show nothing but the traffic lines. Each pixel is
+  classed in HSV as green, yellow, red or dark red; the search looks right of the line first,
+  where two-way traffic is drawn. A segment is graded by majority of at least three samples.
+  Tiles are cached for 2 min, so the candidates share them.
+- **Route candidates at planning:** avoid red; avoid red and long yellow (runs over 300 m); avoid
+  red and all yellow — each ranked by traffic-adjusted time (yellow 25 km/h, red 10 km/h, dark
+  red 5 km/h), with one refinement pass for jams a detour runs into itself. Then the plain
+  shortest route (no bans), then the plain fastest at the bottom, labelled as ignoring traffic.
+  Routes sharing more than 85% of their length are merged; with fewer than two left there is no
+  chooser. The first 400 m and last 200 m are never banned.
+- **The router takes bans per calculation.** Jammed road ids are injected as impassable into each
+  calculation’s own router copy, never the shared configuration; the chosen route’s bans persist
+  for off-route recalculations and clear when the route ends. The shortest candidate runs with
+  `short_way` and without HH routing.
+- **Chooser:** a card per route in the pull-up (colour swatch, label, time, distance, ETA, time in
+  traffic), with “Checking traffic…” while the candidates calculate; the current route stays
+  usable and Go works at once.
+- **Map drawing:** every candidate is drawn at once — the selected one in its colour with a black
+  casing, the others thinner and translucent in their own colours, all on a soft dark halo. The
+  map frames all of them. Tapping within 24 dp of a line selects that route.
+- **Calm preview map:** the road style switches to Pale while a route is previewed and goes back on
+  Go, cancel or leaving the map — or on the next start, after a crash mid-preview.
+- **Stats strip:** a shaded strip under the status bar shows the selected route’s time, distance,
+  arrival time and time in traffic, visible with the pull-up minimised.
+- **Rotation in preview:** two-finger rotation works in route preview even in north-up mode, and
+  the compass button appears there to turn the map back north.
+- **Reroute offers while driving:** every few minutes the next 40 km are re-sampled; a new red jam
+  is costed against a detour and, if it saves enough, offered as “Avoid jam on <street>: −N
+  min?”. No answer within 20 s counts as no, and a declined jam is not offered again for 10 min.
+- **Settings:** a new Traffic section on the 白い熊 地図 page — on/off (off by default), route
+  chooser on/off, re-check interval, minimum saving, long-yellow threshold. Exported with the rest
+  of the fork’s settings.
+
+### Google tile requests no longer identify the phone
+
+Map tiles were fetched with the app’s full version string as User-Agent — unique worldwide, so it
+linked every Google tile request across IP changes — and the traffic overlay URL was plain http.
+Requests to Google hosts are now upgraded to https and sent with a generic mobile-browser
+User-Agent, no Referer and no HTTP cache. Other tile sources keep the identifying User-Agent their
+usage policies ask for.
+
 ## 5.5.0+002 — 2026-10-13
 
 Base unchanged (OsmAnd 5.5.0, `master` at `998211b87d`). Fork-side only.
