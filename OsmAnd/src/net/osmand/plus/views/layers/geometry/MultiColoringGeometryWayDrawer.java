@@ -89,6 +89,10 @@ public class MultiColoringGeometryWayDrawer<T extends MultiColoringGeometryWayCo
 		Paint borderPaint = getContext().getBorderPaint();
 		int borderColor = coloringType.isGradient() ? borderPaint.getColor() : 0;
 		float borderWidth = coloringType.isGradient() ? borderPaint.getStrokeWidth() : 0;
+		if (chizuCasingWidth > 0 && !coloringType.isGradient()) {
+			borderColor = chizuCasingColor;
+			borderWidth = style.getWidth(0) + 2 * chizuCasingWidth;
+		}
 
 		Bitmap pointBitmap = getArrowBitmap(style, false);
 		Bitmap specialPointBitmap = getArrowBitmap(style, true);
@@ -151,8 +155,36 @@ public class MultiColoringGeometryWayDrawer<T extends MultiColoringGeometryWayCo
 		return colors;
 	}
 
+	// 白い熊 地図 渋滞回避: a dark casing around the line, so a route stands out from the streets
+	private int chizuCasingColor;
+	private float chizuCasingWidth;
+
+	/** Casing on each side of the line, px; 0 turns it off. */
+	public void setChizuCasing(int color, float widthPx) {
+		chizuCasingColor = color;
+		chizuCasingWidth = widthPx;
+	}
+
+	private void drawChizuCasing(@NonNull Canvas canvas, @NonNull DrawPathData pathData) {
+		if (chizuCasingWidth <= 0 || coloringType.isGradient() || pathData.style == null
+				|| pathData.style.getColor(0) == 0) {
+			return;
+		}
+		float width = pathData.style.getWidth(0);
+		if (width <= 0) {
+			width = getContext().getAttrs().paint.getStrokeWidth();
+		}
+		Paint casing = getContext().getCustomPaint();
+		casing.setShader(null);
+		casing.setPathEffect(null);
+		casing.setColor(chizuCasingColor);
+		casing.setStrokeWidth(width + 2 * chizuCasingWidth);
+		canvas.drawPath(pathData.path, casing);
+	}
+
 	@Override
 	public void drawPath(Canvas canvas, DrawPathData pathData) {
+		drawChizuCasing(canvas, pathData);
 		Paint strokePaint = getContext().getCustomPaint();
 		if (coloringType.isCustomColor() || coloringType.isTrackSolid() || coloringType.isRouteInfoAttribute()) {
 			drawCustomSolid(canvas, pathData);

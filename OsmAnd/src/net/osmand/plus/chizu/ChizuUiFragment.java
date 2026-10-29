@@ -147,6 +147,24 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addSubgroup(R.string.chizu_subgroup_shape, accent, 1);
 		addMapButtonSliders(2);
 
+		// ===== Traffic (渋滞回避) =====
+		addSection(R.string.chizu_section_traffic, accent);
+		addSwitchRow(R.string.chizu_traffic_enabled, R.string.chizu_traffic_enabled_descr, 1,
+				ChizuTrafficPrefs.isEnabled(requireContext()),
+				checked -> ChizuTrafficPrefs.setEnabled(requireContext(), checked));
+		addSwitchRow(R.string.chizu_traffic_chooser, R.string.chizu_traffic_chooser_descr, 1,
+				ChizuTrafficPrefs.isChooserEnabled(requireContext()),
+				checked -> ChizuTrafficPrefs.setChooserEnabled(requireContext(), checked));
+		addSliderRow(getString(R.string.chizu_traffic_interval), 1, 1, 15,
+				ChizuTrafficPrefs.getIntervalMinutes(requireContext()), " min",
+				(value, preview) -> ChizuTrafficPrefs.setIntervalMinutes(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_traffic_min_saving), 1, 1, 15,
+				ChizuTrafficPrefs.getMinSavingMinutes(requireContext()), " min",
+				(value, preview) -> ChizuTrafficPrefs.setMinSavingMinutes(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_traffic_long_yellow), 1, 100, 1000,
+				ChizuTrafficPrefs.getLongYellowMeters(requireContext()), " m",
+				(value, preview) -> ChizuTrafficPrefs.setLongYellowMeters(requireContext(), value), null);
+
 		// ===== Maintenance =====
 		addSection(R.string.chizu_section_maintenance, accent);
 		addResetRow(1);
@@ -277,6 +295,25 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 
 		box.setOnClickListener(v -> exim.showPanel());
 		holder.addView(box);
+	}
+
+	private interface SwitchListener {
+		void onChanged(boolean checked);
+	}
+
+	private void addSwitchRow(int titleRes, int descrRes, int level, boolean checked, SwitchListener listener) {
+		LinearLayout row = tightRow(level);
+		row.addView(stackedLabels(getString(titleRes), getString(descrRes)));
+
+		SwitchCompat toggle = new SwitchCompat(requireContext());
+		toggle.setThumbTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.ACCENT)));
+		toggle.setTrackTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.DIVIDER)));
+		toggle.setChecked(checked);
+		toggle.setOnCheckedChangeListener((button, isChecked) -> listener.onChanged(isChecked));
+		row.addView(toggle);
+
+		row.setOnClickListener(v -> toggle.toggle());
+		holder.addView(row);
 	}
 
 	// the automation gate lives with the backup rows it drives — 保存復元 contract, §2

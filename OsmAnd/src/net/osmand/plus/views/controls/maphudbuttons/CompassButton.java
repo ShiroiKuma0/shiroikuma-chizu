@@ -123,7 +123,8 @@ public class CompassButton extends MapButton {
 						showCompassModeWidgetDialog();
 						return true;
 					}
-					if (settings.getCompassMode() == NORTH_IS_UP) {
+					// 白い熊 地図: in route preview the map may be turned by hand even in north-up mode
+					if (settings.getCompassMode() == NORTH_IS_UP && !app.getRoutingHelper().isRoutePlanningMode()) {
 						app.showShortToastMessage(R.string.compass_click_north_is_up);
 					} else {
 						rotateMapToNorth();
@@ -172,6 +173,12 @@ public class CompassButton extends MapButton {
 	@Override
 	protected boolean shouldShow() {
 		CompassVisibility visibility = buttonState.getVisibility();
+		// 白い熊 地図: a map turned by hand in route preview gets its face-north button back
+		if (app.getRoutingHelper().isRoutePlanningMode() && visibility != ALWAYS_HIDDEN
+				&& mapActivity.getMapRotate() != 0) {
+			forceHideCompass = false;
+			return true;
+		}
 		forceHideCompass = routeDialogOpened || visibilityHelper.shouldHideCompass() || visibility == ALWAYS_HIDDEN;
 		if (forceHideCompass) {
 			return false;
