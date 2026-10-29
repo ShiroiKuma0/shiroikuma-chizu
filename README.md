@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless backup an automation app can trigger and a verified-caller data door that survives a wipe, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, nothing reported to osmand.net, and an Android Auto that opens straight onto a 3D map in the same colors.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless backup an automation app can trigger and a verified-caller data door that survives a wipe, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, nothing reported to osmand.net, an Android Auto that opens straight onto a 3D map in the same colors, and Waze-like route choice around traffic jams read off Google’s traffic tiles without telling Google who is asking.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.5.0+002`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.5.0+006`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -84,6 +84,17 @@ The map **stays 3D**. Stock could drop the car map to flat 2D mid-route — afte
 The car screen is black and yellow as far as the car API reaches. Stock declares no car theme at all, so the host picked its own grey for everything — including the card behind the turn instructions, which OsmAnd was asking the host to colour for it. This fork declares one, and paints the rest itself: black navigation card, yellow glyphs on every action, filled yellow buttons for Stop / Start / Apply / Allow / permission and purchase prompts, yellow row subtitles, yellow ETA and distance, yellow destination pin and map pins. The launcher icon renders full-bleed (no white rim) and car flashes are dark navigation alerts rather than white toast pills.
 
 The colours come from the same theming page as the rest of the app, so recolouring there recolours the car — except for the few the host resolves for itself out of the manifest theme, the ETA numbers among them, which hold the fork's own yellow. What the car API keeps to itself stays host-drawn — row **titles** cannot take a colour span at all, and neither can the list background or header bar. The map keeps the full OpenGL 3D renderer, with a self-healing guard that re-enables it after a crash-loop auto-disable.
+
+---
+
+## 🚦 Around the jams, Waze-style — without Waze
+Plan a car route and 地図 reads Google’s live traffic layer along it — the same red and yellow you see on the traffic overlay — and works out the alternatives itself: one that avoids every red street, one that also avoids long yellow crawls, one that avoids yellow altogether, the plain shortest, and at the bottom the plain fastest that ignores traffic. They are ranked by a traffic-adjusted time, near-duplicates are merged, and when they all come out the same there is no chooser at all.
+
+All of them are drawn on the map at once. The selected route carries a dark casing and its own colour, the others sit beside it thinner but each in a colour of its own, and a soft halo lifts the lot off the street grid while the streets themselves turn pale for the preview. Tap a line on the map — or a card in the pull-up — to pick it; a strip at the top shows its time, distance, arrival and the minutes still spent in traffic, even with the pull-up closed. The preview map turns with two fingers and has a face-north button.
+
+While driving it keeps looking: every few minutes the road ahead is re-read, and a new jam brings one question — “Avoid jam on Jižní spojka: −7 min?” — that times out as a no.
+
+The privacy is the point. Only the tiles along the route are fetched, over https, with a generic browser User-Agent and no Referer — Google learns that some phone looked at some streets, not that it was this one. Routing stays fully offline. The whole thing is off until switched on in the 白い熊 地図 page’s Traffic section.
 
 ---
 
