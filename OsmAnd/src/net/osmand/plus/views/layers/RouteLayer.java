@@ -29,6 +29,7 @@ import net.osmand.plus.R;
 import net.osmand.plus.base.MapViewTrackingUtilities;
 import net.osmand.plus.charts.TrackChartPoints;
 import net.osmand.plus.routing.*;
+import net.osmand.plus.routepreparationmenu.cards.ChizuRouteCandidateCard;
 import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.track.helpers.GpxUtils;
 import net.osmand.plus.utils.NativeUtilities;
@@ -68,6 +69,12 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 	private RouteGeometryWayContext routeWayContext;
 	private PublicTransportGeometryWayContext publicTransportWayContext;
 	private RouteGeometryWay routeGeometry;
+	// 白い熊 地図 渋滞回避: the traffic chooser's other routes, drawn under the selected one
+	private float chizuDensity = 1f;
+	private ChizuWayPool chizuAlternatives;
+	// 白い熊 地図 渋滞回避: a soft dark band under every previewed route, so nearby streets recede
+	private ChizuWayPool chizuHalos;
+	private static final int CHIZU_HALO_COLOR = 0x8C000000;
 	private PublicTransportGeometryWay publicTransportRouteGeometry;
 
 	private final ColoringTypeAvailabilityCache coloringAvailabilityCache;
@@ -141,9 +148,14 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 
 	@Override
 	protected void initGeometries(float density) {
+		chizuDensity = density;
+		chizuAlternatives = new ChizuWayPool(0xC0000000, 2 * density);
+		chizuHalos = new ChizuWayPool(0, 0);
 		routeWayContext = new RouteGeometryWayContext(getContext(), density);
 		routeWayContext.updatePaints(nightMode, attrs, attrsW);
 		routeGeometry = new RouteGeometryWay(routeWayContext);
+		// a black casing keeps the route legible over any street colour
+		routeGeometry.getDrawer().setChizuCasing(0xFF000000, 3 * density);
 		routeGeometry.baseOrder = getBaseOrder();
 
 		publicTransportWayContext = new PublicTransportGeometryWayContext(getContext(), density);
@@ -498,6 +510,19 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 					routeColoringType : ColoringType.DEFAULT;
 			int routeLineColor = getRouteLineColor();
 			float routeLineWidth = getRouteLineWidth(tileBox);
+			ChizuRouteCandidates chooser = helper.getChizuCandidates();
+			boolean chizuChoice = helper.isRoutePlanningMode() && chooser.hasChoice() && chooser.getSelectedIndex() >= 0;
+			if (chizuChoice) {
+				// the selected route wears its card's colour, so card and line match, and is the widest
+				routeLineColor = ChizuRouteCandidateCard.colorFor(chooser.getSelectedIndex());
+				actualColoringType = ColoringType.DEFAULT;
+				routeLineWidth *= 1.2f;
+			}
+			drawChizuHalos(tileBox, canvas, topLatitude, leftLongitude, bottomLatitude, rightLongitude,
+					helper.isRoutePlanningMode() && route.isCalculated(), chizuChoice ? chooser : null, route,
+					routeLineWidth);
+			drawChizuAlternatives(tileBox, canvas, topLatitude, leftLongitude, bottomLatitude, rightLongitude,
+					chizuChoice ? chooser : null, routeLineWidth);
 			boolean shouldShowDirectionArrows = shouldShowDirectionArrows();
 			routeGeometry.setRouteStyleParams(routeLineColor, routeLineWidth, shouldShowDirectionArrows,
 					getDirectionArrowsColor(), actualColoringType, routeInfoAttribute, routeGradientPalette);
@@ -773,7 +798,7 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 
 	@Override
 	public boolean onSingleTap(@NonNull PointF point, @NonNull RotatedTileBox tileBox) {
-		return false;
+		return selectChizuRouteAt(point, tileBox);
 	}
 
 	private int getRadiusPoi(RotatedTileBox tb) {
@@ -882,9 +907,174 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 		resetLayer();
 	}
 
-	/** OpenGL */
+	private void drawChizuAlternatives(@NonNull RotatedTileBox tileBox, @Nullable Canvas canvas,
+	                                   double top, double left, double bottom, double right,
+	                                   @Nullable ChizuRouteCandidates chooser, float mainWidth) {
+		List<RouteCalculationResult> wanted = new ArrayList<>();
+		List<Integer> colors = new ArrayList<>();
+		if (chooser != null) {
+			List<ChizuRouteCandidates.Candidate> list = chooser.getCandidates();
+			for (int i = 0; i < list.size(); i++) {
+				if (i != chooser.getSelectedIndex()) {
+					wanted.add(list.get(i).route);
+					// not selected: shaded (translucent) in its own colour, still told apart from the others
+					colors.add((ChizuRouteCandidateCard.colorFor(i) & 0x00FFFFFF) | 0xB0000000);
+				}
+			}
+		}
+		// larger order = lower in OpenGL: well under the selected route's lines
+		chizuAlternatives.draw(tileBox, canvas, top, left, bottom, right, wanted, colors, mainWidth * 0.75f,
+				getBaseOrder() + 5000);
+	}
+
+	private void drawChizuHalos(@NonNull RotatedTileBox tileBox, @Nullable Canvas canvas,
+	                            double top, double left, double bottom, double right, boolean show,
+	                            @Nullable ChizuRouteCandidates chooser, @NonNull RouteCalculationResult route,
+	                            float mainWidth) {
+		List<RouteCalculationResult> wanted = new ArrayList<>();
+		List<Integer> colors = new ArrayList<>();
+		if (show) {
+			wanted.add(route);
+			if (chooser != null) {
+				for (ChizuRouteCandidates.Candidate c : chooser.getCandidates()) {
+					if (c.route != route) {
+						wanted.add(c.route);
+					}
+				}
+			}
+			for (int i = 0; i < wanted.size(); i++) {
+				colors.add(CHIZU_HALO_COLOR);
+			}
+		}
+		// under every route line and casing
+		chizuHalos.draw(tileBox, canvas, top, left, bottom, right, wanted, colors, mainWidth * 3.5f,
+				getBaseOrder() + 30000);
+	}
+
+	/** Extra route lines of the traffic chooser, each its own geometry way (own OpenGL line collection). */
+	private class ChizuWayPool {
+		private final List<RouteGeometryWay> ways = new ArrayList<>();
+		private final List<RouteCalculationResult> routes = new ArrayList<>();
+		private final List<Integer> colors = new ArrayList<>();
+		private final List<Float> widths = new ArrayList<>();
+		private final int casingColor;
+		private final float casingWidth;
+
+		ChizuWayPool(int casingColor, float casingWidth) {
+			this.casingColor = casingColor;
+			this.casingWidth = casingWidth;
+		}
+
+		void draw(@NonNull RotatedTileBox tileBox, @Nullable Canvas canvas,
+		          double top, double left, double bottom, double right,
+		          @NonNull List<RouteCalculationResult> wanted, @NonNull List<Integer> wantedColors,
+		          float width, int baseOrder) {
+			while (ways.size() < wanted.size()) {
+				RouteGeometryWayContext context = new RouteGeometryWayContext(getContext(), chizuDensity);
+				context.updatePaints(nightMode, attrs, attrsW);
+				RouteGeometryWay way = new RouteGeometryWay(context);
+				way.getDrawer().setChizuCasing(casingColor, casingWidth);
+				ways.add(way);
+				routes.add(null);
+				colors.add(0);
+				widths.add(0f);
+			}
+			for (int k = 0; k < ways.size(); k++) {
+				RouteGeometryWay way = ways.get(k);
+				RouteCalculationResult route = k < wanted.size() ? wanted.get(k) : null;
+				int color = k < wanted.size() ? wantedColors.get(k) : 0;
+				boolean changed = route != routes.get(k) || color != colors.get(k)
+						|| Math.abs(width - widths.get(k)) > 0.5f;
+				routes.set(k, route);
+				colors.set(k, color);
+				widths.set(k, width);
+				if (route == null) {
+					if (changed) {
+						clear(way);
+					}
+					continue;
+				}
+				way.baseOrder = baseOrder + k * 1000;
+				// the palette must stay non-null: the way compares it with equals() on the next frame
+				way.setRouteStyleParams(color, width, false, null, ColoringType.DEFAULT, null, routeGradientPalette);
+				boolean updated = way.updateRoute(tileBox, route);
+				boolean draw = !way.hasMapRenderer() || changed || updated || mapActivityInvalidated || mapRendererChanged;
+				if (draw) {
+					if (way.hasMapRenderer()) {
+						way.resetSymbolProviders();
+					}
+					way.drawSegments(tileBox, canvas, top, left, bottom, right, null, 0);
+				}
+			}
+		}
+
+		void reset() {
+			for (int k = 0; k < ways.size(); k++) {
+				clear(ways.get(k));
+				routes.set(k, null);
+			}
+		}
+
+		private void clear(@NonNull RouteGeometryWay way) {
+			way.clearRoute();
+			if (way.hasMapRenderer()) {
+				way.resetSymbolProviders();
+			}
+		}
+	}
+
+	/** Tapping a route of the traffic chooser selects it; true when the tap was taken. */
+	private boolean selectChizuRouteAt(@NonNull PointF point, @NonNull RotatedTileBox tileBox) {
+		ChizuRouteCandidates chooser = helper.getChizuCandidates();
+		if (!helper.isRoutePlanningMode() || !chooser.hasChoice()) {
+			return false;
+		}
+		MapRendererView mapRenderer = getMapRenderer();
+		QuadRect bounds = tileBox.getLatLonBounds();
+		float best = 24 * tileBox.getDensity();
+		int bestIndex = -1;
+		List<ChizuRouteCandidates.Candidate> list = chooser.getCandidates();
+		for (int i = 0; i < list.size(); i++) {
+			PointF prev = null;
+			for (Location l : list.get(i).route.getImmutableAllLocations()) {
+				boolean inside = l.getLatitude() <= bounds.top + 0.01 && l.getLatitude() >= bounds.bottom - 0.01
+						&& l.getLongitude() >= bounds.left - 0.01 && l.getLongitude() <= bounds.right + 0.01;
+				if (!inside) {
+					prev = null;
+					continue;
+				}
+				PointF p = NativeUtilities.getPixelFromLatLon(mapRenderer, tileBox, l.getLatitude(), l.getLongitude());
+				float d = prev == null ? (float) Math.hypot(p.x - point.x, p.y - point.y)
+						: distanceToSegment(point, prev, p);
+				// the selected route wins ties: it is drawn on top
+				if (d < best || (d == best && i == chooser.getSelectedIndex())) {
+					best = d;
+					bestIndex = i;
+				}
+				prev = p;
+			}
+		}
+		if (bestIndex < 0) {
+			return false;
+		}
+		chooser.select(bestIndex);
+		return true;
+	}
+
+	private static float distanceToSegment(@NonNull PointF p, @NonNull PointF a, @NonNull PointF b) {
+		float dx = b.x - a.x;
+		float dy = b.y - a.y;
+		float len2 = dx * dx + dy * dy;
+		float t = len2 == 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+		return (float) Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+	}
+
 	private void resetLayer() {
 		clearXAxisPoints();
+		if (chizuAlternatives != null) {
+			chizuAlternatives.reset();
+			chizuHalos.reset();
+		}
 		if (routeGeometry != null && routeGeometry.hasMapRenderer()) {
 			routeGeometry.resetSymbolProviders();
 		}

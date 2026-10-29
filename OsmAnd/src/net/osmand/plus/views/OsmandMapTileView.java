@@ -631,8 +631,10 @@ public class OsmandMapTileView implements IMapDownloaderCallback {
 	}
 
 	public boolean mapGestureAllowed(OsmandMapLayer.MapGestureType type) {
+		// 白い熊 地図: route preview may always be rotated with two fingers
 		if (type == MapGestureType.TWO_POINTERS_ROTATION &&
-				settings.getCompassMode() == CompassMode.NORTH_IS_UP) {
+				settings.getCompassMode() == CompassMode.NORTH_IS_UP
+				&& !app.getRoutingHelper().isRoutePlanningMode()) {
 			return false;
 		}
 		for (OsmandMapLayer layer : getLayers()) {

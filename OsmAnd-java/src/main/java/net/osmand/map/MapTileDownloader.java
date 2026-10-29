@@ -236,10 +236,8 @@ public class MapTileDownloader {
 				request.setError(false);
 				HttpURLConnection connection = null;
 				try {
-					connection = NetworkUtils.getHttpURLConnection(request.url);
-					connection.setRequestProperty("User-Agent", Algorithms.isEmpty(request.userAgent) ? USER_AGENT : request.userAgent); 
-					if (request.referer != null)
-						connection.setRequestProperty("Referer", request.referer); 
+					connection = ChizuTileIdentity.open(request.url,
+							Algorithms.isEmpty(request.userAgent) ? USER_AGENT : request.userAgent, request.referer);
 					connection.setConnectTimeout(CONNECT_TIMEOUT);
 					connection.setReadTimeout(READ_TIMEOUT);
 					BufferedInputStream inputStream = new BufferedInputStream(connection.getInputStream(), 8 * 1024);

@@ -217,6 +217,9 @@ public class RoutingHelper {
 		}
 		isFollowingMode = follow;
 		isPauseNavigation = false;
+		if (chizuCandidates != null) {
+			chizuCandidates.onFollowingModeChanged(follow);
+		}
 		if (!follow) {
 			if (app.getNavigationService() != null) {
 				app.getNavigationService().stopIfNeeded(app, NavigationService.USED_BY_NAVIGATION);
@@ -952,6 +955,24 @@ public class RoutingHelper {
 			routeRecalculationHelper.recalculateRouteInBackground(lastFixedLocation, finalLocation,
 					intermediatePoints, currentGPXRoute, route, true, false);
 		}
+	}
+
+	private ChizuRouteCandidates chizuCandidates;
+
+	// 白い熊 地図 渋滞回避: traffic-aware route choice and reroute offers (held strongly here —
+	// route listeners are weak references)
+	@NonNull
+	public synchronized ChizuRouteCandidates getChizuCandidates() {
+		if (chizuCandidates == null) {
+			net.osmand.plus.chizu.ChizuPreviewStyle.restoreIfLeft(app);
+			chizuCandidates = new ChizuRouteCandidates(app, this);
+		}
+		return chizuCandidates;
+	}
+
+	// 白い熊 地図: the route 白い熊 picked in the traffic chooser, or accepted from a reroute offer
+	public void chizuSetActiveRoute(@NonNull RouteCalculationResult res) {
+		routeRecalculationHelper.chizuSetNewRoute(res);
 	}
 
 	public void startRouteCalculationThread(RouteCalculationParams params) {

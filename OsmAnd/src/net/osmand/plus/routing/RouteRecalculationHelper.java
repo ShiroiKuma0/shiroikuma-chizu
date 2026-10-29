@@ -157,6 +157,11 @@ class RouteRecalculationHelper {
 		return routingHelper.getLastProjection();
 	}
 
+	// 白い熊 地図: make an already calculated traffic candidate the active route
+	void chizuSetNewRoute(@NonNull RouteCalculationResult res) {
+		setNewRoute(routingHelper.getRoute(), res, getLastFixedLocation());
+	}
+
 	private void setNewRoute(RouteCalculationResult prevRoute, RouteCalculationResult res, Location start) {
 		routingHelper.setRoute(res);
 		boolean newRoute = !prevRoute.isCalculated();
@@ -426,6 +431,11 @@ class RouteRecalculationHelper {
 			OsmandSettings settings = getSettings();
 			RouteCalculationResult res = provider.calculateRouteImpl(params);
 			routingHelper.getApplication().getMemoryLog().onRouteCalculated();
+			if (params.chizuCandidate) {
+				// 白い熊 地図: traffic candidates report every outcome to their listener, never to the UI
+				params.alternateResultListener.onRouteCalculated(res);
+				return;
+			}
 			if (params.calculationProgress.isCancelled && !params.calculationProgress.memoryLimitExceeded) {
 				return; // stopped by stopCalculation() or the caller; a stop by NativeRoutingMemoryGuard is an error to show
 			}

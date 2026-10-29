@@ -9,6 +9,7 @@ import net.osmand.router.RouteCalculationProgress;
 import net.osmand.shared.gpx.GpxFile;
 
 import java.util.List;
+import java.util.Set;
 
 public class RouteCalculationParams {
 
@@ -35,6 +36,14 @@ public class RouteCalculationParams {
 	public RouteCalculationProgress calculationProgress;
 	public RouteCalculationProgressListener calculationProgressListener;
 	public RouteCalculationResultListener alternateResultListener;
+
+	// 白い熊 地図: roads banned for this calculation only (traffic candidates), never saved
+	public Set<Long> chizuExtraImpassable;
+	// 白い熊 地図: force the shortest-distance route for this calculation only
+	public boolean chizuShortestWay;
+	// 白い熊 地図: a traffic candidate — its listener gets every outcome (failed or cancelled too)
+	// and nothing is shown or stored by the routing helper
+	public boolean chizuCandidate;
 
 	public boolean recheckRouteNearestPoint() {
 		return previousToRecalculate != null && onlyStartPointChanged && start != null && gpxRoute != null;
