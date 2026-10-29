@@ -291,14 +291,14 @@ public class RouteProvider {
 
 		RouteCalculationMethod method = settings.ROUTE_CALCULATION_METHOD.getModeValue(params.mode);
 
-		if (method.isFastRoutingPossible(params.mode)) {
+		if (method.isFastRoutingPossible(params.mode) && !params.chizuShortestWay) {
 			router.setDefaultHHRoutingConfig();
 		} else {
 			router.setHHRoutingConfig(null);
 		}
 
 		router.setHHRouteCpp(!settings.SAFE_MODE.get());
-		router.setUseOnlyHHRouting(method.isFastRoutingOnly(params.mode));
+		router.setUseOnlyHHRouting(method.isFastRoutingOnly(params.mode) && !params.chizuShortestWay);
 
 		ApproximationType approximationType = settings.APPROXIMATION_TYPE.getModeValue(params.mode);
 		router.setUseNativeApproximation(approximationType.isNativeApproximation());
@@ -397,7 +397,7 @@ public class RouteProvider {
 			RoutingParameter pr = e.getValue();
 			String vl;
 			if (key.equals(GeneralRouter.USE_SHORTEST_WAY)) {
-				boolean bool = !settings.FAST_ROUTE_MODE.getModeValue(params.mode);
+				boolean bool = params.chizuShortestWay || !settings.FAST_ROUTE_MODE.getModeValue(params.mode);
 				vl = bool ? "true" : null;
 			} else if (pr.getType() == RoutingParameterType.BOOLEAN) {
 				CommonPreference<Boolean> pref = settings.getCustomRoutingBooleanProperty(key, pr.getDefaultBoolean());
@@ -443,6 +443,15 @@ public class RouteProvider {
 			configuration.routeCalculationTime = System.currentTimeMillis();
 		}
 		configuration.showMinorTurns = settings.SHOW_MINOR_TURNS.getModeValue(params.mode);
+		Set<Long> chizuBans = params.chizuExtraImpassable != null
+				? params.chizuExtraImpassable : ChizuTrafficBans.getActive();
+		if (!chizuBans.isEmpty() && configuration.router != null) {
+			Set<Long> impassable = new HashSet<>(chizuBans);
+			for (long id : configuration.router.getImpassableRoadIds()) {
+				impassable.add(id);
+			}
+			configuration.router.setImpassableRoads(impassable);
+		}
 
 		return configuration;
 	}
