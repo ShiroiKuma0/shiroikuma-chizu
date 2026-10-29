@@ -98,6 +98,9 @@ import net.osmand.plus.plugins.PluginsHelper;
 import net.osmand.plus.plugins.accessibility.MapAccessibilityActions;
 import net.osmand.plus.plugins.audionotes.AudioVideoNoteRecordingMenu;
 import net.osmand.plus.routepreparationmenu.MapRouteInfoMenu;
+import net.osmand.plus.chizu.ChizuRouteStatsStrip;
+import net.osmand.plus.chizu.ChizuTrafficOffer;
+import net.osmand.plus.routing.ChizuRouteCandidates;
 import net.osmand.plus.routing.IRouteInformationListener;
 import net.osmand.plus.routing.RouteCalculationProgressListener;
 import net.osmand.plus.routing.RouteService;
@@ -700,6 +703,14 @@ public class MapActivity extends OsmandActionBarActivity implements DownloadEven
 	@Override
 	protected void onResume() {
 		super.onResume();
+		// 白い熊 地図 渋滞回避: reroute offers are shown while the map is in front
+		ChizuRouteCandidates chizuChooser = app.getRoutingHelper().getChizuCandidates();
+		chizuChooser.setOfferListener((detour, saving, street) ->
+				ChizuTrafficOffer.show(this, chizuChooser, saving, street));
+		if (chizuStatsStrip == null) {
+			chizuStatsStrip = new ChizuRouteStatsStrip(this);
+		}
+		chizuStatsStrip.start();
 		MapActivity mapViewMapActivity = getMapView().getMapActivity();
 		if (activityRestartNeeded || !getMapLayers().hasMapActivity()
 				|| (mapViewMapActivity != null && mapViewMapActivity != this)) {
@@ -1216,6 +1227,10 @@ public class MapActivity extends OsmandActionBarActivity implements DownloadEven
 	@Override
 	protected void onPause() {
 		super.onPause();
+		app.getRoutingHelper().getChizuCandidates().setOfferListener(null);
+		if (chizuStatsStrip != null) {
+			chizuStatsStrip.stop();
+		}
 		settings.LAST_MAP_ACTIVITY_PAUSED_TIME.set(System.currentTimeMillis());
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInMultiWindowMode()) {
 			pendingPause = true;
@@ -1784,6 +1799,13 @@ public class MapActivity extends OsmandActionBarActivity implements DownloadEven
 		for (OsmandPlugin plugin : PluginsHelper.getEnabledPlugins()) {
 			plugin.newRouteIsCalculated(newRoute);
 		}
+	}
+
+	private ChizuRouteStatsStrip chizuStatsStrip;
+
+	// 白い熊 地図 渋滞回避: frame the traffic chooser's routes once they arrive
+	public void chizuFitRoutesToMap() {
+		fitCurrentRouteToMap();
 	}
 
 	private void fitCurrentRouteToMap() {

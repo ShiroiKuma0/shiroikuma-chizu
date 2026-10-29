@@ -87,4 +87,27 @@
 	<string name="chizu_restart_note">Changes apply to screens as they are (re)opened; a few deep surfaces pick them up after an app restart.</string>
 	<string name="chizu_storage_access_message">白い熊 地図 cannot reach “%1$s”. Turn on “All files access”, then come back — your maps and tracks are waiting there.</string>
 	<string name="chizu_exim_shared_folder_note">Greyed categories live in “%1$s”, a shared folder this app does not back up — a backup carries the settings that point at it. Copy the folder itself the way you copy the rest of 〇.</string>
+
+	<!-- 渋滞回避: traffic-aware routing -->
+	<string name="chizu_section_traffic">Traffic (渋滞回避)</string>
+	<string name="chizu_traffic_enabled">Avoid traffic</string>
+	<string name="chizu_traffic_enabled_descr">Reads Google traffic colours along the route (https, anonymous browser identity) and routes around red jams. Car profile only.</string>
+	<string name="chizu_traffic_chooser">Route choice at planning</string>
+	<string name="chizu_traffic_chooser_descr">Offer up to five routes side by side: traffic-aware variants, shortest, and the plain route.</string>
+	<string name="chizu_traffic_interval">Re-check while driving</string>
+	<string name="chizu_traffic_min_saving">Offer a detour from</string>
+	<string name="chizu_traffic_long_yellow">Long yellow from</string>
+	<string name="chizu_traffic_avoid_red">Avoids jams</string>
+	<string name="chizu_traffic_avoid_long_yellow">Avoids jams and long slow stretches</string>
+	<string name="chizu_traffic_avoid_yellow">Avoids jams and all slow traffic</string>
+	<string name="chizu_traffic_shortest">Shortest</string>
+	<string name="chizu_traffic_ignores">Ignores traffic — probably slowest</string>
+	<string name="chizu_traffic_checking">Checking traffic…</string>
+	<string name="chizu_traffic_jam_on_route">%1$s in traffic</string>
+	<string name="chizu_traffic_no_jam">no jams</string>
+	<string name="chizu_traffic_offer_title">Jam ahead</string>
+	<string name="chizu_traffic_offer">Avoid jam on %1$s: −%2$d min?</string>
+	<string name="chizu_traffic_offer_unnamed">Avoid jam ahead: −%1$d min?</string>
+	<string name="chizu_traffic_offer_accept">Avoid</string>
+	<string name="chizu_traffic_offer_decline">Stay</string>
 </resources>

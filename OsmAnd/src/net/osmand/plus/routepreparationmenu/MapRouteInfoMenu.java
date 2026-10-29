@@ -86,6 +86,7 @@ import net.osmand.plus.profiles.ConfigureAppModesBottomSheetDialogFragment;
 import net.osmand.plus.routepreparationmenu.cards.*;
 import net.osmand.plus.routepreparationmenu.cards.BaseCard.CardListener;
 import net.osmand.plus.routing.GPXRouteParams.GPXRouteParamsBuilder;
+import net.osmand.plus.routing.ChizuRouteCandidates;
 import net.osmand.plus.routing.IRouteInformationListener;
 import net.osmand.plus.routing.RouteCalculationResult;
 import net.osmand.plus.routing.RoutingHelper;
@@ -122,7 +123,10 @@ import java.io.File;
 import java.lang.ref.WeakReference;
 import java.util.*;
 
-public class MapRouteInfoMenu implements IRouteInformationListener, CardListener, FavoritesListener {
+public class MapRouteInfoMenu implements IRouteInformationListener, CardListener, FavoritesListener,
+		ChizuRouteCandidates.Listener {
+
+	private boolean chizuCandidatesRegistered;
 
 	private static final int BUTTON_ANIMATION_DELAY = 2000;
 	public static final int DEFAULT_MENU_STATE = 0;
@@ -216,8 +220,28 @@ public class MapRouteInfoMenu implements IRouteInformationListener, CardListener
 			portraitMode = AndroidUiHelper.isOrientationPortrait(mapActivity);
 			animationsHandler = new Handler();
 			selectNavPointController = new SelectNavigationPointController(app);
+			if (!chizuCandidatesRegistered) {
+				app.getRoutingHelper().getChizuCandidates().addListener(this);
+				chizuCandidatesRegistered = true;
+			}
 		}
 	}
+
+	// 白い熊 地図 渋滞回避: the chooser's list, selection or working state changed
+	@Override
+	public void onCandidatesChanged() {
+		updateMenu();
+		MapActivity mapActivity = getMapActivity();
+		if (mapActivity != null) {
+			List<ChizuRouteCandidates.Candidate> list = mapActivity.getRoutingHelper().getChizuCandidates().getCandidates();
+			if (!list.isEmpty() && list != chizuFittedCandidates) {
+				chizuFittedCandidates = list;
+				app.runInUIThread(mapActivity::chizuFitRoutesToMap, 300);
+			}
+		}
+	}
+
+	private List<ChizuRouteCandidates.Candidate> chizuFittedCandidates;
 
 	@Nullable
 	public OsmandApplication getApp() {
@@ -545,6 +569,7 @@ public class MapRouteInfoMenu implements IRouteInformationListener, CardListener
 
 		boolean bottomShadowVisible = true;
 		if (isBasicRouteCalculated()) {
+			addChizuCandidateCards(mapActivity, routingHelper, menuCards);
 			GpxFile gpx = GpxUiHelper.makeGpxFromRoute(routingHelper.getRoute(), app);
 			SimpleRouteCard simpleRouteCard = new SimpleRouteCard(mapActivity, gpx);
 			simpleRouteCard.setListener(this);
@@ -848,11 +873,30 @@ public class MapRouteInfoMenu implements IRouteInformationListener, CardListener
 		updateLayout();
 	}
 
+	// 白い熊 地図 渋滞回避: the traffic chooser, above the usual route card
+	private void addChizuCandidateCards(@NonNull MapActivity mapActivity, @NonNull RoutingHelper routingHelper,
+	                                    @NonNull List<BaseCard> menuCards) {
+		ChizuRouteCandidates chooser = routingHelper.getChizuCandidates();
+		if (chooser.isWorking()) {
+			menuCards.add(new ChizuRouteCandidateCard(mapActivity, null, -1, false));
+		} else if (chooser.hasChoice()) {
+			List<ChizuRouteCandidates.Candidate> list = chooser.getCandidates();
+			for (int i = 0; i < list.size(); i++) {
+				ChizuRouteCandidateCard card = new ChizuRouteCandidateCard(mapActivity, list.get(i), i,
+						i == chooser.getSelectedIndex());
+				card.setListener(this);
+				menuCards.add(card);
+			}
+		}
+	}
+
 	@Override
 	public void onCardPressed(@NonNull BaseCard card) {
 		MapActivity mapActivity = getMapActivity();
 		if (mapActivity != null) {
-			if (card instanceof SimpleRouteCard) {
+			if (card instanceof ChizuRouteCandidateCard) {
+				mapActivity.getRoutingHelper().getChizuCandidates().select(((ChizuRouteCandidateCard) card).getIndex());
+			} else if (card instanceof SimpleRouteCard) {
 				hide();
 				ChooseRouteFragment.showInstance(mapActivity.getSupportFragmentManager(), 0, MenuState.FULL_SCREEN);
 			} else if (card instanceof PublicTransportCard) {

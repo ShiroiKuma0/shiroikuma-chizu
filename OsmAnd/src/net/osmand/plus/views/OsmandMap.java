@@ -15,6 +15,7 @@ import net.osmand.plus.auto.SurfaceRenderer;
 import net.osmand.plus.base.MapViewTrackingUtilities;
 import net.osmand.plus.helpers.TargetPoint;
 import net.osmand.plus.resources.ResourceManager;
+import net.osmand.plus.routing.ChizuRouteCandidates;
 import net.osmand.plus.routing.RoutingHelper;
 import net.osmand.plus.settings.backend.OsmandSettings;
 import net.osmand.plus.utils.AndroidUtils;
@@ -191,7 +192,13 @@ public class OsmandMap {
 		if (lt != null) {
 			double left = lt.getLongitude(), right = lt.getLongitude();
 			double top = lt.getLatitude(), bottom = lt.getLatitude();
-			List<Location> list = rh.getCurrentCalculatedRoute();
+			List<Location> list = new ArrayList<>(rh.getCurrentCalculatedRoute());
+			// 白い熊 地図 渋滞回避: frame every route of the traffic chooser
+			if (rh.isRoutePlanningMode()) {
+				for (ChizuRouteCandidates.Candidate c : rh.getChizuCandidates().getCandidates()) {
+					list.addAll(c.route.getImmutableAllLocations());
+				}
+			}
 			for (Location l : list) {
 				left = Math.min(left, l.getLongitude());
 				right = Math.max(right, l.getLongitude());
