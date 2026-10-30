@@ -3,6 +3,38 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+007 — 2026-10-30
+
+Rebased onto upstream OsmAnd 5.5.0, `master` at `9f7ddb7c95` (2026-10-30), from `998211b87d` —
+527 upstream commits. Fork-side behaviour is unchanged; the fork layer was carried over intact.
+
+### Reconciled with upstream
+
+- **Release signing and R8.** Upstream now builds its Huawei release without R8. Our release
+  buildType keeps signing with the fork keystore when `keystore.properties` exists and takes
+  upstream’s Huawei switch; our `androidFull` build stays minified exactly as before.
+- **Black-yellow toast card.** Upstream replaced the overlay window context of toasts with the map
+  activity’s own context (the application context when no map is open). The fork’s themed toast
+  card now builds on that context, so it follows upstream’s fix for rejected toast windows.
+
+### New from upstream in this base
+
+- **Navigation:** route recalculation prompts are announced less often during a deviation and reset
+  once the route is followed again; a recalculated route’s direction is also checked 100 m ahead;
+  routing data keeps updating while off the route; the start heading is passed to BRouter.
+- **Android Auto:** launcher suggestions from navigation history; Map mode is saved on selection.
+  The fork’s “open straight into Free ride” start is kept.
+- **Map:** smoother panning, no zoom jumps after pinch-to-zoom with the magnifier, track arrows drawn
+  once per colour, the track menu keeps tracks and chart points in the visible part of the map.
+- **Search:** the spatial search moved to OsmAnd-shared, matches POI categories in the map language
+  and the local languages, and shows only addresses on the address tab; phone numbers are formatted.
+- **POI and widgets:** POI filters hide values with no places nearby; additional values read
+  “Name: value”; Glide ratio widgets gain a Mode setting and Average vertical speed; widget settings
+  dialogs survive rotation; speed charts show zero speed.
+- **My Places, media, elevation:** rotating direction arrows in track lists, multi-select in the
+  Tracks quick action, an “Original” POI icon for new favourites, EXIF time fixes, much faster
+  elevation from Terrain maps, and native routing memory budgets for 1–2 GB devices.
+
 ## 5.5.0+006 — 2026-10-29
 
 Base unchanged (OsmAnd 5.5.0, `master` at `998211b87d`). Fork-side only.
