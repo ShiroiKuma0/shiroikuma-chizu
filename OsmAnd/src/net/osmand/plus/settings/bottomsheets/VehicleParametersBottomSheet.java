@@ -113,7 +113,7 @@ public class VehicleParametersBottomSheet extends BaseTextFieldBottomSheet {
 		String symbol = units.getSymbol();
 		for (Float value : vehicleSpecs.getPredefinedValues(type, units.isMetricSystem())) {
 			String pattern = getString(R.string.ltr_or_rtl_combine_via_space);
-			String valueStr = SharedNumberFormatter.formatDecimal(value, 1);
+			String valueStr = SharedNumberFormatter.formatDecimal(value, 4); // 白い熊 地図: unrounded
 			String title = String.format(pattern, valueStr, symbol);
 			chip = new ChipItem(title);
 			chip.title = title;

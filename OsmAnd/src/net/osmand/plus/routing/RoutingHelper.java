@@ -457,6 +457,9 @@ public class RoutingHelper {
 			// 0. Route empty or needs to be extended? Then re-calculate route.
 			if (route.isEmpty()) {
 				calculateRoute = !route.hasMissingMaps() || isLocationJumping(currentLocation, targetPointsChanged);
+				if (isFollowingMode) {
+					net.osmand.plus.chizu.ChizuDriveLog.log("chk route empty, recalc=" + calculateRoute); // 白い熊 地図 drive log
+				}
 			} else {
 				// 1. Update current route position status according to latest received location
 				boolean finished = updateCurrentRouteStatus(currentLocation, posTolerance);
@@ -497,7 +500,8 @@ public class RoutingHelper {
 					calculateRoute = true;
 				}
 				// 4. Identify if UTurn is needed
-				if (RoutingHelperUtils.identifyUTurnIsNeeded(this, currentLocation, posTolerance)) {
+				boolean chizuUTurn = RoutingHelperUtils.identifyUTurnIsNeeded(this, currentLocation, posTolerance);
+				if (chizuUTurn) {
 					isDeviatedFromRoute = true;
 				}
 				// 4.5. Disable recalculation in tunnels (tunnel locations are simulated)
@@ -525,6 +529,14 @@ public class RoutingHelper {
 					voiceRouter.announceOffRoute(distOrth);
 				}
 
+				if (isFollowingMode) {
+					// 白い熊 地図 drive log: the off-route check of every fix, and what fired
+					net.osmand.plus.chizu.ChizuDriveLog.log(String.format(java.util.Locale.US,
+							"chk seg=%d/%d orth=%.1f allowed=%.1f tol=%.1f wrongDir=%b uturn=%b deviated=%b recalc=%b busy=%b",
+							currentRoute, routeNodes.size(), distOrth, allowableDeviation, posTolerance,
+							wrongMovementDirection, chizuUTurn, isDeviatedFromRoute, calculateRoute,
+							isRouteBeingCalculated()));
+				}
 				// calculate projection of current location
 				if (currentRoute > 0 && !inRecalc) {
 					Location previousRouteLocation = routeNodes.get(currentRoute - 1);
@@ -848,10 +860,17 @@ public class RoutingHelper {
 	 */
 	private int applyAverageSpeed(int routeTime, int distance) {
 		ApplicationMode mode = getAppMode();
-		if (!isFollowingMode || mode == null || distance <= 0 || !settings.ETA_USE_AVERAGE_SPEED.getModeValue(mode)) {
+		if (!isFollowingMode || mode == null || distance <= 0) {
 			return routeTime;
 		}
-		long interval = settings.ETA_AVERAGE_SPEED_INTERVAL.getModeValue(mode);
+		// 白い熊 地図: with own speeds the switch and the span are the ones in 白い熊 UI → My driving speeds
+		boolean chizuOwn = net.osmand.plus.chizu.ChizuSpeeds.governsTravelSpeed(app, mode);
+		if (chizuOwn ? !net.osmand.plus.chizu.ChizuSpeeds.isEtaFollowsSpeed(app)
+				: !settings.ETA_USE_AVERAGE_SPEED.getModeValue(mode)) {
+			return routeTime;
+		}
+		long interval = chizuOwn ? net.osmand.plus.chizu.ChizuSpeeds.getEtaMinutes(app) * 60_000L
+				: settings.ETA_AVERAGE_SPEED_INTERVAL.getModeValue(mode);
 		float speed = app.getAverageSpeedComputer().getAverageSpeed(etaSpeedStartTime, interval, true);
 		if (interval <= 0 || Float.isNaN(speed) || speed < MIN_AVERAGE_SPEED_FOR_ETA) {
 			return routeTime;

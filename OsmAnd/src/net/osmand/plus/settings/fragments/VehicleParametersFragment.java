@@ -202,7 +202,9 @@ public class VehicleParametersFragment extends BaseSettingsFragment {
 		Preference defaultSpeedPref = new Preference(ctx);
 		defaultSpeedPref.setKey(DEFAULT_SPEED);
 		defaultSpeedPref.setTitle(R.string.travel_speed);
-		defaultSpeedPref.setSummary(R.string.default_speed_setting_descr);
+		// 白い熊 地図: with own speeds on, the car's travel speeds are set in 白い熊 UI
+		defaultSpeedPref.setSummary(net.osmand.plus.chizu.ChizuSpeeds.governsTravelSpeed(app, getSelectedAppMode())
+				? R.string.chizu_speeds_governed : R.string.default_speed_setting_descr);
 		defaultSpeedPref.setIcon(getPreferenceIcon(DEFAULT_SPEED));
 		defaultSpeedPref.setLayoutResource(R.layout.preference_with_descr);
 		getPreferenceScreen().addPreference(defaultSpeedPref);
@@ -245,7 +247,11 @@ public class VehicleParametersFragment extends BaseSettingsFragment {
 			FragmentActivity activity = getActivity();
 			if (activity != null) {
 				ApplicationMode mode = getSelectedAppMode();
-				DefaultSpeedFragment.showInstance(activity, mode);
+				if (net.osmand.plus.chizu.ChizuSpeeds.governsTravelSpeed(app, mode)) {
+					net.osmand.plus.chizu.ChizuUiFragment.showInstance(activity, true);
+				} else {
+					DefaultSpeedFragment.showInstance(activity, mode);
+				}
 			}
 			return true;
 		} else if (settings.FUEL_TANK_CAPACITY.getId().equals(key)) {

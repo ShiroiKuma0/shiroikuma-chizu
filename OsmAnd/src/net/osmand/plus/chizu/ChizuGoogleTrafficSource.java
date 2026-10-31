@@ -126,6 +126,42 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 		return levels;
 	}
 
+	/**
+	 * 白い熊 地図 road log: the colour under each point, read across the direction of travel as for
+	 * route segments. Each point is {lat, lon, bearing in degrees}.
+	 */
+	@NonNull
+	public List<ChizuTraffic.Level> pointLevels(@NonNull List<double[]> points) throws InterruptedException {
+		List<Sample> samples = new ArrayList<>(points.size());
+		for (int i = 0; i < points.size(); i++) {
+			double[] p = points.get(i);
+			double b = Math.toRadians(p[2]);
+			samples.add(new Sample(i, MapUtils.getTileNumberX(ZOOM, p[1]) * TILE, MapUtils.getTileNumberY(ZOOM, p[0]) * TILE,
+					Math.sin(b), -Math.cos(b)));
+		}
+		Map<Long, byte[]> tiles = loadTiles(samples);
+		List<ChizuTraffic.Level> levels = new ArrayList<>(samples.size());
+		for (Sample s : samples) {
+			switch (classify(s, tiles)) {
+				case GREEN:
+					levels.add(ChizuTraffic.Level.FREE);
+					break;
+				case YELLOW:
+					levels.add(ChizuTraffic.Level.SLOW);
+					break;
+				case RED:
+					levels.add(ChizuTraffic.Level.JAM);
+					break;
+				case DARK_RED:
+					levels.add(ChizuTraffic.Level.STANDSTILL);
+					break;
+				default:
+					levels.add(ChizuTraffic.Level.UNKNOWN);
+			}
+		}
+		return levels;
+	}
+
 	public void shutdown() {
 		fetchers.shutdownNow();
 	}
