@@ -87,6 +87,13 @@ public class JsMediaCommandPlayer extends CommandPlayer implements OnCompletionL
 			return Collections.emptyList();
 		}
 		List<String> lst = splitAnnouncements(builder.execute());
+		// 白い熊 地図: nothing to play takes no audio focus (a prompt switched off comes out empty)
+		lst.removeIf(String::isEmpty);
+		if (lst.isEmpty()) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("voice empty prompt skipped");
+			return lst;
+		}
+		net.osmand.plus.chizu.ChizuDriveLog.log("voice play " + lst);
 		filesToPlay.addAll(lst);
 
 		// If we have not already started to play audio, start.

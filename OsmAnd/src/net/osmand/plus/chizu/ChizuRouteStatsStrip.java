@@ -111,7 +111,7 @@ public class ChizuRouteStatsStrip {
 		ChizuRouteCandidates chooser = helper.getChizuCandidates();
 		int seconds;
 		int meters;
-		int jamSeconds = -1;
+		ChizuRouteCandidates.Candidate shown = null;
 		String label = null;
 		int color = 0;
 		List<ChizuRouteCandidates.Candidate> list = chooser.getCandidates();
@@ -120,7 +120,7 @@ public class ChizuRouteStatsStrip {
 			ChizuRouteCandidates.Candidate c = list.get(selected);
 			seconds = Math.round(c.adjustedTime);
 			meters = c.distance;
-			jamSeconds = Math.round(c.jamDelay);
+			shown = c;
 			label = app.getString(c.kind.label);
 			color = ChizuRouteCandidateCard.colorFor(selected);
 		} else {
@@ -137,15 +137,13 @@ public class ChizuRouteStatsStrip {
 		sb.setSpan(new StyleSpan(Typeface.BOLD), boldStart, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 		sb.append("  ·  ").append(OsmAndFormatter.getFormattedDistance(meters, app));
 		sb.append("  ·  → ").append(OsmAndFormatter.getFormattedTimeShort(seconds, true));
-		if (jamSeconds >= 0) {
-			sb.append("  ·  ").append(jamSeconds >= 60
-					? app.getString(R.string.chizu_traffic_jam_on_route, OsmAndFormatter.getFormattedDuration(jamSeconds, app))
-					: app.getString(R.string.chizu_traffic_no_jam));
+		if (shown != null) {
+			sb.append("  ·  ").append(ChizuRouteCandidateCard.trafficText(app, shown));
 		} else if (chooser.isWorking()) {
 			sb.append("  ·  ").append(app.getString(R.string.chizu_traffic_checking));
 		}
 		if (label != null) {
-			sb.append("\n").append(label);
+			sb.append("\n").append(label).append("  ·  ").append(app.getString(R.string.chizu_traffic_times_note));
 		}
 		return sb;
 	}

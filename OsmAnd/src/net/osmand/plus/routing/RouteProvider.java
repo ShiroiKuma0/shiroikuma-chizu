@@ -291,14 +291,17 @@ public class RouteProvider {
 
 		RouteCalculationMethod method = settings.ROUTE_CALCULATION_METHOD.getModeValue(params.mode);
 
-		if (method.isFastRoutingPossible(params.mode) && !params.chizuShortestWay) {
+		// 白い熊 地図: the fast precomputed network knows only OsmAnd's standard speeds, so 白い熊's own
+		// speeds (ChizuSpeeds) need the full search to change the route choice
+		boolean chizuOwnSpeeds = chizuUsesOwnSpeeds(params);
+		if (method.isFastRoutingPossible(params.mode) && !params.chizuShortestWay && !chizuOwnSpeeds) {
 			router.setDefaultHHRoutingConfig();
 		} else {
 			router.setHHRoutingConfig(null);
 		}
 
 		router.setHHRouteCpp(!settings.SAFE_MODE.get());
-		router.setUseOnlyHHRouting(method.isFastRoutingOnly(params.mode) && !params.chizuShortestWay);
+		router.setUseOnlyHHRouting(method.isFastRoutingOnly(params.mode) && !params.chizuShortestWay && !chizuOwnSpeeds);
 
 		ApproximationType approximationType = settings.APPROXIMATION_TYPE.getModeValue(params.mode);
 		router.setUseNativeApproximation(approximationType.isNativeApproximation());
@@ -411,14 +414,23 @@ public class RouteProvider {
 			}
 		}
 		Float defaultSpeed = params.mode.getDefaultSpeed();
+		Float minSpeed = params.mode.getMinSpeed();
+		Float maxSpeed = params.mode.getMaxSpeed();
+		if (chizuUsesOwnSpeeds(params)) {
+			/* the Travel speed screen's three speeds come from 白い熊's own: the floor (stock 50 lifted
+			 * every slower row to 50), the speed of an unknown road type, and the ceiling, which is
+			 * exactly the fastest own speed, so the search's best-case guess is as tight as it can be */
+			defaultSpeed = net.osmand.plus.chizu.ChizuSpeeds.getUnknown(params.ctx) / 3.6f;
+			minSpeed = net.osmand.plus.chizu.ChizuSpeeds.getSlowest(params.ctx) / 3.6f;
+			maxSpeed = Math.max(net.osmand.plus.chizu.ChizuSpeeds.maxSpeed(params.ctx),
+					net.osmand.plus.chizu.ChizuSpeeds.getUnknown(params.ctx)) / 3.6f;
+		}
 		if (defaultSpeed > 0) {
 			paramsR.put(GeneralRouter.DEFAULT_SPEED, String.valueOf(defaultSpeed));
 		}
-		Float minSpeed = params.mode.getMinSpeed();
 		if (minSpeed > 0) {
 			paramsR.put(GeneralRouter.MIN_SPEED, String.valueOf(minSpeed));
 		}
-		Float maxSpeed = params.mode.getMaxSpeed();
 		if (maxSpeed > 0) {
 			paramsR.put(GeneralRouter.MAX_SPEED, String.valueOf(maxSpeed));
 		}
@@ -436,13 +448,19 @@ public class RouteProvider {
 		log.warn("Use " + nativeMemoryLimitMb + " MB of native memory ");
 		String derivedProfile = params.mode.getDerivedProfile();
 		String routingProfile = "default".equals(derivedProfile) ? params.mode.getRoutingProfile() : derivedProfile;
-		Double direction = params.start.hasBearing() ? params.start.getBearing() / 180d * Math.PI : null;
+		// 白い熊 地図: a phone standing still still reports a heading — whatever the last movement or the
+		// noise left — and a route starting against it pays for a U-turn, so plans from home came out
+		// different every time; the heading counts only while actually moving
+		Double direction = chizuUsesHeading(params.start) ? params.start.getBearing() / 180d * Math.PI : null;
 
 		RoutingConfiguration configuration = builder.build(routingProfile, direction, memoryLimits, paramsR);
 		if (settings.ENABLE_TIME_CONDITIONAL_ROUTING.getModeValue(params.mode)) {
 			configuration.routeCalculationTime = System.currentTimeMillis();
 		}
 		configuration.showMinorTurns = settings.SHOW_MINOR_TURNS.getModeValue(params.mode);
+		if (chizuUsesOwnSpeeds(params) && configuration.router != null) {
+			net.osmand.plus.chizu.ChizuSpeeds.apply(params.ctx, configuration.router);
+		}
 		Set<Long> chizuBans = params.chizuExtraImpassable != null
 				? params.chizuExtraImpassable : ChizuTrafficBans.getActive();
 		if (!chizuBans.isEmpty() && configuration.router != null) {
@@ -454,6 +472,18 @@ public class RouteProvider {
 		}
 
 		return configuration;
+	}
+
+	public static final float CHIZU_HEADING_MIN_SPEED = 2f; // m/s, about 7 km/h
+
+	static boolean chizuUsesHeading(@NonNull net.osmand.Location start) {
+		return start.hasBearing() && start.hasSpeed() && start.getSpeed() >= CHIZU_HEADING_MIN_SPEED;
+	}
+
+	// 白い熊 地図: a car calculation with 白い熊's own speeds set (not the shortest-way variant)
+	private static boolean chizuUsesOwnSpeeds(@NonNull RouteCalculationParams params) {
+		return params.mode.isDerivedRoutingFrom(ApplicationMode.CAR) && !params.chizuShortestWay
+				&& net.osmand.plus.chizu.ChizuSpeeds.isActive(params.ctx);
 	}
 
 	private RouteCalculationResult calcOfflineRouteImpl(RouteCalculationParams params,
