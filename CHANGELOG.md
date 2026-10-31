@@ -3,6 +3,86 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+022 — 2026-10-31
+
+Base unchanged (OsmAnd 5.5.0, `master` at `9f7ddb7c95`). Fork-side only; builds +008 – +021 were
+test builds on the phone and are all included here.
+
+### 渋滞回避 — reroutes while driving
+
+- **Automatic traffic reroute.** Every minute (the default interval is now 1 min), and
+  right after every off-route reroute, the rest of the route is graded by the traffic of now and set
+  against two fresh routes from the current position: the plain fastest with no bans, and one around
+  the jams there are now. When the faster one saves at least the minimum saving, 地図 switches to it
+  without asking and announces it with the time saved (Japanese, Czech, English; TTS voices). The
+  reroute offer card is gone.
+- **Bans follow the traffic of now.** The roads an off-route reroute avoids are always the jams of
+  the latest check — never the stale jams from when the route was planned.
+- **Car reroutes are planned afresh.** Stock steered a reroute back onto the old route 10 km
+  further on and kept the rest, so a faster road taken instead (a tunnel) was never found.
+- **Traffic candidates never block navigation.** A real reroute is not kept waiting behind traffic
+  calculations, and they no longer spin the car’s loading circle or pause voice guidance.
+
+### Route chooser
+
+- **Every route ranked by its time with traffic** — the plain fastest and the shortest included —
+  the fastest first and preselected. A traffic variant slower than the plain route is left out;
+  near-duplicates merge into the faster one.
+- **Clearer labels:** “Fastest”, “Around jams”, “Around jams and long slow traffic”, “Around all
+  slow traffic”, “Shortest distance”. The traffic part reads “traffic 0 min”, “traffic +3 min” or
+  “traffic +7 min, 2 jams”; the top strip adds “times include current traffic”.
+- **Stable plans from a standstill.** A phone standing still still reports a heading, and a route
+  starting against it paid for a U-turn, so plans from home varied. The heading now counts only
+  above 7 km/h.
+
+### My driving speeds
+
+- **55 sliders** in 白い熊 UI → My driving speeds, one per road type and posted limit, with tunnels
+  separate (motorway, trunk, primary, secondary, tertiary, unclassified, residential, living and
+  service roads, ramps), in 5 km/h steps; 0 keeps OsmAnd’s own speed; a long press resets a row to
+  its preset. Limits without a row of their own are interpolated between the type’s rows.
+- **Used by the router itself:** injected as speed rules ahead of the profile’s own in each car
+  calculation, so both route choice and the arrival time follow them. Such calculations use the
+  full search (the precomputed network knows only stock speeds).
+- **The Travel speed screen moves here for the car.** While own speeds are on, its rows are greyed
+  out and lead to this section, which gains: slowest counted speed (default 5 km/h; stock’s 50 lifted
+  every slower road to 50), speed on roads of unknown type (default 50 km/h; stock 140), and
+  “Arrival time follows my recent speed” with its span (default off, so the arrival time keeps the
+  traffic). The ceiling is always your fastest row.
+
+### Voice
+
+- **Japanese voice reads street names in katakana** — by Czech rules inside Czechia (long vowels,
+  ě, devoicing, doubled letters), roughly elsewhere; “nám.”, “tř.”, “nábř.” spelled out; road
+  numbers and short all-caps words kept.
+- **Audio focus always given back.** Music stayed ducked after some prompts until a restart; focus
+  now follows the audio that is actually playing (also for engines that render the whole utterance
+  first), and a prompt that came out empty takes no focus at all.
+- **No pauses inside Japanese prompts** from spaces next to Japanese text.
+
+### Android Auto
+
+- **3D kept on reroutes:** a route preview left in the stack no longer reframes the rerouted route
+  north-up and flat.
+- **Tunnels:** cell/Wi-Fi fixes hundreds of metres off are dropped on the car path too, and the
+  tunnel simulation faces along the tunnel.
+
+### Logs for tuning (on the phone, in `/sdcard/tmp`)
+
+- **Drive log** `chizu-drive_<day>.log`: calculations with engine and timings, predictions against
+  arrivals, traffic checks and bans by road name, off-route checks, car screen events.
+- **Road log** `chizu-roads_<day>.tsv`: every drive, navigating or not, split into stretches of
+  one road type, limit, tunnel, bridge, name and traffic colour, with length, time, average and top
+  speed, and the speed OsmAnd and your own setting assumed.
+- **Phone view dump** while Android Auto runs, to find the black box at the bottom of the phone.
+
+### Fixes
+
+- **Hamburger long press** (opens 白い熊 UI) fires 300 ms after the touch, measured from the touch
+  itself; touches reached the button up to half a second late, so it took about 2 s.
+- **Vehicle parameters show what was entered:** height, weight, width, length, the preset chips and
+  the fuel tank show up to four decimals instead of rounding to one.
+
 ## 5.5.0+007 — 2026-10-30
 
 Rebased onto upstream OsmAnd 5.5.0, `master` at `9f7ddb7c95` (2026-10-30), from `998211b87d` —
