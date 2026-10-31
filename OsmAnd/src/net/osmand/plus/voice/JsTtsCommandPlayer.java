@@ -6,8 +6,10 @@ import static net.osmand.IndexConstants.VOICE_PROVIDER_SUFFIX;
 import android.content.Intent;
 import android.media.AudioAttributes;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.speech.tts.TextToSpeech;
-import android.speech.tts.TextToSpeech.OnUtteranceCompletedListener;
+import android.speech.tts.UtteranceProgressListener;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -35,6 +37,9 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 	private static final Log log = PlatformUtil.getLog(JsTtsCommandPlayer.class);
 
 	private static final String PEBBLE_ALERT = "PEBBLE_ALERT";
+	private static final String JA = "\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}ー、。";
+	private static final java.util.regex.Pattern JAPANESE_SPACE = java.util.regex.Pattern.compile(
+			"(?<=[" + JA + "])[\\s\\u3000]+|[\\s\\u3000]+(?=[" + JA + "])");
 
 	private static TextToSpeech mTts;
 
@@ -48,6 +53,13 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 	 * optimize use of requesting and abandoning audio focus.
 	 */
 	private static int ttsRequests;
+	// 白い熊 地図: utterances whose audio has started and not yet finished
+	private final java.util.Set<String> audibleUtterances = new java.util.HashSet<>();
+
+	// 白い熊 地図: give the audio focus back when the TTS engine never reports an utterance as done
+	private static final long FOCUS_WATCHDOG_MS = 4000;
+	private static final Handler focusWatchdogHandler = new Handler(Looper.getMainLooper());
+	private final Runnable focusWatchdog = this::checkFocusStillNeeded;
 	private float cSpeechRate = 1;
 	private boolean speechAllowed;
 
@@ -107,17 +119,35 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 			});
 			mTts = textToSpeech[0];
 
-			mTts.setOnUtteranceCompletedListener(new OnUtteranceCompletedListener() {
-				// The call back is on a binder thread.
+			// 白い熊 地図: progress, not just completion. An engine that renders the whole utterance
+			// before it plays (VOICEVOX in 白い熊 音声 takes up to ~15 s) calls start() at once and
+			// hands over audio only when rendered, so the music is ducked at the first audio of an
+			// utterance and given back when no utterance is audible any more.
+			// The callbacks are on a binder thread.
+			mTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
 				@Override
-				public synchronized void onUtteranceCompleted(String utteranceId) {
-					if (--ttsRequests <= 0) {
-						abandonAudioFocus();
-					}
-					log.debug("ttsRequests=" + ttsRequests);
-					if (ttsRequests < 0) {
-						ttsRequests = 0;
-					}
+				public void onStart(String utteranceId) {
+					// dispatched before the engine renders anything: too early for the focus
+				}
+
+				@Override
+				public void onAudioAvailable(String utteranceId, byte[] audio) {
+					onUtteranceAudioStart(utteranceId); // the engine hands over rendered audio now
+				}
+
+				@Override
+				public void onDone(String utteranceId) {
+					onUtteranceFinished(utteranceId, "done");
+				}
+
+				@Override
+				public void onError(String utteranceId) {
+					onUtteranceFinished(utteranceId, "error");
+				}
+
+				@Override
+				public void onStop(String utteranceId, boolean interrupted) {
+					onUtteranceFinished(utteranceId, "stopped");
 				}
 			});
 		}
@@ -186,10 +216,23 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 		for (String s : execute) {
 			bld.append(s).append(' ');
 		}
+		// 白い熊 地図: a space next to Japanese is read as a pause (“100メートル　先”), so it goes
+		String joined = JAPANESE_SPACE.matcher(bld).replaceAll("");
+		bld.setLength(0);
+		bld.append(joined);
+		// 白い熊 地図: a prompt that came out empty (its announcement switched off) says nothing, so it
+		// must not take the audio focus either — that muted the music on every silent reroute
+		if (bld.toString().trim().isEmpty()) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("voice empty prompt skipped");
+			return execute;
+		}
+		net.osmand.plus.chizu.ChizuDriveLog.log("voice say \"" + bld.toString().trim() + "\" requests=" + ttsRequests);
 		sendAlertToPebble(bld.toString());
 		if (mTts != null && !voiceRouter.isMute() && speechAllowed) {
 			if (ttsRequests++ == 0) {
-				requestAudioFocus();
+				if (!isFocusAtAudioStart()) {
+					requestAudioFocus(); // BT SCO: the link must be up before the audio comes
+				}
 				mTts.setAudioAttributes(new AudioAttributes.Builder()
 						.setUsage(settings.AUDIO_USAGE[settings.AUDIO_MANAGER_STREAM.getModeValue(app.getRoutingHelper().getAppMode())].get())
 						.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -207,18 +250,65 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 			}
 			log.debug("ttsRequests=" + ttsRequests);
 			params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "" + System.currentTimeMillis());
-			if (AudioFocusHelperImpl.playbackAuthorized) {
+			if (isFocusAtAudioStart() || AudioFocusHelperImpl.playbackAuthorized) {
 				mTts.speak(bld.toString(), TextToSpeech.QUEUE_ADD, params);
 			} else {
 				stop();
 			}
-			// Audio focus will be released when onUtteranceCompleted() completed is called by the TTS engine.
+			// Audio focus is taken in onStart() and given back in onDone() (BT SCO: when all are done).
 		}
 		// #5966: TTS Utterance for debugging
 		if (app != null && settings.DISPLAY_TTS_UTTERANCE.get()) {
 			app.showToastMessage(bld.toString());
 		}
 		return execute;
+	}
+
+	private boolean isFocusAtAudioStart() {
+		return settings.AUDIO_MANAGER_STREAM.getModeValue(app.getRoutingHelper().getAppMode()) != 0;
+	}
+
+	private synchronized void onUtteranceAudioStart(@NonNull String utteranceId) {
+		if (!audibleUtterances.add(utteranceId)) {
+			return; // a later chunk of an utterance already playing
+		}
+		net.osmand.plus.chizu.ChizuDriveLog.log("voice audio starts, audible=" + audibleUtterances.size());
+		if (!isFocusAtAudioStart() || audibleUtterances.size() > 1) {
+			return; // the focus is held already
+		}
+		requestAudioFocus();
+		if (!AudioFocusHelperImpl.playbackAuthorized) {
+			stop(); // a call or another app holds the audio: say nothing, as before
+			return;
+		}
+		focusWatchdogHandler.removeCallbacks(focusWatchdog);
+		focusWatchdogHandler.postDelayed(focusWatchdog, FOCUS_WATCHDOG_MS);
+	}
+
+	private synchronized void onUtteranceFinished(@NonNull String utteranceId, @NonNull String how) {
+		ttsRequests = Math.max(0, ttsRequests - 1);
+		audibleUtterances.remove(utteranceId);
+		net.osmand.plus.chizu.ChizuDriveLog.log("voice audio " + how + ", audible=" + audibleUtterances.size()
+				+ " requests=" + ttsRequests);
+		if (isFocusAtAudioStart() ? audibleUtterances.isEmpty() : ttsRequests == 0) {
+			focusWatchdogHandler.removeCallbacks(focusWatchdog);
+			abandonAudioFocus();
+		}
+	}
+
+	private synchronized void checkFocusStillNeeded() {
+		if (ttsRequests <= 0) {
+			return;
+		}
+		TextToSpeech tts = mTts;
+		if (tts != null && tts.isSpeaking()) {
+			focusWatchdogHandler.postDelayed(focusWatchdog, FOCUS_WATCHDOG_MS);
+			return;
+		}
+		net.osmand.plus.chizu.ChizuDriveLog.log("voice focus watchdog: engine silent, released with requests=" + ttsRequests);
+		ttsRequests = 0;
+		audibleUtterances.clear();
+		abandonAudioFocus();
 	}
 
 	private void sendAlertToPebble(@NonNull String bld) {
@@ -255,6 +345,9 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 	@Override
 	public void stop() {
 		ttsRequests = 0;
+		synchronized (this) {
+			audibleUtterances.clear();
+		}
 		// Before onInit the engine connection is still being set up under TextToSpeech's internal lock, so
 		// stop() would wait for a slow engine on the main thread (ANR). Nothing can be speaking before onInit.
 		if (mTts != null && speechAllowed) {

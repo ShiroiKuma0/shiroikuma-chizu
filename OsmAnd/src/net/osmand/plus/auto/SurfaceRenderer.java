@@ -85,6 +85,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	// path back to 2D (a recalculation, a lost fix, a renderer re-setup reading the flat
 	// per-profile angle) is tilted back. Reset on every new session, so it always starts in 3D.
 	private boolean flatByUser;
+	private boolean loggedFlat;
 	private final Runnable keep3D = this::keep3D;
 
 	private static final float surfaceWidthMultiply = 0.5f;
@@ -587,6 +588,12 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 		if (callback != null) {
 			callback.onElevationChanging(angle);
 		}
+		boolean flat = angle >= DEFAULT_ELEVATION_ANGLE;
+		if (flat != loggedFlat) {
+			loggedFlat = flat;
+			net.osmand.plus.chizu.ChizuDriveLog.log("car map " + (flat ? "flat" : "3D") + " angle=" + angle + " byUser=" + flatByUser
+					+ " compass=" + getApp().getSettings().getCompassMode()); // 白い熊 地図 drive log
+		}
 		if (angle >= DEFAULT_ELEVATION_ANGLE && !flatByUser) {
 			getApp().runInUIThread(keep3D, KEEP_3D_DELAY_MS);
 		}
@@ -602,6 +609,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 				return;
 			}
 			float angle = mapView.getAdjustedTiltAngle(mapView.getZoom(), true);
+			net.osmand.plus.chizu.ChizuDriveLog.log("car map tilted back to " + angle); // 白い熊 地図 drive log
 			getApp().getSettings().setLastKnownMapElevation(angle);
 			mapView.getAnimatedDraggingThread().startTilting(angle, 0.0f);
 		}

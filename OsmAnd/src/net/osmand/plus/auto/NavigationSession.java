@@ -644,6 +644,7 @@ public class NavigationSession extends Session implements NavigationListener, Os
 				return;
 			}
 		}
+		net.osmand.plus.chizu.ChizuDriveLog.log("car push navigation screen by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
 		if (navigationScreen == null || navigationScreen.getLifecycle().getCurrentState().isAtLeast(State.DESTROYED)) {
 			navigationScreen = new NavigationScreen(getCarContext(), settingsAction, this);
 			navigationCarSurface.setCallback(navigationScreen);
@@ -683,6 +684,9 @@ public class NavigationSession extends Session implements NavigationListener, Os
 
 	@Override
 	public void newRouteIsCalculated(boolean newRoute, ValueHolder<Boolean> showToast) {
+		net.osmand.plus.chizu.ChizuDriveLog.log("car route calculated newRoute=" + newRoute + " following=" + routingHelper.isFollowingMode()
+				+ " top=" + (getScreenManager().getScreenStack().isEmpty() ? "-"
+				: getScreenManager().getTop().getClass().getSimpleName())); // 白い熊 地図 drive log
 		closeMissingMapsScreen();
 		if (routingHelper.isFollowingMode() && routingHelper.isRouteCalculated()) {
 			startNavigationScreen();
@@ -760,6 +764,7 @@ public class NavigationSession extends Session implements NavigationListener, Os
 	}
 
 	private void showRoutePreview() {
+		net.osmand.plus.chizu.ChizuDriveLog.log("car show route preview by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
 		if (isPrivateAccessScreenShown()) {
 			return;
 		}
@@ -821,6 +826,14 @@ public class NavigationSession extends Session implements NavigationListener, Os
 				public void onLocationResult(@NonNull List<Location> locations) {
 					if (!locations.isEmpty()) {
 						Location location = locations.get(locations.size() - 1);
+						// 白い熊 地図: the fused provider hands over cell/Wi-Fi fixes (hundreds of metres off)
+						// when GPS is gone, as in a tunnel. The phone path drops them while navigating; the
+						// car path let them through, so the car map jumped off the tunnel and turned round.
+						if (useOnlyGPS() && location.hasAccuracy()
+								&& location.getAccuracy() > OsmAndLocationProvider.ACCURACY_FOR_GPX_AND_ROUTING) {
+							net.osmand.plus.chizu.ChizuDriveLog.log("loc aa rough fix dropped acc=" + location.getAccuracy());
+							return;
+						}
 						lastTimeGPSLocationFixed = System.currentTimeMillis();
 						if (!settings.MAP_ACTIVITY_ENABLED) {
 							locationProvider.setLocationFromService(location);

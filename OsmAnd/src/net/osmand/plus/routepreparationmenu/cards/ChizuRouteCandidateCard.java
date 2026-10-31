@@ -44,6 +44,28 @@ public class ChizuRouteCandidateCard extends MapBaseCard {
 		return COLORS[Math.min(index, COLORS.length - 1)];
 	}
 
+	/** “traffic 0 min”, “traffic +3 min”, “traffic +7 min, 2 jams”: the traffic share of the time shown. */
+	@NonNull
+	public static String trafficText(@NonNull net.osmand.plus.OsmandApplication app, @NonNull Candidate c) {
+		int minutes = Math.round(c.jamDelay / 60f);
+		int jams = 0;
+		boolean inJam = false;
+		for (net.osmand.plus.chizu.ChizuTraffic.Level l : c.levels) {
+			if (l.isJam() && !inJam) {
+				jams++;
+			}
+			inJam = l.isJam();
+		}
+		if (minutes <= 0 && jams == 0) {
+			return app.getString(R.string.chizu_traffic_no_jam);
+		}
+		if (jams == 0) {
+			return app.getString(R.string.chizu_traffic_jam_on_route, Math.max(minutes, 0));
+		}
+		return jams == 1 ? app.getString(R.string.chizu_traffic_with_jam, minutes)
+				: app.getString(R.string.chizu_traffic_with_jams, minutes, jams);
+	}
+
 	public int getIndex() {
 		return index;
 	}
@@ -72,11 +94,7 @@ public class ChizuRouteCandidateCard extends MapBaseCard {
 		title.setText(OsmAndFormatter.getFormattedDuration(seconds, app)
 				+ "  ·  " + OsmAndFormatter.getFormattedDistance(candidate.distance, app));
 		title.setTypeface(selected ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-		int jamSeconds = Math.round(candidate.jamDelay);
-		String traffic = jamSeconds >= 60
-				? app.getString(R.string.chizu_traffic_jam_on_route, OsmAndFormatter.getFormattedDuration(jamSeconds, app))
-				: app.getString(R.string.chizu_traffic_no_jam);
-		subtitle.setText(app.getString(candidate.kind.label) + "  ·  " + traffic);
+		subtitle.setText(app.getString(candidate.kind.label) + "  ·  " + trafficText(app, candidate));
 		eta.setText(OsmAndFormatter.getFormattedTimeShort(seconds, true));
 
 		GradientDrawable bar = new GradientDrawable();

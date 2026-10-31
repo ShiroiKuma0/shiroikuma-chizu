@@ -104,6 +104,10 @@ public class SimulationProvider {
 					}
 					location.setLongitude(MapUtils.get31LongitudeX(prx));
 					location.setLatitude(MapUtils.get31LatitudeY(pry));
+					// 白い熊 地図: face along the tunnel, so the map turns with the route, never at random
+					Location from = new Location("", MapUtils.get31LatitudeY(st31y), MapUtils.get31LongitudeX(st31x));
+					Location to = new Location("", MapUtils.get31LatitudeY(end31y), MapUtils.get31LongitudeX(end31x));
+					location.setBearing(from.bearingTo(to));
 					return Math.max(meters - dd, 0);
 				} else {
 					LOG.error(String.format(Locale.US,

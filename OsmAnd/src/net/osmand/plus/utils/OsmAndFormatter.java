@@ -680,7 +680,8 @@ public class OsmAndFormatter {
 			textValue = app.getString(R.string.shared_string_none);
 			textUnit = "";
 		} else {
-			DecimalFormat formatter = new DecimalFormat("0.#", new DecimalFormatSymbols(Locale.US));
+			// 白い熊 地図: as entered (stock rounds to one decimal)
+			DecimalFormat formatter = new DecimalFormat("0.####", new DecimalFormatSymbols(Locale.US));
 			textValue = formatter.format(value);
 			textUnit = volumeUnit.getUnitSymbol(app);
 			separateWithSpace = true;

@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,16 +42,19 @@ import java.util.concurrent.atomic.AtomicReference;
  * <b>Planning.</b> When a car route is calculated in route-planning mode, the route ahead is read
  * from the traffic source and up to four more routes are computed in the background, each with its
  * own bans (never the shared avoid-roads list): avoid red; avoid red + long yellow; avoid red + all
- * yellow; and plain shortest (no bans). Each is graded by its own traffic and ranked by
- * traffic-adjusted time. The chooser lists the traffic variants best first, then shortest, then the
- * plain fastest route (which ignores traffic) at the bottom. Near-duplicates are merged; when nothing
- * differs from the plain route, no chooser is shown.
+ * yellow; and plain shortest (no bans). Each is graded by its own traffic, and all of them — the
+ * plain route and the shortest included — are listed by traffic-adjusted time, the fastest first and
+ * preselected. A traffic variant slower than the plain route is left out. Near-duplicates are merged;
+ * when nothing differs from the plain route, no chooser is shown.
  * <p>
- * <b>Driving.</b> Every few minutes the road ahead is re-read; when a fresh jam would cost more than
- * the minimum saving, a detour around it is computed and offered ({@link OfferListener}).
+ * <b>Driving.</b> Every minute, and right after every off-route reroute, the rest of the route is
+ * set against a fresh plain fastest route and a fresh route around the jams of now; when one of them
+ * saves the minimum saving, it is taken without asking (nobody could answer an offer in the car) and
+ * announced with the time it saves.
  * <p>
- * The bans of the chosen route are held by {@link ChizuTrafficBans} so off-route recalculations keep
- * avoiding the same jams. Nothing is written to settings.
+ * {@link ChizuTrafficBans} holds the jams of the latest check, so an off-route recalculation avoids
+ * what is jammed now — never what was jammed when the route was planned. Nothing is written to
+ * settings.
  */
 public class ChizuRouteCandidates implements IRouteInformationListener {
 
@@ -63,7 +65,10 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 	private static final float PROTECT_END_M = 200f;
 	private static final float DUPLICATE_SHARE = 0.85f;
 	private static final long CALC_TIMEOUT_S = 90;
-	private static final long DECLINE_MEMORY_MS = 10 * 60 * 1000;
+	// planning shows what it has after this long; a slower alternative is not worth the wait
+	private static final long PLAN_BUDGET_MS = 45_000;
+	// after an off-route recalculation, read the traffic on the new route this soon
+	private static final long REROUTE_CHECK_DELAY_MS = 3_000;
 
 	public enum Kind {
 		AVOID_RED(R.string.chizu_traffic_avoid_red),
@@ -112,21 +117,12 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		void onCandidatesChanged();
 	}
 
-	public interface OfferListener {
-		/**
-		 * UI thread: a detour avoiding a fresh jam saves {@code savingSeconds}.
-		 * Call {@link #acceptOffer} or {@link #declineOffer}.
-		 */
-		void onRerouteOffer(@NonNull Candidate detour, int savingSeconds, @Nullable String street);
-	}
-
 	private final OsmandApplication app;
 	private final RoutingHelper routingHelper;
 	private final ChizuGoogleTrafficSource source = new ChizuGoogleTrafficSource();
 	private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
 	private final List<WeakReference<Listener>> listeners = new CopyOnWriteArrayList<>();
-	private volatile OfferListener offerListener;
 
 	private volatile int generation;
 	private volatile boolean working;
@@ -134,8 +130,10 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 	private volatile List<Candidate> candidates = Collections.emptyList();
 	private volatile int selected = -1;
 
-	private Candidate pendingOffer;
-	private final Map<Long, Long> declined = new HashMap<>();
+	private volatile Candidate active;
+	private volatile boolean chosenByUser;
+	private Runnable rerouteCheck;
+	private volatile boolean checkQueued;
 	private Runnable driveCheck;
 
 	public ChizuRouteCandidates(@NonNull OsmandApplication app, @NonNull RoutingHelper routingHelper) {
@@ -167,18 +165,20 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		listeners.add(new WeakReference<>(listener));
 	}
 
-	public void setOfferListener(@Nullable OfferListener listener) {
-		offerListener = listener;
+	/** Makes candidate {@code index} the active route: 白い熊's pick in the chooser. UI thread. */
+	public void select(int index) {
+		chosenByUser = true;
+		selectCandidate(index);
 	}
 
-	/** Makes candidate {@code index} the active route. UI thread. */
-	public void select(int index) {
+	private void selectCandidate(int index) {
 		List<Candidate> list = candidates;
 		if (index < 0 || index >= list.size() || index == selected) {
 			return;
 		}
 		Candidate c = list.get(index);
 		selected = index;
+		active = c;
 		ChizuTrafficBans.setActive(c.bans);
 		selecting = true;
 		routingHelper.chizuSetActiveRoute(c.route);
@@ -190,7 +190,7 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 	@Override
 	public void newRouteIsCalculated(boolean newRoute, ValueHolder<Boolean> showToast) {
 		if (selecting) {
-			// the route we set ourselves, from the chooser or an accepted offer
+			// the route we set ourselves, from the chooser or the traffic check
 			selecting = false;
 			return;
 		}
@@ -207,7 +207,25 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 			}
 		} else if (routingHelper.isFollowingMode()) {
 			scheduleDriveCheck();
+			if (!newRoute) {
+				scheduleRerouteCheck();
+			}
 		}
+	}
+
+	/** An off-route recalculation knows nothing of the traffic, so the new route is checked at once. */
+	private void scheduleRerouteCheck() {
+		Runnable r = new Runnable() {
+			@Override
+			public void run() {
+				if (rerouteCheck == this) {
+					rerouteCheck = null;
+					checkAhead(true);
+				}
+			}
+		};
+		rerouteCheck = r;
+		app.runInUIThread(r, REROUTE_CHECK_DELAY_MS);
 	}
 
 	/** Navigation started (Go) or stopped. Any thread. */
@@ -238,17 +256,15 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 
 	@Override
 	public void routeWasFinished() {
+		net.osmand.plus.chizu.ChizuDriveLog.log("arrived"); // 白い熊 地図: predictions against arrivals
 		stopAll();
 	}
 
 	private void stopAll() {
 		generation++;
 		ChizuTrafficBans.clear();
-		synchronized (declined) {
-			declined.clear();
-		}
 		cancelDriveCheck();
-		pendingOffer = null;
+		rerouteCheck = null;
 		discard();
 	}
 
@@ -282,6 +298,8 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		int gen = ++generation;
 		candidates = Collections.emptyList();
 		selected = -1;
+		active = null;
+		chosenByUser = false;
 		working = true;
 		notifyChanged();
 		LatLon end = routingHelper.getFinalLocation();
@@ -296,20 +314,7 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		Location start = new Location(locations.get(0));
 		worker.execute(() -> {
 			try {
-				List<Candidate> result = computeCandidates(gen, baseline, start, end, intermediates, mode);
-				app.runInUIThread(() -> {
-					if (gen != generation) {
-						return;
-					}
-					working = false;
-					candidates = result;
-					selected = -1;
-					if (result.size() > 1) {
-						// the best traffic-aware route is pre-selected, as Waze does
-						select(0);
-					}
-					notifyChanged();
-				});
+				computeCandidates(gen, baseline, start, end, intermediates, mode);
 			} catch (InterruptedException e) {
 				// superseded
 			} catch (Exception e) {
@@ -324,54 +329,88 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		});
 	}
 
-	@NonNull
-	private List<Candidate> computeCandidates(int gen, @NonNull RouteCalculationResult baseline, @NonNull Location start,
-	                                          @NonNull LatLon end, @Nullable List<LatLon> intermediates,
-	                                          @NonNull ApplicationMode mode) throws InterruptedException {
+	/**
+	 * Fills the chooser as the routes come in: the plain route with its traffic first, then each
+	 * alternative the moment it is calculated, within {@link #PLAN_BUDGET_MS}. Alternatives are only
+	 * calculated around traffic that is really there, “avoid red” first, without refinement passes.
+	 */
+	private void computeCandidates(int gen, @NonNull RouteCalculationResult baseline, @NonNull Location start,
+	                               @NonNull LatLon end, @Nullable List<LatLon> intermediates,
+	                               @NonNull ApplicationMode mode) throws InterruptedException {
 		TrafficMap seen = new TrafficMap();
+		long t0 = System.currentTimeMillis();
+		long deadline = t0 + PLAN_BUDGET_MS;
 		Candidate fastest = grade(Kind.FASTEST, baseline, Collections.emptySet(), seen);
+		net.osmand.plus.chizu.ChizuDriveLog.log("candidate FASTEST traffic " + (System.currentTimeMillis() - t0) + " ms"); // 白い熊 地図 drive log
 		checkGeneration(gen);
 
 		List<Candidate> variants = new ArrayList<>();
+		Candidate shortest = null;
+		List<Set<Long>> tried = new ArrayList<>();
 		for (Kind kind : new Kind[] {Kind.AVOID_RED, Kind.AVOID_LONG_YELLOW, Kind.AVOID_YELLOW}) {
 			Set<Long> bans = seen.bansFor(kind, app);
-			if (bans.isEmpty()) {
-				continue; // identical to the plain route
+			if (bans.isEmpty() || tried.contains(bans)) {
+				continue; // no such traffic, or the same bans as a route already calculated
 			}
-			Candidate c = calculate(gen, kind, start, end, intermediates, mode, bans, false, seen);
+			long left = deadline - System.currentTimeMillis();
+			if (left <= 0) {
+				break;
+			}
+			tried.add(bans);
+			net.osmand.plus.chizu.ChizuDriveLog.log("candidate " + kind + " banned: " + describeBans(bans, seen)); // 白い熊 地図 drive log
+			Candidate c = calculate(gen, kind, start, end, intermediates, mode, bans, false, seen, left);
 			if (c != null) {
-				// one refinement: jams the detour itself runs into
-				Set<Long> refined = seen.bansFor(kind, app);
-				if (!refined.equals(bans)) {
-					Candidate r = calculate(gen, kind, start, end, intermediates, mode, refined, false, seen);
-					if (r != null && r.adjustedTime < c.adjustedTime) {
-						c = r;
-					}
-				}
 				variants.add(c);
+				publish(gen, variants, null, fastest, false);
 			}
 		}
-		Candidate shortest = calculate(gen, Kind.SHORTEST, start, end, intermediates, mode,
-				Collections.emptySet(), true, seen);
+		long left = deadline - System.currentTimeMillis();
+		if (left > 0) {
+			shortest = calculate(gen, Kind.SHORTEST, start, end, intermediates, mode,
+					Collections.emptySet(), true, seen, left);
+		}
+		publish(gen, variants, shortest, fastest, true);
+		net.osmand.plus.chizu.ChizuDriveLog.log("candidates done in " + (System.currentTimeMillis() - t0) + " ms, " + candidates.size() + " shown"); // 白い熊 地図 drive log
+	}
 
-		// traffic variants best first, near-duplicates merged into the better one or into the plain route
-		Collections.sort(variants, (a, b) -> Float.compare(a.adjustedTime, b.adjustedTime));
+	/** Orders and merges what has been calculated so far and shows it. Worker thread. */
+	private void publish(int gen, @NonNull List<Candidate> variantsSoFar, @Nullable Candidate shortest,
+	                     @NonNull Candidate fastest, boolean done) {
+		// every route, the plain one and the shortest included, ranked by its time with traffic;
+		// a traffic variant slower than the plain route is a pointless detour and is left out
+		List<Candidate> all = new ArrayList<>();
+		for (Candidate c : variantsSoFar) {
+			if (c.adjustedTime < fastest.adjustedTime) {
+				all.add(c);
+			}
+		}
+		all.add(fastest);
+		if (shortest != null) {
+			all.add(shortest);
+		}
+		Collections.sort(all, (a, b) -> Float.compare(a.adjustedTime, b.adjustedTime));
+		// near-duplicates go into the faster of the two
 		List<Candidate> shown = new ArrayList<>();
-		for (Candidate c : variants) {
-			if (!isDuplicate(c, shown) && !isDuplicate(c, Collections.singletonList(fastest))) {
+		for (Candidate c : all) {
+			if (!isDuplicate(c, shown)) {
 				shown.add(c);
 			}
 		}
-		if (shortest != null) {
-			List<Candidate> others = new ArrayList<>(shown);
-			others.add(fastest);
-			if (!isDuplicate(shortest, others)) {
-				shown.add(shortest);
+		List<Candidate> result = shown.size() > 1 ? shown : Collections.emptyList();
+		app.runInUIThread(() -> {
+			if (gen != generation) {
+				return;
 			}
-		}
-		shown.add(fastest);
-		LOG.info("Traffic candidates: " + shown.size() + " shown of " + (variants.size() + 2));
-		return shown.size() > 1 ? shown : Collections.emptyList();
+			working = !done;
+			candidates = result;
+			Candidate current = active;
+			selected = current != null ? result.indexOf(current) : -1;
+			if (!result.isEmpty() && !chosenByUser && result.get(0) != current) {
+				// the best traffic-aware route so far is pre-selected, as Waze does
+				selectCandidate(0);
+			}
+			notifyChanged();
+		});
 	}
 
 	private static boolean isDuplicate(@NonNull Candidate c, @NonNull List<Candidate> others) {
@@ -387,22 +426,28 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 	@Nullable
 	private Candidate calculate(int gen, @NonNull Kind kind, @NonNull Location start, @NonNull LatLon end,
 	                            @Nullable List<LatLon> intermediates, @NonNull ApplicationMode mode,
-	                            @NonNull Set<Long> bans, boolean shortest, @NonNull TrafficMap seen)
-			throws InterruptedException {
+	                            @NonNull Set<Long> bans, boolean shortest, @NonNull TrafficMap seen,
+	                            long timeoutMs) throws InterruptedException {
 		checkGeneration(gen);
-		RouteCalculationResult res = calculateRoute(start, end, intermediates, mode, bans, shortest);
+		long t0 = System.currentTimeMillis();
+		RouteCalculationResult res = calculateRoute(start, end, intermediates, mode, bans, shortest, timeoutMs);
+		long t1 = System.currentTimeMillis();
 		checkGeneration(gen);
 		if (res == null || !res.isCalculated()) {
 			LOG.info("Traffic candidate " + kind + ": no route");
+			net.osmand.plus.chizu.ChizuDriveLog.log("candidate " + kind + " bans=" + bans.size() + " route " + (t1 - t0) + " ms: no route");
 			return null;
 		}
-		return grade(kind, res, bans, seen);
+		Candidate c = grade(kind, res, bans, seen);
+		net.osmand.plus.chizu.ChizuDriveLog.log("candidate " + kind + " bans=" + bans.size() + " route " + (t1 - t0) + " ms, traffic "
+				+ (System.currentTimeMillis() - t1) + " ms"); // 白い熊 地図 drive log
+		return c;
 	}
 
 	@Nullable
 	private RouteCalculationResult calculateRoute(@NonNull Location start, @NonNull LatLon end,
 	                                              @Nullable List<LatLon> intermediates, @NonNull ApplicationMode mode,
-	                                              @NonNull Set<Long> bans, boolean shortest)
+	                                              @NonNull Set<Long> bans, boolean shortest, long timeoutMs)
 			throws InterruptedException {
 		RouteCalculationParams params = new RouteCalculationParams();
 		params.start = start;
@@ -423,7 +468,8 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 			done.countDown();
 		};
 		routingHelper.startRouteCalculationThread(params);
-		if (!done.await(CALC_TIMEOUT_S, TimeUnit.SECONDS)) {
+		if (!done.await(Math.min(timeoutMs, TimeUnit.SECONDS.toMillis(CALC_TIMEOUT_S)), TimeUnit.MILLISECONDS)) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("candidate calc timed out after " + timeoutMs + " ms");
 			params.calculationProgress.isCancelled = true;
 			return null;
 		}
@@ -466,15 +512,26 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 	/** Every graded road seen this round, plus the roads near start and end that must never be banned. */
 	private static final class TrafficMap {
 		final Map<Long, Level> levels = new HashMap<>();
+		final Map<Long, String> names = new HashMap<>();
+		final Map<Long, Float> lengths = new HashMap<>();
 		final Set<Long> longSlow = new HashSet<>();
 		final Set<Long> protectedIds = new HashSet<>();
 
 		void add(@NonNull List<RouteSegmentResult> segments, @NonNull List<Level> grades, float longYellowMeters) {
 			for (int i = 0; i < segments.size(); i++) {
 				Level l = grades.get(i);
+				RouteSegmentResult seg = segments.get(i);
+				long id = ChizuTraffic.roadId(seg);
 				if (l != Level.UNKNOWN) {
-					levels.put(ChizuTraffic.roadId(segments.get(i)), l);
+					levels.put(id, l);
 				}
+				if (!names.containsKey(id)) {
+					String n = seg.getObject().getName();
+					String h = seg.getObject().getHighway();
+					names.put(id, (n == null || n.isEmpty() ? "unnamed" : n) + " (" + h + (seg.getObject().tunnel() ? ", tunnel" : "") + ")");
+				}
+				Float len = lengths.get(id);
+				lengths.put(id, (len == null ? 0f : len) + seg.getDistance());
 			}
 			longSlow.addAll(ChizuTraffic.longSlowIds(segments, grades, longYellowMeters));
 			protectEnds(segments, protectedIds);
@@ -495,6 +552,42 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 			bans.removeAll(protectedIds);
 			return bans;
 		}
+	}
+
+	/** 白い熊 地図 drive log: the banned roads by name, longest first, with their colour. */
+	@NonNull
+	private static String describeBans(@NonNull Set<Long> bans, @NonNull TrafficMap map) {
+		Map<String, float[]> byName = new HashMap<>(); // {metres, worst level ordinal}
+		for (Long id : bans) {
+			String name = map.names.get(id);
+			if (name == null) {
+				name = "road " + id;
+			}
+			float[] v = byName.get(name);
+			if (v == null) {
+				v = new float[2];
+				byName.put(name, v);
+			}
+			Float len = map.lengths.get(id);
+			v[0] += len == null ? 0 : len;
+			Level l = map.levels.get(id);
+			v[1] = Math.max(v[1], l == null ? 0 : l.ordinal());
+		}
+		List<Map.Entry<String, float[]>> list = new ArrayList<>(byName.entrySet());
+		Collections.sort(list, (a, b) -> Float.compare(b.getValue()[0], a.getValue()[0]));
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < list.size() && i < 20; i++) {
+			Map.Entry<String, float[]> e = list.get(i);
+			if (sb.length() > 0) {
+				sb.append(", ");
+			}
+			sb.append(e.getKey()).append(' ').append(Math.round(e.getValue()[0])).append(" m ")
+					.append(Level.values()[(int) e.getValue()[1]].name().toLowerCase(java.util.Locale.US));
+		}
+		if (list.size() > 20) {
+			sb.append(", … ").append(list.size() - 20).append(" more");
+		}
+		return sb.toString();
 	}
 
 	private static void protectEnds(@NonNull List<RouteSegmentResult> segments, @NonNull Set<Long> out) {
@@ -528,7 +621,7 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 				if (driveCheck != this) {
 					return;
 				}
-				checkAhead();
+				checkAhead(false);
 				app.runInUIThread(this, ChizuTrafficPrefs.getIntervalMinutes(app) * 60_000L);
 			}
 		};
@@ -539,9 +632,17 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		driveCheck = null;
 	}
 
-	private void checkAhead() {
+	/**
+	 * Every minute while driving, and {@link #REROUTE_CHECK_DELAY_MS} after every off-route reroute:
+	 * is there a faster way now? The rest of the current route is graded by the traffic of now and
+	 * set against two fresh routes from here — the plain fastest, with no bans at all, so a road that
+	 * was jammed when the route was planned is back in play once it is free; and one around the jams
+	 * there are now. When the faster of the two saves at least the minimum saving, 地図 switches to it
+	 * and says so. Either way, the bans the next off-route reroute keeps to become the jams of now.
+	 */
+	private void checkAhead(boolean afterReroute) {
 		RouteCalculationResult route = routingHelper.getRoute();
-		if (!routingHelper.isFollowingMode() || pendingOffer != null || !isApplicable(route)) {
+		if (!routingHelper.isFollowingMode() || !isApplicable(route) || (checkQueued && !afterReroute)) {
 			return;
 		}
 		List<RouteSegmentResult> ahead = route.getOriginalRoute(route.getCurrentRoute());
@@ -550,57 +651,65 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		if (ahead == null || ahead.isEmpty() || location == null || end == null) {
 			return;
 		}
+		Location from = new Location(location);
 		List<LatLon> intermediates = routingHelper.getIntermediatePoints();
 		ApplicationMode mode = routingHelper.getAppMode();
 		int gen = generation;
+		checkQueued = true;
 		worker.execute(() -> {
+			checkQueued = false;
 			try {
+				long t0 = System.currentTimeMillis();
 				List<RouteSegmentResult> head = headOf(ahead, SAMPLE_AHEAD_M);
 				List<Level> levels = new ArrayList<>(source.sample(head));
-				Set<Long> jams = ChizuTraffic.jamIds(head, levels);
-				Set<Long> protect = new HashSet<>();
-				protectEnds(ahead, protect);
-				jams.removeAll(protect);
-				long now = System.currentTimeMillis();
-				synchronized (declined) {
-					for (Iterator<Map.Entry<Long, Long>> it = declined.entrySet().iterator(); it.hasNext(); ) {
-						Map.Entry<Long, Long> e = it.next();
-						if (now - e.getValue() > DECLINE_MEMORY_MS) {
-							it.remove();
-						} else {
-							jams.remove(e.getKey());
-						}
-					}
-				}
-				jams.removeAll(ChizuTrafficBans.getActive());
-				if (jams.isEmpty()) {
-					return;
-				}
 				while (levels.size() < ahead.size()) {
 					levels.add(Level.UNKNOWN); // beyond the sampled head: the router's own time
 				}
-				float remainingTime = ChizuTraffic.adjustedTime(ahead, levels);
-				Set<Long> bans = new HashSet<>(ChizuTrafficBans.getActive());
-				bans.addAll(jams);
-				RouteCalculationResult res = calculateRoute(new Location(location), end, intermediates, mode, bans, false);
-				if (gen != generation || res == null || !res.isCalculated()) {
-					return;
+				float currentTime = ChizuTraffic.adjustedTime(ahead, levels);
+				Set<Long> jams = ChizuTraffic.jamIds(ahead, levels);
+				Set<Long> protect = new HashSet<>();
+				protectEnds(ahead, protect);
+				TrafficMap seen = new TrafficMap();
+				seen.add(ahead, levels, ChizuTrafficPrefs.getLongYellowMeters(app));
+				long timeout = TimeUnit.SECONDS.toMillis(CALC_TIMEOUT_S);
+				Candidate plain = calculate(gen, Kind.FASTEST, from, end, intermediates, mode,
+						Collections.emptySet(), false, seen, timeout);
+				if (plain != null) {
+					jams.addAll(ChizuTraffic.jamIds(plain.segments, plain.levels));
+					protectEnds(plain.segments, protect);
 				}
-				Candidate detour = grade(Kind.AVOID_RED, res, bans, new TrafficMap());
-				float detourTime = detour.adjustedTime;
-				int saving = Math.round(remainingTime - detourTime);
-				LOG.info("Traffic ahead: " + jams.size() + " jammed roads, detour saves " + saving + " s");
-				if (saving < ChizuTrafficPrefs.getMinSavingMinutes(app) * 60) {
-					return;
+				jams.removeAll(protect);
+				if (!jams.isEmpty()) {
+					net.osmand.plus.chizu.ChizuDriveLog.log("traffic check banned: " + describeBans(jams, seen)); // 白い熊 地図 drive log
 				}
-				String street = ChizuTraffic.worstStreet(ahead, levels);
+				Candidate around = jams.isEmpty() ? null : calculate(gen, Kind.AVOID_RED, from, end, intermediates,
+						mode, jams, false, seen, timeout);
+				Candidate best = plain;
+				if (around != null && (best == null || around.adjustedTime < best.adjustedTime)) {
+					best = around;
+				}
+				int saving = best == null ? 0 : Math.round(currentTime - best.adjustedTime);
+				net.osmand.plus.chizu.ChizuDriveLog.log(String.format(java.util.Locale.US,
+						"traffic check%s: current %.0f s, plain %s, around %d jams %s, saves %d s, took %d ms",
+						afterReroute ? " after reroute" : "", currentTime,
+						plain == null ? "-" : Math.round(plain.adjustedTime) + " s",
+						jams.size(), around == null ? "-" : Math.round(around.adjustedTime) + " s",
+						saving, System.currentTimeMillis() - t0)); // 白い熊 地図 drive log
+				Candidate chosen = best;
+				Set<Long> jamsNow = new HashSet<>(jams);
 				app.runInUIThread(() -> {
-					OfferListener l = offerListener;
-					if (gen != generation || l == null || !routingHelper.isFollowingMode()) {
+					if (gen != generation || !routingHelper.isFollowingMode()) {
 						return;
 					}
-					pendingOffer = detour;
-					l.onRerouteOffer(detour, saving, street);
+					if (chosen != null && saving >= ChizuTrafficPrefs.getMinSavingMinutes(app) * 60) {
+						net.osmand.plus.chizu.ChizuDriveLog.log("traffic reroute taken: " + chosen.kind + ", saves " + saving + " s");
+						ChizuTrafficBans.setActive(chosen.bans);
+						selecting = true;
+						routingHelper.chizuSetActiveRoute(chosen.route);
+						routingHelper.getVoiceRouter().chizuAnnounceTrafficReroute(saving);
+					} else {
+						ChizuTrafficBans.setActive(jamsNow);
+					}
 				});
 			} catch (InterruptedException e) {
 				// superseded
@@ -608,35 +717,6 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 				LOG.error("Traffic check failed", e);
 			}
 		});
-	}
-
-	/** UI thread. */
-	public void acceptOffer() {
-		Candidate c = pendingOffer;
-		pendingOffer = null;
-		if (c == null || !routingHelper.isFollowingMode()) {
-			return;
-		}
-		ChizuTrafficBans.setActive(c.bans);
-		selecting = true;
-		routingHelper.chizuSetActiveRoute(c.route);
-	}
-
-	/** UI thread: the jams of this offer are not offered again for ten minutes. */
-	public void declineOffer() {
-		Candidate c = pendingOffer;
-		pendingOffer = null;
-		if (c == null) {
-			return;
-		}
-		Set<Long> mine = new HashSet<>(c.bans);
-		mine.removeAll(ChizuTrafficBans.getActive());
-		long now = System.currentTimeMillis();
-		synchronized (declined) {
-			for (Long id : mine) {
-				declined.put(id, now);
-			}
-		}
 	}
 
 	// ---------- plumbing ----------

@@ -290,6 +290,11 @@ public final class RoutePreviewScreen extends BaseAndroidAutoScreen implements I
 
 	@Override
 	public void newRouteIsCalculated(boolean newRoute, ValueHolder<Boolean> showToast) {
+		// 白い熊 地図: a preview left in the stack once navigation is running must not frame the
+		// rerouted route — that unlinked the car map and turned it north-up and flat on every reroute
+		if (getApp().getRoutingHelper().isFollowingMode()) {
+			return;
+		}
 		zoomMapToRoute();
 		updateRoute(newRoute);
 	}

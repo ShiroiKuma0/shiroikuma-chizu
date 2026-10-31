@@ -233,6 +233,7 @@ public class VoiceRouter {
 		if (settings.SPEAK_ROUTE_DEVIATION.get() && dist > atd.getOffRouteDistance()) {
 			long ms = System.currentTimeMillis();
 			if (waitAnnouncedOffRoute == 0 || ms - lastAnnouncedOffRoute > waitAnnouncedOffRoute) {
+				net.osmand.plus.chizu.ChizuDriveLog.log("voice off route " + Math.round(dist) + " m"); // 白い熊 地図 drive log
 				CommandBuilder p = getNewCommandPlayerToPlay();
 				if (p != null) {
 					p.offRoute(dist);
@@ -652,6 +653,16 @@ public class VoiceRouter {
 		return speakablePointName == null ? "" : speakablePointName;
 	}
 
+	private boolean chizuInCzechia() {
+		Location l = router.getLastFixedLocation();
+		if (l == null) {
+			return true; // 白い熊 drives in Czechia mostly
+		}
+		double lat = l.getLatitude();
+		double lon = l.getLongitude();
+		return lat > 48.55 && lat < 51.06 && lon > 12.09 && lon < 18.86;
+	}
+
 	private String getSpeakablePointName(String pn) {
 		// Replace characters which may produce unwanted TTS sounds:
 		String pl = "";
@@ -674,6 +685,11 @@ public class VoiceRouter {
 				if (pn.startsWith("St ")) {
 					pn = pn.replace("St ", "S T "); // German Staatsstrasse, abbreviated St, often mispronounced
 				}
+			}
+			// 白い熊 地図: the Japanese voice spells unknown Latin words letter by letter, so names go
+			// to it in katakana — read by Czech rules in Czechia, by rough general ones elsewhere
+			if (pl.startsWith("ja") && player instanceof net.osmand.plus.voice.JsTtsCommandPlayer) {
+				pn = net.osmand.plus.chizu.ChizuKana.toKatakana(pn, chizuInCzechia());
 			}
 		}
 		return pn;
@@ -900,6 +916,7 @@ public class VoiceRouter {
 	}
 
 	public void newRouteIsCalculated(boolean newRoute) {
+		net.osmand.plus.chizu.ChizuDriveLog.log("voice route " + (newRoute ? "new" : "recalculated") + " announce=" + settings.SPEAK_ROUTE_RECALCULATION.get()); // 白い熊 地図 drive log
 		CommandBuilder p = getNewCommandPlayerToPlay();
 		if (p != null) {
 			if (newRoute) {
@@ -918,6 +935,32 @@ public class VoiceRouter {
 		currentStatus = STATUS_UNKNOWN;
 		suppressDest = false;
 		nextRouteDirection = null;
+	}
+
+	/**
+	 * 白い熊 地図: the traffic check switched to a faster route; says so, with the time it saves.
+	 * Spoken whether or not reroutes are announced, since nobody asked for this one. TTS voices only.
+	 */
+	public void chizuAnnounceTrafficReroute(int savedSeconds) {
+		if (!(player instanceof net.osmand.plus.voice.JsTtsCommandPlayer) || isMute()) {
+			return;
+		}
+		CommandBuilder p = getNewCommandPlayerToPlay();
+		if (p == null) {
+			return;
+		}
+		int min = Math.max(1, Math.round(savedSeconds / 60f));
+		String lang = player.getLanguage() == null ? "" : player.getLanguage();
+		String text;
+		if (lang.startsWith("ja")) {
+			text = "渋滞を避けて、ルートを変更しました。約" + min + "分短縮します。";
+		} else if (lang.startsWith("cs")) {
+			text = "Trasa změněna kvůli provozu, o " + min + (min == 1 ? " minutu" : min < 5 ? " minuty" : " minut") + " rychleji.";
+		} else {
+			text = "Rerouted around traffic, about " + min + (min == 1 ? " minute" : " minutes") + " faster.";
+		}
+		p.chizuSay(text);
+		play(p);
 	}
 
 	public void arrivedDestinationPoint(String name) {

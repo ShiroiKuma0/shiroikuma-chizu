@@ -70,7 +70,38 @@ class DefaultSpeedFragment : BaseMaterialFragment() {
 		intervalRow.setTitle(R.string.shared_string_interval)
 
 		bindValues(view)
+		chizuGovern(view)
 		return view
+	}
+
+	/**
+	 * 白い熊 地図: with own speeds on, a car profile takes these speeds from 白い熊 UI → My driving
+	 * speeds, so the rows here are greyed out and every footer leads there.
+	 */
+	private fun chizuGovern(view: View) {
+		if (!net.osmand.plus.chizu.ChizuSpeeds.governsTravelSpeed(osmandApp, appMode)) {
+			return
+		}
+		for (id in intArrayOf(R.id.default_speed_rows, R.id.speed_range_rows, R.id.eta_rows)) {
+			val rows: View = view.findViewById(id)
+			rows.alpha = 0.38f
+			chizuDisable(rows)
+		}
+		for (id in intArrayOf(R.id.default_speed_footer, R.id.speed_range_footer, R.id.eta_footer)) {
+			val footer: GroupFooterView = view.findViewById(id)
+			footer.setText(R.string.chizu_speeds_governed)
+			footer.setOnClickListener { net.osmand.plus.chizu.ChizuUiFragment.showInstance(requireActivity(), true) }
+		}
+	}
+
+	private fun chizuDisable(v: View) {
+		v.isEnabled = false
+		v.isClickable = false
+		if (v is ViewGroup) {
+			for (i in 0 until v.childCount) {
+				chizuDisable(v.getChildAt(i))
+			}
+		}
 	}
 
 	override fun onDestroyView() {
@@ -174,8 +205,12 @@ class DefaultSpeedFragment : BaseMaterialFragment() {
 
 		val interval = formatInterval(settings().ETA_AVERAGE_SPEED_INTERVAL.getModeValue(appMode))
 		val footer: GroupFooterView = view.findViewById(R.id.eta_footer)
-		footer.setText(if (enabled) getString(R.string.eta_adapt_to_my_speed_descr, interval)
-			else getString(R.string.eta_adapt_to_my_speed_off_descr))
+		if (net.osmand.plus.chizu.ChizuSpeeds.governsTravelSpeed(osmandApp, appMode)) {
+			footer.setText(R.string.chizu_speeds_governed)
+		} else {
+			footer.setText(if (enabled) getString(R.string.eta_adapt_to_my_speed_descr, interval)
+				else getString(R.string.eta_adapt_to_my_speed_off_descr))
+		}
 	}
 
 	private fun clampDefaultSpeed(value: Float): Float =
