@@ -63,7 +63,8 @@ public class VehicleSpecificationPreference extends DialogPreference {
 		}
 		try {
 			String pattern = getString(R.string.ltr_or_rtl_combine_via_space);
-			String valueStr = SharedNumberFormatter.formatDecimal(value, 1);
+			// 白い熊 地図: as entered, like the input box (stock rounds to one decimal)
+			String valueStr = SharedNumberFormatter.formatDecimal(value, 4);
 			String symbolStr = units.getSymbol();
 			return String.format(pattern, valueStr, symbolStr);
 		} catch (NumberFormatException e) {

@@ -436,8 +436,10 @@ public class RoutePlannerFrontEnd {
 				HHNetworkRouteRes r = runHHRoute(ctx, start, targets);
 				boolean hasAnyMissingMaps = ctx.calculationProgress.hasAnyMissingMaps();
 				if ((r != null && r.isCorrect()) || hasAnyMissingMaps || useOnlyHHRouting) {
+					ctx.calculationProgress.chizuEngine = "hh-java";
 					return r;
 				}
+				ctx.calculationProgress.chizuEngine = "hh-java-failed";
 			} else {
 				setStartEndToCtx(ctx, start, end, intermediates);
 				ctx.calculationProgress.nextIteration();
@@ -447,8 +449,10 @@ public class RoutePlannerFrontEnd {
 				boolean hasAnyMissingMaps = ctx.calculationProgress.hasAnyMissingMaps();
 				if ((!r.detailed.isEmpty() && r.isCorrect()) || hasAnyMissingMaps || useOnlyHHRouting) {
 					makeStartEndPointsPrecise(ctx, r, start, end, intermediates);
+					ctx.calculationProgress.chizuEngine = "hh-cpp";
 					return r;
 				}
+				ctx.calculationProgress.chizuEngine = "hh-cpp-failed";
 			}
 		}
 
@@ -487,6 +491,10 @@ public class RoutePlannerFrontEnd {
 			ctx.calculationProgress.nextIteration();
 			res = runNativeRouting(ctx, recalculationEnd, null);
 			makeStartEndPointsPrecise(ctx, res, start, end, intermediates);
+			if (ctx.calculationMode != RouteCalculationMode.BASE) {
+				ctx.calculationProgress.chizuEngine = (ctx.calculationProgress.chizuEngine.startsWith("hh") ? ctx.calculationProgress.chizuEngine + ">" : "")
+						+ "astar-cpp" + (recalculationEnd != null ? "+rejoin" : "") + (routeDirection != null ? "+2phase" : "");
+			}
 		} else {
 			int indexNotFound = 0;
 			List<RouteSegmentPoint> points = new ArrayList<RouteSegmentPoint>();
@@ -506,6 +514,9 @@ public class RoutePlannerFrontEnd {
 			}
 			ctx.calculationProgress.nextIteration();
 			res = searchRouteImpl(ctx, points, routeDirection);
+			if (ctx.calculationMode != RouteCalculationMode.BASE) {
+				ctx.calculationProgress.chizuEngine = "astar-java";
+			}
 		}
 		ctx.calculationProgress.timeToCalculate = (System.nanoTime() - timeToCalculate);
 		RouteResultPreparation.printResults(ctx, start, end, res.detailed);

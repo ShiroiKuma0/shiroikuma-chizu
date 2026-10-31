@@ -87,8 +87,10 @@ class RouteRecalculationHelper {
 
 	boolean isRouteBeingCalculated() {
 		synchronized (routingHelper) {
-			for (Future<?> future : tasksMap.keySet()) {
-				if (!future.isDone()) {
+			for (Entry<Future<?>, RouteRecalculationTask> e : tasksMap.entrySet()) {
+				// 白い熊 地図: a traffic candidate is not the route being recalculated — counting it
+				// spun the car's loading circle and paused voice guidance while it ran
+				if (!e.getKey().isDone() && !e.getValue().params.chizuCandidate) {
 					return true;
 				}
 			}
@@ -165,6 +167,16 @@ class RouteRecalculationHelper {
 	private void setNewRoute(RouteCalculationResult prevRoute, RouteCalculationResult res, Location start) {
 		routingHelper.setRoute(res);
 		boolean newRoute = !prevRoute.isCalculated();
+		net.osmand.plus.chizu.ChizuDriveLog.log("route set newRoute=" + newRoute + " following=" + isFollowingMode()
+				+ " planning=" + routingHelper.isRoutePlanningMode() + " initial=" + res.initialCalculation
+				+ " dist=" + res.getWholeDistance() + " err=" + res.getErrorMessage()
+				+ " by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
+		if (res.isCalculated()) {
+			int left = routingHelper.getLeftTime();
+			net.osmand.plus.chizu.ChizuDriveLog.log(String.format(java.util.Locale.US,
+					"predict %s dist=%d m time=%d s eta=%tR following=%b", newRoute ? "new" : "recalc",
+					res.getWholeDistance(), left, System.currentTimeMillis() + left * 1000L, isFollowingMode())); // 白い熊 地図: predictions against arrivals
+		}
 		if (isFollowingMode()) {
 			Location lastFixedLocation = getLastFixedLocation();
 			if (lastFixedLocation != null) {
@@ -191,6 +203,8 @@ class RouteRecalculationHelper {
 					getVoiceRouter().newRouteIsCalculated(true);
 				} else if (suppressedRecalculationPrompt.shouldAnnounce(System.currentTimeMillis(), wrongMovementDirection)) {
 					getVoiceRouter().newRouteIsCalculated(false);
+				} else {
+					net.osmand.plus.chizu.ChizuDriveLog.log("route prompt suppressed wrongDir=" + wrongMovementDirection); // 白い熊 地図 drive log
 				}
 			}
 		}
@@ -228,7 +242,22 @@ class RouteRecalculationHelper {
 			getSettings().LAST_ROUTE_APPLICATION_MODE.set(getAppMode());
 			RouteRecalculationTask newTask = new RouteRecalculationTask(this,
 					params, paramsChanged, updateProgress);
-			lastTask = newTask;
+			if (params.chizuCandidate) {
+				net.osmand.plus.chizu.ChizuDriveLog.log("candidate calc queued");
+			} else {
+				lastTask = newTask;
+				// 白い熊 地図: the one calculation thread must not keep a real reroute waiting behind
+				// traffic candidates (up to 90 s each); they are dropped and tried again on the next check
+				for (Entry<Future<?>, RouteRecalculationTask> e : tasksMap.entrySet()) {
+					if (e.getValue().params.chizuCandidate && !e.getKey().isDone()) {
+						net.osmand.plus.chizu.ChizuDriveLog.log("candidate calc dropped for a route calculation");
+						e.getValue().stopCalculation();
+						e.getKey().cancel(false);
+						// a task cancelled before it ran never reports: its caller would wait out its timeout
+						e.getValue().params.alternateResultListener.onRouteCalculated(null);
+					}
+				}
+			}
 			onRouteCalculationStart(params);
 			if (updateProgress) {
 				updateProgressWithDelay(params);
@@ -262,6 +291,10 @@ class RouteRecalculationHelper {
 			if (System.currentTimeMillis() - lastTimeEvaluatedRoute < RECALCULATE_THRESHOLD_CAUSING_FULL_RECALCULATE_INTERVAL) {
 				recalculateCountInInterval++;
 			}
+			net.osmand.plus.chizu.ChizuDriveLog.log("recalc start paramsChanged=" + paramsChanged
+					+ " onlyStart=" + onlyStartPointChanged + " prev=" + (previousRoute != null)
+					+ " countInInterval=" + recalculateCountInInterval + " wait=" + evalWaitInterval
+					+ " by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
 			ApplicationMode mode = getAppMode();
 			RouteCalculationParams params = new RouteCalculationParams();
 			params.start = start;
@@ -273,7 +306,13 @@ class RouteRecalculationHelper {
 				params.gpxRoute = null;
 			}
 			params.onlyStartPointChanged = onlyStartPointChanged;
-			if (recalculateCountInInterval < RECALCULATE_THRESHOLD_COUNT_CAUSING_FULL_RECALCULATE
+			// 白い熊 地図: a car reroute is planned afresh, never steered back onto the old route — that
+			// route only aims at a point 10 km down the old one and keeps the rest, so a faster way
+			// (a tunnel 白い熊 took instead) was never found while it stayed the fastest
+			boolean chizuFresh = gpxRoute == null && mode.isDerivedRoutingFrom(ApplicationMode.CAR);
+			if (chizuFresh) {
+				recalculateCountInInterval = 0;
+			} else if (recalculateCountInInterval < RECALCULATE_THRESHOLD_COUNT_CAUSING_FULL_RECALCULATE
 					|| (gpxRoute != null && isDeviatedFromRoute())) {
 				params.previousToRecalculate = previousRoute;
 			} else {
@@ -429,7 +468,19 @@ class RouteRecalculationHelper {
 			}
 			RouteProvider provider = routingHelper.getProvider();
 			OsmandSettings settings = getSettings();
+			long chizuT0 = System.currentTimeMillis();
 			RouteCalculationResult res = provider.calculateRouteImpl(params);
+			net.osmand.plus.chizu.ChizuDriveLog.log("calc " + (params.chizuCandidate ? "candidate" : "route")
+					+ " engine=" + params.calculationProgress.chizuEngine
+					+ " " + (System.currentTimeMillis() - chizuT0) + " ms dist=" + res.getWholeDistance()
+					+ " cost=" + Math.round(res.getRoutingTime())
+					+ (params.calculationProgress.isCancelled ? " cancelled" : "")
+					+ (params.start == null ? "" : String.format(java.util.Locale.US,
+					" start=%.6f,%.6f acc=%.0f spd=%s brg=%s heading=%s", params.start.getLatitude(), params.start.getLongitude(),
+					params.start.hasAccuracy() ? params.start.getAccuracy() : -1f,
+					params.start.hasSpeed() ? String.format(java.util.Locale.US, "%.1f", params.start.getSpeed()) : "-",
+					params.start.hasBearing() ? String.valueOf(Math.round(params.start.getBearing())) : "-",
+					RouteProvider.chizuUsesHeading(params.start) ? "used" : "ignored"))); // 白い熊 地図 drive log
 			routingHelper.getApplication().getMemoryLog().onRouteCalculated();
 			if (params.chizuCandidate) {
 				// 白い熊 地図: traffic candidates report every outcome to their listener, never to the UI

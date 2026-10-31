@@ -138,6 +138,13 @@ public abstract class CommandBuilder {
 		return this;
 	}
 
+	/** 白い熊 地図: a sentence of our own, spoken as written — the voice packs have no phrase for it. TTS only. */
+	public CommandBuilder chizuSay(String text) {
+		listCommands.add("chizu_say");
+		listStruct.add(text);
+		return this;
+	}
+
 	private void addToCommandList(String name, Object... args) {
 		listCommands.add(name);
 		for (Object o : args) {

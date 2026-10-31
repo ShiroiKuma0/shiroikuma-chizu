@@ -669,6 +669,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 				List<RouteSegmentResult> tunnel = routingHelper.getUpcomingTunnel(UPCOMING_TUNNEL_DISTANCE);
 				if (tunnel != null) {
 					simulatePosition = new SimulationProvider(location, tunnel);
+					net.osmand.plus.chizu.ChizuDriveLog.log("tunnel simulation starts, " + tunnel.size() + " segments, speed " + location.getSpeed()); // 白い熊 地図 drive log
 					scheduleSimulatedPositionRun();
 				}
 			}, START_LOCATION_SIMULATION_DELAY);
@@ -682,6 +683,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 				setLocation(loc);
 				app.runInUIThreadAndCancelPrevious(RUN_SIMULATE_LOCATION_MSG_ID, this::scheduleSimulatedPositionRun, 600);
 			} else {
+				net.osmand.plus.chizu.ChizuDriveLog.log("tunnel simulation ends"); // 白い熊 地図 drive log
 				simulatePosition = null;
 			}
 		}
@@ -719,6 +721,12 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		if (locationSimulation.isRouteAnimating() || shouldIgnoreLocation(location)) {
 			return;
 		}
+		if (app.getRoutingHelper().isFollowingMode()) {
+			net.osmand.plus.chizu.ChizuDriveLog.location("aa", location); // 白い熊 地図 drive log
+		}
+		if (!isTunnelLocationSimulated(location) && !locationSimulation.isRouteAnimating()) {
+			net.osmand.plus.chizu.ChizuRoadLog.onFix(location); // 白い熊 地図 road-section log, navigating or not
+		}
 		prevLocation = location;
 		if (location != null) {
 			lastTimeLocationFixed = System.currentTimeMillis();
@@ -751,6 +759,12 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	private void setLocation(@Nullable net.osmand.Location location) {
 		if (shouldIgnoreLocation(location)) {
 			return;
+		}
+		if (app.getRoutingHelper().isFollowingMode()) {
+			net.osmand.plus.chizu.ChizuDriveLog.location("ph", location); // 白い熊 地図 drive log
+		}
+		if (!isTunnelLocationSimulated(location) && !locationSimulation.isRouteAnimating()) {
+			net.osmand.plus.chizu.ChizuRoadLog.onFix(location); // 白い熊 地図 road-section log, navigating or not
 		}
 		prevLocation = location;
 		if (location == null) {

@@ -25,9 +25,13 @@ public class DrawerMenuButton extends MapButton {
 	private boolean chizuLongPressFired;
 	private float chizuDownX;
 	private float chizuDownY;
+	private long chizuDownTime;
+	private static final long CHIZU_LONG_PRESS_MS = 300;
 	private final Runnable chizuLongPress = () -> {
 		if (mapActivity != null) {
 			chizuLongPressFired = true;
+			net.osmand.plus.chizu.ChizuDriveLog.log("drawer long press fired after "
+					+ (android.os.SystemClock.uptimeMillis() - chizuDownTime) + " ms"); // where the time goes
 			performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
 			net.osmand.plus.chizu.ChizuUiFragment.showInstance(mapActivity);
 		}
@@ -61,9 +65,14 @@ public class DrawerMenuButton extends MapButton {
 		switch (event.getActionMasked()) {
 			case MotionEvent.ACTION_DOWN:
 				chizuLongPressFired = false;
+				chizuDownTime = event.getDownTime();
 				chizuDownX = event.getX();
 				chizuDownY = event.getY();
-				postDelayed(chizuLongPress, ViewConfiguration.getLongPressTimeout());
+				// timed from the touch itself: the event reaches the button a few hundred ms late
+				// while the map draws, and a wait started only then felt like two seconds
+				long late = android.os.SystemClock.uptimeMillis() - chizuDownTime;
+				net.osmand.plus.chizu.ChizuDriveLog.log("drawer touch reached the button " + late + " ms late");
+				postDelayed(chizuLongPress, Math.max(0, CHIZU_LONG_PRESS_MS - late));
 				break;
 			case MotionEvent.ACTION_MOVE:
 				float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();

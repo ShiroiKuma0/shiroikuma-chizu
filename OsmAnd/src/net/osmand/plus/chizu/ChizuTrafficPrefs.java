@@ -42,7 +42,7 @@ public final class ChizuTrafficPrefs {
 	}
 
 	public static int getIntervalMinutes(@NonNull Context context) {
-		return Math.max(1, prefs(context).getInt(INTERVAL_MIN, 3));
+		return Math.max(1, prefs(context).getInt(INTERVAL_MIN, 1));
 	}
 
 	public static void setIntervalMinutes(@NonNull Context context, int minutes) {

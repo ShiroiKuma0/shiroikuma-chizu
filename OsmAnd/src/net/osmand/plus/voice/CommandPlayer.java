@@ -151,6 +151,13 @@ public abstract class CommandPlayer {
 
 	protected synchronized void requestAudioFocus() {
 		log.debug("requestAudioFocus");
+		if (focusHelper != null) {
+			// 白い熊 地図: still held. A fresh helper here replaced the one holding the focus, which then
+			// could never be given back — the music stayed ducked until the app was restarted
+			net.osmand.plus.chizu.ChizuDriveLog.log("focus already held");
+			return;
+		}
+		net.osmand.plus.chizu.ChizuDriveLog.log("focus request"); // 白い熊 地図 drive log
 		streamType = app.getSettings().AUDIO_MANAGER_STREAM.getModeValue(app.getRoutingHelper().getAppMode());
 		updateAudioStream(streamType);
 		focusHelper = createAudioFocusHelper();
@@ -174,6 +181,7 @@ public abstract class CommandPlayer {
 
 	protected synchronized void abandonAudioFocus() {
 		log.debug("abandonAudioFocus");
+		net.osmand.plus.chizu.ChizuDriveLog.log("focus abandon"); // 白い熊 地図 drive log
 		if (streamType == 0 || bluetoothScoRunning) {
 			stopBluetoothSco();
 		}

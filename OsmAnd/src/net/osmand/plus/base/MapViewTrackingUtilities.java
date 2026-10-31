@@ -446,6 +446,7 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 
 	public void switchRoutePlanningMode() {
 		routePlanningMode = routingHelper.isRoutePlanningMode();
+		net.osmand.plus.chizu.ChizuDriveLog.log("map route planning mode=" + routePlanningMode); // 白い熊 地図 drive log
 		updateSettings();
 		if (!routePlanningMode && followingMode && !trackingPaused) {
 			backToLocationImpl();
@@ -504,6 +505,7 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 	}
 
 	public void backToLocationImpl(int zoom, boolean forceZoom) {
+		net.osmand.plus.chizu.ChizuDriveLog.log("map back to location zoom=" + zoom + " by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
 		if (mapView != null && !trackingPaused) {
 			OsmAndLocationProvider locationProvider = app.getLocationProvider();
 			Location lastKnownLocation = locationProvider.getLastKnownLocation();
@@ -599,6 +601,10 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 	}
 
 	public void setMapLinkedToLocation(boolean isMapLinkedToLocation) {
+		if (this.isMapLinkedToLocation != isMapLinkedToLocation) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("map linked=" + isMapLinkedToLocation + " autoFollow=" + settings.AUTO_FOLLOW_ROUTE.get()
+					+ " by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
+		}
 		this.isMapLinkedToLocation = isMapLinkedToLocation;
 		if (!isMapLinkedToLocation) {
 			movingToMyLocation = false;
@@ -647,6 +653,7 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 	}
 
 	public void switchCompassModeTo(@NonNull CompassMode newMode) {
+		net.osmand.plus.chizu.ChizuDriveLog.log("map compass mode " + settings.getCompassMode() + " -> " + newMode + " by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
 		if (!settings.isCompassMode(newMode)) {
 			settings.setCompassMode(newMode);
 			onCompassModeChanged();

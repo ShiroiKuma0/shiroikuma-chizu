@@ -46,6 +46,8 @@ public class RouteCalculationProgress implements Serializable {
 	public int loadedTiles = 0;
 	
 	public boolean isCancelled;
+	// 白い熊 地図: which router produced the route, for the drive log
+	public String chizuEngine = "-";
 	public boolean memoryLimitExceeded; // set with isCancelled when the memory guard stops the calculation
 	public boolean requestPrivateAccessRouting;
 

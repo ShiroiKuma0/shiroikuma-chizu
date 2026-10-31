@@ -872,6 +872,26 @@ public class GeneralRouter implements VehicleRouter {
 			return ev;
 		}
 		
+		// 白い熊 地図: a rule ahead of the profile's own (the first match wins); for the per-calculation router only
+		public RouteAttributeEvalRule chizuInsertRule(int index, String selectValue, String selectType) {
+			RouteAttributeEvalRule ev = new RouteAttributeEvalRule();
+			ev.registerSelectValue(selectValue, selectType);
+			rules.add(Math.max(0, Math.min(index, rules.size())), ev);
+			return ev;
+		}
+
+		// 白い熊 地図: the index just past the last rule selecting a value that starts with the prefix, or 0
+		public int chizuIndexAfter(String selectValuePrefix) {
+			int index = 0;
+			for (int k = 0; k < rules.size(); k++) {
+				String def = rules.get(k).selectValueDef;
+				if (def != null && def.startsWith(selectValuePrefix)) {
+					index = k + 1;
+				}
+			}
+			return index;
+		}
+
 		public RouteAttributeEvalRule getLastRule() {
 			return rules.get(rules.size() - 1);
 		}

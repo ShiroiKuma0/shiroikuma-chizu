@@ -46,6 +46,7 @@ import java.util.Locale;
 public class ChizuUiFragment extends BaseOsmAndFragment {
 
 	public static final String TAG = ChizuUiFragment.class.getName();
+	private static final String ARG_SPEEDS = "speeds";
 
 	// kxkb indent ladder: section heading 36, its rows 72, sub-heading 54, sub-rows 90
 	private static final int SECTION_INSET_DP = 36;
@@ -79,7 +80,12 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	@Override
 	public void onResume() {
 		super.onResume();
+		ChizuDriveLog.log("ui page resumed"); // with the long press line: where the time goes
 		buildRows();
+		View root = getView();
+		if (root != null) {
+			root.post(() -> ChizuDriveLog.log("ui page first frame"));
+		}
 	}
 
 	private void buildRows() {
@@ -87,6 +93,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		if (root == null) {
 			return;
 		}
+		long chizuT0 = System.currentTimeMillis();
 		int background = color(ChizuTheme.Slot.BACKGROUND);
 		int text = color(ChizuTheme.Slot.TEXT);
 		int accent = color(ChizuTheme.Slot.ACCENT);
@@ -165,10 +172,40 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 				ChizuTrafficPrefs.getLongYellowMeters(requireContext()), " m",
 				(value, preview) -> ChizuTrafficPrefs.setLongYellowMeters(requireContext(), value), null);
 
+		// ===== My driving speeds =====
+		View speedsSection = null;
+		addSection(R.string.chizu_section_speeds, accent);
+		speedsSection = holder.getChildAt(holder.getChildCount() - 1);
+		addSwitchRow(R.string.chizu_speeds_enabled, R.string.chizu_speeds_enabled_descr, 1,
+				ChizuSpeeds.isEnabled(requireContext()),
+				checked -> ChizuSpeeds.setEnabled(requireContext(), checked));
+		// what the car profile's Travel speed screen set before, which is greyed out while this is on
+		addSliderRow(getString(R.string.chizu_speeds_slowest), 1, 1, 50,
+				ChizuSpeeds.getSlowest(requireContext()), " km/h",
+				(value, preview) -> ChizuSpeeds.setSlowest(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_speeds_unknown), 1, 5, 130,
+				ChizuSpeeds.getUnknown(requireContext()), " km/h",
+				(value, preview) -> ChizuSpeeds.setUnknown(requireContext(), value), null);
+		addSwitchRow(R.string.chizu_speeds_eta_follows, R.string.chizu_speeds_eta_follows_descr, 1,
+				ChizuSpeeds.isEtaFollowsSpeed(requireContext()),
+				checked -> ChizuSpeeds.setEtaFollowsSpeed(requireContext(), checked));
+		addSliderRow(getString(R.string.chizu_speeds_eta_minutes), 1, 1, 60,
+				ChizuSpeeds.getEtaMinutes(requireContext()), " min",
+				(value, preview) -> ChizuSpeeds.setEtaMinutes(requireContext(), value), null);
+		addNoteRow(R.string.chizu_speeds_extra_note, 1);
+		addSpeedGroups(accent);
+
 		// ===== Maintenance =====
 		addSection(R.string.chizu_section_maintenance, accent);
 		addResetRow(1);
 		addNoteRow(R.string.chizu_restart_note, 1);
+		if (speedsSection != null && getArguments() != null && getArguments().getBoolean(ARG_SPEEDS)) {
+			getArguments().remove(ARG_SPEEDS); // once: a later resume keeps the place 白い熊 scrolled to
+			View target = speedsSection;
+			View scroller = (View) holder.getParent();
+			holder.post(() -> scroller.scrollTo(0, target.getTop()));
+		}
+		ChizuDriveLog.log("ui page rows built in " + (System.currentTimeMillis() - chizuT0) + " ms");
 	}
 
 	// ---------- row builders ----------
@@ -662,6 +699,104 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		holder.addView(row);
 	}
 
+	/** One collapsible heading per road type, a slider per limit under it; 0 is OsmAnd's own speed. */
+	private void addSpeedGroups(@ColorInt int accent) {
+		String group = null;
+		LinearLayout rows = null;
+		java.util.Map<LinearLayout, java.util.List<ChizuSpeeds.Row>> pending = new java.util.HashMap<>();
+		for (ChizuSpeeds.Row r : ChizuSpeeds.ROWS) {
+			if (!r.group.equals(group)) {
+				group = r.group;
+				rows = new LinearLayout(requireContext());
+				pending.put(rows, new java.util.ArrayList<>());
+				rows.setOrientation(LinearLayout.VERTICAL);
+				rows.setVisibility(View.GONE);
+				LinearLayout header = tightRow(1);
+				TextView label = itemLabel("▸ " + group);
+				label.setTextColor(accent);
+				label.setTypeface(currentGlobalOrDefault(), Typeface.BOLD);
+				header.addView(label);
+				String title = group;
+				LinearLayout body = rows;
+				header.setOnClickListener(v -> {
+					// the sliders are made on first opening, so the page itself opens fast
+					java.util.List<ChizuSpeeds.Row> todo = pending.remove(body);
+					if (todo != null) {
+						for (ChizuSpeeds.Row row : todo) {
+							body.addView(speedRow(row));
+						}
+					}
+					boolean open = body.getVisibility() != View.VISIBLE;
+					body.setVisibility(open ? View.VISIBLE : View.GONE);
+					label.setText((open ? "▾ " : "▸ ") + title);
+				});
+				holder.addView(header);
+				holder.addView(rows);
+			}
+			pending.get(rows).add(r);
+		}
+	}
+
+	@NonNull
+	private View speedRow(@NonNull ChizuSpeeds.Row r) {
+		LinearLayout row = tightRow(2);
+		TextView labelView = itemLabel(r.label());
+		labelView.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.5f));
+		row.addView(labelView);
+
+		SeekBar seekBar = new SeekBar(requireContext());
+		seekBar.setMax(40); // 0 = OsmAnd, then 5 km/h steps to 200
+		seekBar.setProgress(ChizuSpeeds.get(requireContext(), r) / 5);
+		seekBar.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.5f));
+		row.addView(seekBar);
+
+		TextView value = valueLabel();
+		value.setMinWidth(dp(84));
+		value.setGravity(Gravity.END);
+		value.setText(speedText(r, ChizuSpeeds.get(requireContext(), r)));
+		row.addView(value);
+
+		seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+			@Override
+			public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+				int kmh = progress * 5;
+				value.setText(speedText(r, kmh));
+				if (fromUser) {
+					ChizuSpeeds.set(requireContext(), r, kmh);
+				}
+			}
+
+			@Override
+			public void onStartTrackingTouch(SeekBar bar) {
+			}
+
+			@Override
+			public void onStopTrackingTouch(SeekBar bar) {
+			}
+		});
+		// a long press goes back to the speed 白い熊 gave for the row
+		row.setOnLongClickListener(v -> {
+			ChizuSpeeds.set(requireContext(), r, r.preset);
+			seekBar.setProgress(r.preset / 5);
+			value.setText(speedText(r, r.preset));
+			return true;
+		});
+		return row;
+	}
+
+	@NonNull
+	private String speedText(@NonNull ChizuSpeeds.Row r, int kmh) {
+		String osmand = r.osmand > 0 ? String.valueOf(r.osmand) : "—";
+		if (kmh <= 0) {
+			return "OsmAnd " + osmand;
+		}
+		if (r.limits.length == 0) {
+			return kmh + " km/h";
+		}
+		int plus = kmh - r.limits[0];
+		return kmh + " (" + (plus >= 0 ? "+" : "−") + Math.abs(plus) + ")";
+	}
+
 	private void addResetRow(int level) {
 		LinearLayout row = tightRow(level);
 		TextView label = itemLabel(getString(R.string.chizu_reset_all));
@@ -782,10 +917,19 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	}
 
 	public static void showInstance(@NonNull FragmentActivity activity) {
+		showInstance(activity, false);
+	}
+
+	/** {@code speeds}: opened at “My driving speeds”, from the car profile's greyed-out Travel speed. */
+	public static void showInstance(@NonNull FragmentActivity activity, boolean speeds) {
 		FragmentManager manager = activity.getSupportFragmentManager();
 		if (AndroidUtils.isFragmentCanBeAdded(manager, TAG)) {
+			ChizuUiFragment fragment = new ChizuUiFragment();
+			Bundle args = new Bundle();
+			args.putBoolean(ARG_SPEEDS, speeds);
+			fragment.setArguments(args);
 			manager.beginTransaction()
-					.replace(R.id.fragmentContainer, new ChizuUiFragment(), TAG)
+					.replace(R.id.fragmentContainer, fragment, TAG)
 					.addToBackStack(TAG)
 					.commitAllowingStateLoss();
 		}

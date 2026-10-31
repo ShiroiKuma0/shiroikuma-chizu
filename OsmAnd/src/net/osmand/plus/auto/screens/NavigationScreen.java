@@ -418,6 +418,7 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 		OsmandApplication app = getApp();
 		OsmandMap map = app.getOsmandMap();
 		RoutingHelper rh = app.getRoutingHelper();
+		net.osmand.plus.chizu.ChizuDriveLog.log("car screen route calculated newRoute=" + newRoute + " planning=" + rh.isRoutePlanningMode()); // 白い熊 地図 drive log
 		if (rh.isRoutePlanningMode()) {
 			adjustMapPosition(true);
 		}
