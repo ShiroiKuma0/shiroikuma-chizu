@@ -3,6 +3,15 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+023 — 2026-10-31
+
+Base unchanged (OsmAnd 5.5.0, `master` at `9f7ddb7c95`). The app is the same as 5.5.0+022; this
+release carries the corrected README.
+
+### Documentation
+
+- **README says “directory”, not “folder”** throughout, the shared main storage section included.
+
 ## 5.5.0+022 — 2026-10-31
 
 Base unchanged (OsmAnd 5.5.0, `master` at `9f7ddb7c95`). Fork-side only; builds +008 – +021 were
