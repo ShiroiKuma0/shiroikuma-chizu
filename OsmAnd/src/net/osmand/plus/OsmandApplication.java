@@ -278,6 +278,7 @@ public class OsmandApplication extends MultiDexApplication {
 		// shiroikuma fork: 白い熊 地図 UI theming + fonts
 		net.osmand.plus.chizu.ChizuTheme.init(this);
 		net.osmand.plus.chizu.ChizuFonts.init(this);
+		net.osmand.plus.chizu.ChizuDiag.init(this); // the switches first: off-by-default diagnostics
 		net.osmand.plus.chizu.ChizuDriveLog.init(this);
 		net.osmand.plus.chizu.ChizuRoadLog.init(this);
 		appInitializer.initVariables();

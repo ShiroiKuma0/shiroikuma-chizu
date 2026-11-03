@@ -207,64 +207,134 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 		return "-";
 	}
 
+	/** 白い熊 地図: the system's TTS engine package, or null before the engine is set up. */
+	@Nullable
+	static String chizuDefaultEngine() {
+		TextToSpeech tts = mTts;
+		try {
+			return tts == null ? null : tts.getDefaultEngine();
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	/** 白い熊 地図: the sentence a builder speaks, exactly as it goes to the voice. */
+	@NonNull
+	public String chizuTextOf(@NonNull CommandBuilder builder) {
+		StringBuilder bld = new StringBuilder();
+		for (String s : builder.execute()) {
+			bld.append(s).append(' ');
+		}
+		// 白い熊 地図: a space next to Japanese is read as a pause (“100メートル　先”), so it goes
+		return JAPANESE_SPACE.matcher(bld).replaceAll("").trim();
+	}
+
 	// Called from the calculating route thread.
 	@NonNull
 	@Override
 	public synchronized List<String> playCommands(@NonNull CommandBuilder builder) {
 		List<String> execute = builder.execute(); //list of strings, the speech text, play it
-		StringBuilder bld = new StringBuilder();
-		for (String s : execute) {
-			bld.append(s).append(' ');
-		}
-		// 白い熊 地図: a space next to Japanese is read as a pause (“100メートル　先”), so it goes
-		String joined = JAPANESE_SPACE.matcher(bld).replaceAll("");
-		bld.setLength(0);
-		bld.append(joined);
+		String text = chizuTextOf(builder);
 		// 白い熊 地図: a prompt that came out empty (its announcement switched off) says nothing, so it
 		// must not take the audio focus either — that muted the music on every silent reroute
-		if (bld.toString().trim().isEmpty()) {
+		if (text.isEmpty()) {
 			net.osmand.plus.chizu.ChizuDriveLog.log("voice empty prompt skipped");
 			return execute;
 		}
-		net.osmand.plus.chizu.ChizuDriveLog.log("voice say \"" + bld.toString().trim() + "\" requests=" + ttsRequests);
-		sendAlertToPebble(bld.toString());
-		if (mTts != null && !voiceRouter.isMute() && speechAllowed) {
-			if (ttsRequests++ == 0) {
-				if (!isFocusAtAudioStart()) {
-					requestAudioFocus(); // BT SCO: the link must be up before the audio comes
-				}
-				mTts.setAudioAttributes(new AudioAttributes.Builder()
-						.setUsage(settings.AUDIO_USAGE[settings.AUDIO_MANAGER_STREAM.getModeValue(app.getRoutingHelper().getAppMode())].get())
-						.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-						.build());
-				// Delay first prompt of each batch to allow BT SCO link being established, or when VOICE_PROMPT_DELAY is set >0 for the other stream types
-				if (app != null) {
-					Integer streamModeValue = settings.AUDIO_MANAGER_STREAM.getModeValue(app.getRoutingHelper().getAppMode());
-					OsmandPreference<Integer> pref = settings.VOICE_PROMPT_DELAY[streamModeValue];
-					int vpd = pref == null ? 0 : pref.getModeValue(app.getRoutingHelper().getAppMode());
-					if (vpd > 0) {
-						ttsRequests++;
-						mTts.playSilentUtterance(vpd, TextToSpeech.QUEUE_ADD, "" + System.currentTimeMillis());
-					}
-				}
-			}
-			log.debug("ttsRequests=" + ttsRequests);
-			params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "" + System.currentTimeMillis());
-			if (isFocusAtAudioStart() || AudioFocusHelperImpl.playbackAuthorized) {
-				if (mTts.speak(bld.toString(), TextToSpeech.QUEUE_ADD, params) == TextToSpeech.ERROR) {
-					// Not queued (the engine is unbound or died), so no completion callback will come
-					stop();
-				}
-			} else {
-				stop();
-			}
-			// Audio focus is taken in onStart() and given back in onDone() (BT SCO: when all are done).
+		boolean arrival = builder.getCommandsList().contains(CommandBuilder.C_REACHED_DESTINATION);
+		sendAlertToPebble(text);
+		if (!voiceRouter.isMute() && ChizuVoice.get(app).isActive(language)) {
+			// 白い熊 地図: rendered ahead by 白い熊 音声 and played by 地図 itself
+			ChizuVoice.get(app).say(text, arrival, this);
+		} else {
+			chizuSpeakTts(text, arrival);
 		}
 		// #5966: TTS Utterance for debugging
 		if (app != null && settings.DISPLAY_TTS_UTTERANCE.get()) {
-			app.showToastMessage(bld.toString());
+			app.showToastMessage(text);
 		}
 		return execute;
+	}
+
+	/**
+	 * The TTS engine way. 白い熊 地図: an engine that renders a whole sentence first is heard seconds
+	 * late, so prompts piled up and old ones were still being read after arrival. Now a prompt not yet
+	 * audible when a newer one comes is replaced — joined to the newer one when it is only a moment
+	 * old, as in a burst after a reroute — and the arrival replaces everything still queued.
+	 */
+	synchronized void chizuSpeakTts(@NonNull String text, boolean arrival) {
+		net.osmand.plus.chizu.ChizuDriveLog.log("voice say \"" + text + "\" requests=" + ttsRequests);
+		if (mTts == null || voiceRouter.isMute() || !speechAllowed) {
+			return;
+		}
+		long now = System.currentTimeMillis();
+		if (arrival && ttsRequests > 0) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("voice arrival replaces " + pendingTts.size() + " queued");
+			flushTts();
+		} else if (audibleUtterances.isEmpty() && !pendingTts.isEmpty()) {
+			StringBuilder joined = new StringBuilder();
+			for (Map.Entry<String, String> e : pendingTexts.entrySet()) {
+				Long at = pendingTts.get(e.getKey());
+				if (at != null && now - at < CHIZU_JOIN_MS) {
+					joined.append(e.getValue());
+				}
+			}
+			net.osmand.plus.chizu.ChizuDriveLog.log("voice replaces " + pendingTts.size() + " not yet audible"
+					+ (joined.length() > 0 ? ", joined" : ""));
+			flushTts();
+			text = joined.append(text).toString();
+		}
+		if (ttsRequests++ == 0) {
+			if (!isFocusAtAudioStart()) {
+				requestAudioFocus(); // BT SCO: the link must be up before the audio comes
+			}
+			mTts.setAudioAttributes(new AudioAttributes.Builder()
+					.setUsage(settings.AUDIO_USAGE[settings.AUDIO_MANAGER_STREAM.getModeValue(app.getRoutingHelper().getAppMode())].get())
+					.setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+					.build());
+			// Delay first prompt of each batch to allow BT SCO link being established, or when VOICE_PROMPT_DELAY is set >0 for the other stream types
+			if (app != null) {
+				Integer streamModeValue = settings.AUDIO_MANAGER_STREAM.getModeValue(app.getRoutingHelper().getAppMode());
+				OsmandPreference<Integer> pref = settings.VOICE_PROMPT_DELAY[streamModeValue];
+				int vpd = pref == null ? 0 : pref.getModeValue(app.getRoutingHelper().getAppMode());
+				if (vpd > 0) {
+					ttsRequests++;
+					mTts.playSilentUtterance(vpd, TextToSpeech.QUEUE_ADD, "" + System.currentTimeMillis());
+				}
+			}
+		}
+		log.debug("ttsRequests=" + ttsRequests);
+		String id = "" + now + "-" + (++chizuUtteranceSeq);
+		params.put(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, id);
+		if (isFocusAtAudioStart() || AudioFocusHelperImpl.playbackAuthorized) {
+			pendingTts.put(id, now);
+			pendingTexts.put(id, text);
+			if (mTts.speak(text, TextToSpeech.QUEUE_ADD, params) == TextToSpeech.ERROR) {
+				// Not queued (the engine is unbound or died), so no completion callback will come
+				pendingTts.remove(id);
+				pendingTexts.remove(id);
+				stop();
+			}
+		} else {
+			stop();
+		}
+		// Audio focus is taken in onStart() and given back in onDone() (BT SCO: when all are done).
+	}
+
+	// 白い熊 地図: spoken, not yet audible; a prompt only this old is joined to a newer one, not dropped
+	private static final long CHIZU_JOIN_MS = 3000;
+	private final Map<String, Long> pendingTts = new java.util.LinkedHashMap<>();
+	private final Map<String, String> pendingTexts = new java.util.LinkedHashMap<>();
+	private int chizuUtteranceSeq;
+
+	private void flushTts() {
+		pendingTts.clear();
+		pendingTexts.clear();
+		audibleUtterances.clear();
+		ttsRequests = 0;
+		if (mTts != null) {
+			mTts.stop();
+		}
 	}
 
 	private boolean isFocusAtAudioStart() {
@@ -275,6 +345,8 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 		if (!audibleUtterances.add(utteranceId)) {
 			return; // a later chunk of an utterance already playing
 		}
+		pendingTts.remove(utteranceId);
+		pendingTexts.remove(utteranceId);
 		net.osmand.plus.chizu.ChizuDriveLog.log("voice audio starts, audible=" + audibleUtterances.size());
 		if (!isFocusAtAudioStart() || audibleUtterances.size() > 1) {
 			return; // the focus is held already
@@ -289,8 +361,13 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 	}
 
 	private synchronized void onUtteranceFinished(@NonNull String utteranceId, @NonNull String how) {
+		if (!audibleUtterances.contains(utteranceId) && !pendingTts.containsKey(utteranceId)) {
+			return; // flushed: its count went with the flush
+		}
 		ttsRequests = Math.max(0, ttsRequests - 1);
 		audibleUtterances.remove(utteranceId);
+		pendingTts.remove(utteranceId);
+		pendingTexts.remove(utteranceId);
 		net.osmand.plus.chizu.ChizuDriveLog.log("voice audio " + how + ", audible=" + audibleUtterances.size()
 				+ " requests=" + ttsRequests);
 		if (isFocusAtAudioStart() ? audibleUtterances.isEmpty() : ttsRequests == 0) {
@@ -350,7 +427,10 @@ public class JsTtsCommandPlayer extends CommandPlayer {
 		ttsRequests = 0;
 		synchronized (this) {
 			audibleUtterances.clear();
+			pendingTts.clear();
+			pendingTexts.clear();
 		}
+		ChizuVoice.get(app).stopAll();
 		// Before onInit the engine connection is still being set up under TextToSpeech's internal lock, so
 		// stop() would wait for a slow engine on the main thread (ANR). Nothing can be speaking before onInit.
 		if (mTts != null && speechAllowed) {

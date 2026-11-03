@@ -594,6 +594,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		r.setLatitude(l.getLatitude());
 		r.setLongitude(l.getLongitude());
 		r.setTime(l.getTime());
+		r.chizuElapsedMs = l.getElapsedRealtimeNanos() / 1_000_000L;
 		if (l.hasAccuracy()) {
 			r.setAccuracy(l.getAccuracy());
 		}

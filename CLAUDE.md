@@ -61,6 +61,13 @@ rebase; never edit them by hand. Our fork lines sit AFTER them and multiply/appe
   [osmandapp/OsmAnd-resources](https://github.com/osmandapp/OsmAnd-resources) (the gradle tasks
   reference it as `../../resources` for voice, fonts, styles, POI data, 3D models). It's a shallow
   clone; refresh it on each upstream sync: `git -C ~/git/resources pull`.
+- **Sibling checkout required for the native route search:** `~/git/core-legacy` = a clone of
+  [osmandapp/OsmAnd-core-legacy](https://github.com/osmandapp/OsmAnd-core-legacy) (referenced as
+  `../../core-legacy`), plus `chizu.ndk.dir=<sdk>/ndk/27.3.13750724` in the gitignored
+  `local.properties`. `buildOsmAndCore` then builds `libosmand.so` (arm64 only for `buildApk`; first
+  build ~6 min, then incremental). Without them the task prints “ANDROID_NDK is not set”, succeeds,
+  and the APK silently lacks the library: every route runs in the Java search (5–8 s per route on the phone), as all
+  builds up to 5.5.0+025 did. Check with `unzip -l <apk> | grep libosmand.so`.
 - The build **downloads at build time** (network needed): the mini world basemap + stars DB from
   `builder.osmand.net`, and the prebuilt OpenGL core AAR
   (`net.osmand:OsmAndCore_android*:master-snapshot`) from the `builder.osmand.net` ivy repo.
