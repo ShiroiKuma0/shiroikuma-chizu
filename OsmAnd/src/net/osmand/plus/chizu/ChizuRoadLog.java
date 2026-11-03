@@ -1,7 +1,5 @@
 package net.osmand.plus.chizu;
 
-import android.os.Environment;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -32,12 +30,13 @@ import java.util.concurrent.Executors;
  * traffic colour. A section ends wherever the road type, the posted limit, tunnel or bridge, the
  * street name or the traffic colour changes; the colour is read every {@link #STEP_M} m between the
  * fixes, and a change between two fixes is timed by interpolation. Logged whenever 地図 sees 白い熊
- * drive, navigating or not, to “/sdcard/tmp/chizu-roads_<day>.tsv”. A stretch with no fixes (a
+ * drive, navigating or not, to “chizu-roads_<day>.tsv” in the diag directory ({@link ChizuDiag}),
+ * while Diagnostics → Road sections is on. A stretch with no fixes (a
  * tunnel) is one “gap” row, timed from the fix before to the fix after.
  */
 public final class ChizuRoadLog {
 
-	private static final String PREFIX = "chizu-roads_";
+	private static final String PREFIX = ChizuDiag.ROADS_PREFIX;
 	private static final float STEP_M = 20f;
 	private static final long GAP_MS = 5_000;
 	private static final float DRIVE_START_KMH = 15f;
@@ -66,6 +65,7 @@ public final class ChizuRoadLog {
 	private static long stillSince;
 	private static Writer out;
 	private static String outDay;
+	private static int outGeneration;
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
 	private static final SimpleDateFormat DOW = new SimpleDateFormat("EEE", Locale.US);
 	private static final SimpleDateFormat TIME = new SimpleDateFormat("HH:mm:ss", Locale.US);
@@ -152,7 +152,8 @@ public final class ChizuRoadLog {
 	/** A real fix (not simulated), main thread. */
 	public static void onFix(@Nullable Location location) {
 		OsmandApplication a = app;
-		if (a == null || location == null || !location.hasAccuracy() || location.getAccuracy() > MAX_ACCURACY_M) {
+		if (a == null || location == null || !location.hasAccuracy() || location.getAccuracy() > MAX_ACCURACY_M
+				|| !ChizuDiag.isOn(ChizuDiag.Group.ROADS)) {
 			return;
 		}
 		if (location.getTime() <= lastFixTime) {
@@ -380,7 +381,7 @@ public final class ChizuRoadLog {
 
 	private static void write(@NonNull String day, @NonNull String line) {
 		try {
-			if (out == null || !day.equals(outDay)) {
+			if (out == null || !day.equals(outDay) || outGeneration != ChizuDiag.generation()) {
 				open(day);
 			}
 			if (out != null) {
@@ -400,11 +401,8 @@ public final class ChizuRoadLog {
 			}
 			out = null;
 		}
-		File dir = new File(Environment.getExternalStorageDirectory(), "tmp");
-		if (!ChizuStorage.hasAllFilesAccess() || (!dir.isDirectory() && !dir.mkdirs())) {
-			OsmandApplication a = app;
-			dir = a == null ? null : a.getExternalFilesDir(null);
-		}
+		outGeneration = ChizuDiag.generation();
+		File dir = ChizuDiag.dir(app);
 		if (dir == null) {
 			return;
 		}

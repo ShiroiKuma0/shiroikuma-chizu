@@ -482,7 +482,12 @@ public class MapInfoLayer extends OsmandMapLayer implements ICoveredScreenRectPr
 			topWidgetsPanel.setVisibilityAllowed(previewPanel == null || previewPanel == WidgetsPanel.TOP);
 		}
 		if (bottomWidgetsPanel != null) {
-			bottomWidgetsPanel.setVisibilityAllowed(previewPanel == null || previewPanel == WidgetsPanel.BOTTOM);
+			// 白い熊 地図: under the Android Auto placeholder the bottom panel has nothing to show (the
+			// street name follows the car screen's map), and stood there as an empty black bar
+			boolean chizuCarHasMap = androidAutoMapPlaceholderView != null
+					&& androidAutoMapPlaceholderView.getVisibility() == android.view.View.VISIBLE;
+			bottomWidgetsPanel.setVisibilityAllowed(!chizuCarHasMap
+					&& (previewPanel == null || previewPanel == WidgetsPanel.BOTTOM));
 		}
 	}
 

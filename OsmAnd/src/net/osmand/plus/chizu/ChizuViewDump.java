@@ -62,7 +62,7 @@ public final class ChizuViewDump {
 	private void check() {
 		OsmandApplication app = activity.getApp();
 		NavigationSession session = app.getCarNavigationSession();
-		if (session == null || !session.hasStarted()) {
+		if (session == null || !session.hasStarted() || !ChizuDiag.isOn(ChizuDiag.Group.CAR)) {
 			lastDump = "";
 			return;
 		}
