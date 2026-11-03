@@ -98,6 +98,11 @@ public class MapViewWithLayers extends FrameLayout {
 		AndroidUiHelper.updateVisibility(mapLayersView, !useAndroidAuto && useOpenglRender);
 		AndroidUiHelper.updateVisibility(atlasMapRendererView, !useAndroidAuto && useOpenglRender);
 		AndroidUiHelper.updateVisibility(androidAutoPlaceholder, useAndroidAuto);
+		// 白い熊 地図: the bottom widget panel hides under the placeholder and comes back without it
+		net.osmand.plus.views.layers.MapInfoLayer infoLayer = app.getOsmandMap().getMapLayers().getMapInfoLayer();
+		if (infoLayer != null) {
+			infoLayer.updateVerticalPanels();
+		}
 	}
 
 	private void resetMapRendererView() {

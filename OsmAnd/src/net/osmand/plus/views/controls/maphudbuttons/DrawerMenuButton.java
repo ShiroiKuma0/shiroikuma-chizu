@@ -26,13 +26,14 @@ public class DrawerMenuButton extends MapButton {
 	private float chizuDownX;
 	private float chizuDownY;
 	private long chizuDownTime;
-	private static final long CHIZU_LONG_PRESS_MS = 300;
+	private static final long CHIZU_LONG_PRESS_MS = 200;
 	private final Runnable chizuLongPress = () -> {
 		if (mapActivity != null) {
 			chizuLongPressFired = true;
 			net.osmand.plus.chizu.ChizuDriveLog.log("drawer long press fired after "
 					+ (android.os.SystemClock.uptimeMillis() - chizuDownTime) + " ms"); // where the time goes
 			performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+			net.osmand.plus.chizu.ChizuUiFragment.chizuTouchUptime = chizuDownTime;
 			net.osmand.plus.chizu.ChizuUiFragment.showInstance(mapActivity);
 		}
 	};

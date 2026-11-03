@@ -529,7 +529,7 @@ public class RoutingHelper {
 					voiceRouter.announceOffRoute(distOrth);
 				}
 
-				if (isFollowingMode) {
+				if (isFollowingMode && net.osmand.plus.chizu.ChizuDriveLog.on(net.osmand.plus.chizu.ChizuDiag.Group.OFF_ROUTE)) {
 					// 白い熊 地図 drive log: the off-route check of every fix, and what fired
 					net.osmand.plus.chizu.ChizuDriveLog.log(String.format(java.util.Locale.US,
 							"chk seg=%d/%d orth=%.1f allowed=%.1f tol=%.1f wrongDir=%b uturn=%b deviated=%b recalc=%b busy=%b",

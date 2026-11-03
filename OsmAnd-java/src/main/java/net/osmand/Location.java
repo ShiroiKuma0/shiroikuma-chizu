@@ -33,6 +33,9 @@ public class Location {
     
     private String mProvider;
     private long mTime = 0;
+    // 白い熊 地図: the fix's time on the uptime clock (Android's elapsedRealtime, ms), 0 when unknown.
+    // Unlike mTime it does not depend on the wall clock, which may be a second or more off
+    public long chizuElapsedMs = 0;
     private double mLatitude = 0.0;
     private double mLongitude = 0.0;
     private boolean mHasAltitude = false;
@@ -89,6 +92,7 @@ public class Location {
     public void set(Location l) {
         mProvider = l.mProvider;
         mTime = l.mTime;
+        chizuElapsedMs = l.chizuElapsedMs;
         mLatitude = l.mLatitude;
         mLongitude = l.mLongitude;
         mHasAltitude = l.mHasAltitude;
@@ -109,6 +113,7 @@ public class Location {
     public void reset() {
         mProvider = null;
         mTime = 0;
+        chizuElapsedMs = 0;
         mLatitude = 0;
         mLongitude = 0;
         mHasAltitude = false;

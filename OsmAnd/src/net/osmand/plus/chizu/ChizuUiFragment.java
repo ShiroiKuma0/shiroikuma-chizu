@@ -57,6 +57,10 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	private float density;
 	private ActivityResultLauncher<String[]> fontImportLauncher;
 	private ChizuExim exim;
+	private ActivityResultLauncher<Uri> diagExportLauncher;
+	private boolean diagCleanupDue;
+	/** When the drawer button's touch began (uptime), for “first frame N ms after the touch”. */
+	public static volatile long chizuTouchUptime;
 
 	@Override
 	public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -64,6 +68,8 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		fontImportLauncher = registerForActivityResult(
 				new ActivityResultContracts.OpenDocument(), this::onFontImported);
 		exim = new ChizuExim(this, app);
+		diagExportLauncher = registerForActivityResult(
+				new ActivityResultContracts.OpenDocumentTree(), this::onDiagExportDirChosen);
 	}
 
 	@Nullable
@@ -84,7 +90,20 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		buildRows();
 		View root = getView();
 		if (root != null) {
-			root.post(() -> ChizuDriveLog.log("ui page first frame"));
+			long touch = chizuTouchUptime;
+			chizuTouchUptime = 0;
+			root.post(() -> ChizuDriveLog.log("ui page first frame"
+					+ (touch > 0 ? " " + (android.os.SystemClock.uptimeMillis() - touch) + " ms after the touch" : "")));
+		}
+	}
+
+	@Override
+	public void onPause() {
+		super.onPause();
+		if (diagCleanupDue) {
+			diagCleanupDue = false;
+			Context c = requireContext().getApplicationContext();
+			new Thread(() -> ChizuDiag.cleanup(c), "chizu-diag-cleanup").start();
 		}
 	}
 
@@ -186,6 +205,9 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addSliderRow(getString(R.string.chizu_speeds_unknown), 1, 5, 130,
 				ChizuSpeeds.getUnknown(requireContext()), " km/h",
 				(value, preview) -> ChizuSpeeds.setUnknown(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_speeds_traffic_light), 1, 0, 90,
+				ChizuSpeeds.getTrafficLightSeconds(requireContext()), " s",
+				(value, preview) -> ChizuSpeeds.setTrafficLightSeconds(requireContext(), value), null);
 		addSwitchRow(R.string.chizu_speeds_eta_follows, R.string.chizu_speeds_eta_follows_descr, 1,
 				ChizuSpeeds.isEtaFollowsSpeed(requireContext()),
 				checked -> ChizuSpeeds.setEtaFollowsSpeed(requireContext(), checked));
@@ -194,6 +216,16 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 				(value, preview) -> ChizuSpeeds.setEtaMinutes(requireContext(), value), null);
 		addNoteRow(R.string.chizu_speeds_extra_note, 1);
 		addSpeedGroups(accent);
+
+		// ===== Voice =====
+		addSection(R.string.chizu_section_voice, accent);
+		addSwitchRow(R.string.chizu_voice_prerender, R.string.chizu_voice_prerender_descr, 1,
+				net.osmand.plus.voice.ChizuVoice.isEnabled(requireContext()),
+				checked -> net.osmand.plus.voice.ChizuVoice.setEnabled(requireContext(), checked));
+
+		// ===== Diagnostics =====
+		addSection(R.string.chizu_section_diagnostics, accent);
+		addDiagRows(accent);
 
 		// ===== Maintenance =====
 		addSection(R.string.chizu_section_maintenance, accent);
@@ -797,6 +829,170 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		return kmh + " (" + (plus >= 0 ? "+" : "−") + Math.abs(plus) + ")";
 	}
 
+	// ---------- Diagnostics section ----------
+
+	private void addDiagRows(@ColorInt int accent) {
+		java.io.File dir = ChizuDiag.dir(requireContext());
+		addNoteRow(getString(R.string.chizu_diag_note, dir == null ? "?" : dir.getAbsolutePath()), 1);
+		addNoteRow(R.string.chizu_diag_notification_note, 1);
+		addDiagSubgroup(R.string.chizu_diag_sub_position, accent,
+				ChizuDiag.Group.LOCATION, ChizuDiag.Group.OFF_ROUTE, ChizuDiag.Group.ROADS);
+		addDiagSubgroup(R.string.chizu_diag_sub_routing, accent, ChizuDiag.Group.ROUTING, ChizuDiag.Group.TRAFFIC);
+		addDiagSubgroup(R.string.chizu_diag_sub_voice, accent, ChizuDiag.Group.VOICE);
+		addDiagSubgroup(R.string.chizu_diag_sub_display, accent, ChizuDiag.Group.MAP, ChizuDiag.Group.CAR);
+		addDiagSubgroup(R.string.chizu_diag_sub_app, accent, ChizuDiag.Group.UI);
+
+		addSubgroup(R.string.chizu_diag_sub_data, accent, 1);
+		// counted off the main thread: reading every file's first line must not slow the page down
+		TextView stored = new TextView(requireContext());
+		stored.setText(R.string.chizu_diag_counting);
+		stored.setTextSize(12);
+		stored.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
+		stored.setPadding(indent(2), dp(6), dp(BASE_INSET_DP), 0);
+		holder.addView(stored);
+		Context c = requireContext().getApplicationContext();
+		new Thread(() -> {
+			ChizuDiag.Summary s = ChizuDiag.summarize(c);
+			String text = s.files == 0 ? c.getString(R.string.chizu_diag_stored_none)
+					: c.getString(R.string.chizu_diag_stored, files(s.files, s.bytes) + ", " + span(s.first, s.last));
+			app.runInUIThread(() -> stored.setText(text));
+		}, "chizu-diag-count").start();
+
+		addSliderRow(getString(R.string.chizu_diag_keep), 2, 0, 60, ChizuDiag.getKeepDays(c), " d",
+				(value, preview) -> {
+					ChizuDiag.setKeepDays(c, value);
+					diagCleanupDue = true;
+				}, null);
+		addNoteRow(R.string.chizu_diag_keep_note, 2);
+
+		Uri last = ChizuDiag.getExportTree(c);
+		addActionRow(getString(R.string.chizu_diag_export),
+				getString(R.string.chizu_diag_export_descr, last == null ? "/sdcard/tmp" : treeLabel(last)), 2, v -> {
+					if (ChizuDiag.files(requireContext()).isEmpty()) {
+						Toast.makeText(requireContext(), R.string.chizu_diag_export_nothing, Toast.LENGTH_SHORT).show();
+						return;
+					}
+					Uri tree = ChizuDiag.getExportTree(requireContext());
+					Uri initial = tree != null
+							? android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,
+									android.provider.DocumentsContract.getTreeDocumentId(tree))
+							: android.provider.DocumentsContract.buildDocumentUri(
+									"com.android.externalstorage.documents", "primary:tmp");
+					diagExportLauncher.launch(initial);
+				});
+		addActionRow(getString(R.string.chizu_diag_share), getString(R.string.chizu_diag_share_descr), 2, v -> {
+			android.content.Intent share = ChizuDiag.shareIntent(requireContext());
+			if (share == null) {
+				Toast.makeText(requireContext(), R.string.chizu_diag_export_nothing, Toast.LENGTH_SHORT).show();
+			} else {
+				startActivity(share);
+			}
+		});
+		addActionRow(getString(R.string.chizu_diag_purge), getString(R.string.chizu_diag_purge_descr), 2,
+				v -> confirmDiagPurge());
+	}
+
+	private void addDiagSubgroup(int labelRes, @ColorInt int accent, ChizuDiag.Group... groups) {
+		addSubgroup(labelRes, accent, 1);
+		for (ChizuDiag.Group g : groups) {
+			addSwitchRow(g.titleRes, g.descrRes, 2, ChizuDiag.isOn(g),
+					checked -> ChizuDiag.set(requireContext(), g, checked));
+		}
+	}
+
+	private void addActionRow(String title, String descr, int level, View.OnClickListener listener) {
+		LinearLayout row = tightRow(level);
+		row.addView(stackedLabels(title, descr));
+		row.setOnClickListener(listener);
+		holder.addView(row);
+	}
+
+	private void onDiagExportDirChosen(@Nullable Uri tree) {
+		if (tree == null) {
+			return;
+		}
+		Context c = requireContext().getApplicationContext();
+		ChizuDiag.setExportTree(c, tree);
+		int count = ChizuDiag.files(c).size();
+		String where = treeLabel(tree);
+		new Thread(() -> {
+			String message;
+			try {
+				String sub = ChizuDiag.export(c, tree);
+				message = c.getString(R.string.chizu_diag_export_done, count, where + "/" + sub);
+			} catch (Exception e) {
+				message = c.getString(R.string.chizu_diag_export_failed, String.valueOf(e.getMessage()));
+			}
+			String m = message;
+			app.runInUIThread(() -> {
+				Toast.makeText(c, m, Toast.LENGTH_LONG).show();
+				if (isAdded()) {
+					buildRows();
+				}
+			});
+		}, "chizu-diag-export").start();
+	}
+
+	private void confirmDiagPurge() {
+		ChizuDiag.Summary s = ChizuDiag.summarize(requireContext());
+		if (s.files == 0) {
+			Toast.makeText(requireContext(), R.string.chizu_diag_stored_none, Toast.LENGTH_SHORT).show();
+			return;
+		}
+		StringBuilder msg = new StringBuilder();
+		for (java.util.Map.Entry<String, long[]> k : s.kinds.entrySet()) {
+			long[] v = k.getValue();
+			int label = "drive".equals(k.getKey()) ? R.string.chizu_diag_kind_drive
+					: "roads".equals(k.getKey()) ? R.string.chizu_diag_kind_roads : R.string.chizu_diag_kind_other;
+			msg.append(getString(label)).append(": ").append(files((int) v[0], v[1])).append(",\n    ")
+					.append(span(v[2], v[3])).append("\n");
+		}
+		msg.append("\n");
+		java.text.SimpleDateFormat day = new java.text.SimpleDateFormat("EEE yyyy-MM-dd", Locale.US);
+		java.text.SimpleDateFormat time = new java.text.SimpleDateFormat("HH:mm", Locale.US);
+		for (long[] d : s.days.values()) {
+			msg.append(day.format(new java.util.Date(d[0]))).append("  ")
+					.append(time.format(new java.util.Date(d[0]))).append("–")
+					.append(time.format(new java.util.Date(d[1]))).append("\n");
+		}
+		msg.append("\n").append(files(s.files, s.bytes)).append(", ").append(span(s.first, s.last)).append(".");
+		new AlertDialog.Builder(requireActivity())
+				.setTitle(R.string.chizu_diag_purge_title)
+				.setMessage(msg.toString())
+				.setPositiveButton(R.string.chizu_diag_purge_button, (dialog, which) -> {
+					int n = ChizuDiag.purge(requireContext());
+					Toast.makeText(requireContext(), getString(R.string.chizu_diag_purge_done, n), Toast.LENGTH_SHORT).show();
+					buildRows();
+				})
+				.setNegativeButton(android.R.string.cancel, null)
+				.show();
+	}
+
+	@NonNull
+	private static String files(int count, long bytes) {
+		return String.format(Locale.US, "%d %s, %.1f MB", count, count == 1 ? "file" : "files", bytes / 1048576.0);
+	}
+
+	@NonNull
+	private static String span(long first, long last) {
+		java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
+		return f.format(new java.util.Date(first)) + " – " + f.format(new java.util.Date(last));
+	}
+
+	/** “/sdcard/tmp” for a tree on the phone's storage, else the tree's own name. */
+	@NonNull
+	private String treeLabel(@NonNull Uri tree) {
+		try {
+			String id = android.provider.DocumentsContract.getTreeDocumentId(tree);
+			if (id.startsWith("primary:")) {
+				return "/sdcard/" + id.substring("primary:".length());
+			}
+			return id;
+		} catch (Exception e) {
+			return tree.toString();
+		}
+	}
+
 	private void addResetRow(int level) {
 		LinearLayout row = tightRow(level);
 		TextView label = itemLabel(getString(R.string.chizu_reset_all));
@@ -816,8 +1012,12 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	}
 
 	private void addNoteRow(int labelRes, int level) {
+		addNoteRow(getString(labelRes), level);
+	}
+
+	private void addNoteRow(@NonNull String label, int level) {
 		TextView note = new TextView(requireContext());
-		note.setText(labelRes);
+		note.setText(label);
 		note.setTextSize(12);
 		note.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
 		note.setPadding(indent(level), dp(6), dp(BASE_INSET_DP), 0);
@@ -932,6 +1132,11 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 					.replace(R.id.fragmentContainer, fragment, TAG)
 					.addToBackStack(TAG)
 					.commitAllowingStateLoss();
+			// at once, in this frame: a queued transaction waits behind the map's own work
+			try {
+				manager.executePendingTransactions();
+			} catch (Exception ignored) {
+			}
 		}
 	}
 }
