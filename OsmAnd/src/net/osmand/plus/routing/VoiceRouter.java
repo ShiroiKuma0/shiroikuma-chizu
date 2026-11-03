@@ -574,6 +574,14 @@ public class VoiceRouter {
 		List<String> texts = new ArrayList<>();
 		chizuCapture.set(texts);
 		try {
+			if (app.getRoutingHelper().isRoutePlanningMode()) {
+				// what Start will say first: “route set, about N km, M minutes”
+				CommandBuilder p = getNewCommandPlayerToPlay();
+				if (p != null) {
+					p.newRouteCalculated(router.getLeftDistance(), router.getLeftTime());
+				}
+				play(p);
+			}
 			NextDirectionInfo info = router.getNextRouteDirectionInfo(new NextDirectionInfo(), true);
 			for (int k = 0; k < 3 && info != null && info.directionInfo != null; k++) {
 				RouteDirectionInfo next = info.directionInfo;
@@ -596,6 +604,13 @@ public class VoiceRouter {
 			chizuSuppressDest.remove();
 		}
 		net.osmand.plus.voice.ChizuVoice.get(app).prefetch(texts);
+	}
+
+	/** 白い熊 地図: a route was set while planning — render its prompts before Start is pressed. */
+	public void chizuPrefetchPlanned() {
+		synchronized (router) {
+			chizuPrefetch();
+		}
 	}
 
 	public void announceCurrentDirection(Location currentLocation) {

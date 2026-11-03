@@ -195,7 +195,7 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 		if (mapView != null) {
 			boolean preventCompassRotation = false;
 			if (routePlanningMode) {
-				preventCompassRotation = MapRouteInfoMenu.isRelatedFragmentVisible(mapView);
+				preventCompassRotation = true; // 白い熊 地図: route planning is always north-up
 			}
 			if (settings.isCompassMode(COMPASS_DIRECTION) && !preventCompassRotation && allowRotationAfterReset()
 					&& !trackingPaused) {
@@ -318,6 +318,10 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 					rotation = 0.0f;
 					pendingRotation = true;
 				} else if (currentMapRotation == OsmandSettings.ROTATE_MAP_MANUAL) {
+					pendingRotation = true;
+				}
+				if (routePlanningMode) {
+					rotation = 0.0f; // 白い熊 地図: route planning is always north-up
 					pendingRotation = true;
 				}
 				registerUnregisterSensor(location, smallSpeedForCompass);
@@ -448,6 +452,9 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 		routePlanningMode = routingHelper.isRoutePlanningMode();
 		net.osmand.plus.chizu.ChizuDriveLog.log("map route planning mode=" + routePlanningMode); // 白い熊 地図 drive log
 		updateSettings();
+		if (routePlanningMode && mapView != null) {
+			mapView.resetRotation(); // 白い熊 地図: route planning is always north-up
+		}
 		if (!routePlanningMode && followingMode && !trackingPaused) {
 			backToLocationImpl();
 		}
