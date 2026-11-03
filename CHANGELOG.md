@@ -3,6 +3,69 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+034 — 2026-11-03
+
+Base unchanged (OsmAnd 5.5.0, `master` at `9f7ddb7c95`). Fork-side only; builds +024 – +033 were
+test builds on the phone and are all included here.
+
+### Route chooser
+
+- **Every route that differs is offered, slower ones included.** Only a route sharing more than
+  85 % of its roads both ways with a faster one is merged into it; the plain fastest no longer
+  hides traffic variants that came out slower.
+- **Colours by time.** Each route takes the colour of its time with traffic: the fastest yellow,
+  the slowest red, the midpoint of the time range blue, the hue running through green and cyan
+  below it and violet above. Line, card swatch and top strip agree; colours are recalculated as
+  each route arrives.
+- **Nothing dimmed; the selected route glows gold.** The other routes keep their full colours. The
+  selected one keeps its own colour and black casing inside a bright gold ring and a soft wide gold
+  glow, drawn above the other routes; its card has a gold frame.
+- **Shimmer.** A warm light band runs along the gold glow from start to destination and four-pointed
+  sparkles twinkle on it, cut away from the route line itself, only on the planning screen (the car
+  keeps the steady glow). UI → Traffic → Selected route at planning: Shimmer on/off, band loop
+  (default 3 s), band brightness (100 %), band length (12 % of the route), sparkles (100 %),
+  sparkle size (100 %).
+- **The planning map is always north-up** — on entering planning and through location and compass
+  updates while it is open.
+- **Ranking in the drive log:** one line per planning listing each route’s distance, time and jam
+  time, and which route a merged one shares how much of its roads with.
+
+### Voice (白い熊 音声)
+
+- **Prompts pre-rendered by 白い熊 音声** (render contract 1.0+016) and played on cue; stale
+  prompts are dropped and nothing is said after arrival.
+- **The “route set” prompt is ready at Start.** It is rendered with the first turns as soon as a
+  route is set on the planning screen, and again for each route you pick; Start plays it at once.
+- **音声 is woken at recalculation start**, so the first prompt no longer falls back to TTS while
+  the engine answers late.
+
+### Diagnostics
+
+- **A Diagnostics section** in the UI page: every diagnostic behind its own switch, all off by
+  default, in subsections — Position and roads (location, off-route checks, road log), Routing and
+  traffic, Voice guidance, Map and car screen, App responsiveness.
+- **Own directory.** Files go to the app’s `files/diag` directory; the old logs in “`/sdcard/tmp`”
+  are moved in on first start.
+- **Recorded data:** a stored summary, keep for N days (0–60, 0 keeps all), export to a
+  `yyyy-MM-dd_HH-mm-ss_chizu-diag` subdirectory of a directory picked each time (first offered at
+  “`/sdcard/tmp`”), share, and purge behind a warning listing counts, sizes and the day and time
+  spans per kind.
+- **Recording notification** with Mark (a numbered marker in the drive log) and Turn all off.
+- **Drive log:** fix age measured by the uptime clock, with the clock offset alongside.
+
+### Routing
+
+- **Native route search built in.** `libosmand.so` is built from the `core-legacy` sibling checkout
+  with the NDK named in `local.properties` and bundled (arm64): about 2 s per route on the phone
+  instead of 5–8 s in the Java search.
+- **Traffic-light time** is a setting in My driving speeds.
+
+### Fixes & behaviour
+
+- **Android Auto:** an empty street-name panel no longer leaves a black box.
+- **Hamburger long press** opens the UI page after 200 ms, in the same frame.
+- **Katakana:** more English words read in katakana.
+
 ## 5.5.0+023 — 2026-10-31
 
 Base unchanged (OsmAnd 5.5.0, `master` at `9f7ddb7c95`). The app is the same as 5.5.0+022; this
