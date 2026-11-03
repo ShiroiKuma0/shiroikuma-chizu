@@ -97,6 +97,14 @@
 	<string name="chizu_traffic_interval">Re-check while driving</string>
 	<string name="chizu_traffic_min_saving">Reroute when it saves</string>
 	<string name="chizu_traffic_long_yellow">Long yellow from</string>
+	<string name="chizu_subgroup_shimmer">Selected route at planning</string>
+	<string name="chizu_shimmer">Shimmer</string>
+	<string name="chizu_shimmer_descr">A light band runs along the gold glow of the selected route and sparkles twinkle on it. Off: the glow stays steady.</string>
+	<string name="chizu_shimmer_loop">Band runs the route in</string>
+	<string name="chizu_shimmer_band">Band brightness</string>
+	<string name="chizu_shimmer_length">Band length, of the route</string>
+	<string name="chizu_shimmer_sparkles">Sparkles</string>
+	<string name="chizu_shimmer_sparkle_size">Sparkle size</string>
 	<string name="chizu_traffic_avoid_red">Around jams</string>
 	<string name="chizu_traffic_avoid_long_yellow">Around jams and long slow traffic</string>
 	<string name="chizu_traffic_avoid_yellow">Around all slow traffic</string>

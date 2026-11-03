@@ -6,6 +6,8 @@ import android.content.Context;
 import android.graphics.*;
 import android.graphics.Paint.Cap;
 import android.graphics.drawable.LayerDrawable;
+import android.os.SystemClock;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -28,6 +30,7 @@ import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.base.MapViewTrackingUtilities;
 import net.osmand.plus.charts.TrackChartPoints;
+import net.osmand.plus.chizu.ChizuTrafficPrefs;
 import net.osmand.plus.routing.*;
 import net.osmand.plus.routepreparationmenu.cards.ChizuRouteCandidateCard;
 import net.osmand.plus.settings.backend.OsmandSettings;
@@ -74,6 +77,22 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 	private ChizuWayPool chizuAlternatives;
 	// 白い熊 地図 渋滞回避: a soft dark band under every previewed route, so nearby streets recede
 	private ChizuWayPool chizuHalos;
+	// the selected route's gold glow: a bright inner ring and a soft wide outer one
+	private ChizuWayPool chizuGlowInner;
+	private ChizuWayPool chizuGlowOuter;
+	private static final int CHIZU_GLOW_INNER = 0xFFFFD700;
+	private static final int CHIZU_GLOW_OUTER = 0x70FFC21A;
+	// …and its shimmer, drawn over the map while planning: a light band running along it and twinkling sparkles
+	private static final int CHIZU_SHIMMER_MAX_POINTS = 400;
+	private static final int CHIZU_SPARKLES_MAX = 48;
+	private volatile float chizuShimmerWidth;
+	private final List<float[]> chizuSparkles = new ArrayList<>();
+	private final java.util.Random chizuRandom = new java.util.Random();
+	private final Paint chizuBandPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+	private final Paint chizuClearPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+	private final Paint chizuSparkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+	private final Path chizuBandPath = new Path();
+	private float chizuBandBlur;
 	private static final int CHIZU_HALO_COLOR = 0x8C000000;
 	private PublicTransportGeometryWay publicTransportRouteGeometry;
 
@@ -151,6 +170,8 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 		chizuDensity = density;
 		chizuAlternatives = new ChizuWayPool(0xC0000000, 2 * density);
 		chizuHalos = new ChizuWayPool(0, 0);
+		chizuGlowInner = new ChizuWayPool(0, 0);
+		chizuGlowOuter = new ChizuWayPool(0, 0);
 		routeWayContext = new RouteGeometryWayContext(getContext(), density);
 		routeWayContext.updatePaints(nightMode, attrs, attrsW);
 		routeGeometry = new RouteGeometryWay(routeWayContext);
@@ -514,7 +535,7 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 			boolean chizuChoice = helper.isRoutePlanningMode() && chooser.hasChoice() && chooser.getSelectedIndex() >= 0;
 			if (chizuChoice) {
 				// the selected route wears its card's colour, so card and line match, and is the widest
-				routeLineColor = ChizuRouteCandidateCard.colorFor(chooser.getSelectedIndex());
+				routeLineColor = chooser.colorOf(chooser.getSelectedIndex());
 				actualColoringType = ColoringType.DEFAULT;
 				routeLineWidth *= 1.2f;
 			}
@@ -523,6 +544,9 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 					routeLineWidth);
 			drawChizuAlternatives(tileBox, canvas, topLatitude, leftLongitude, bottomLatitude, rightLongitude,
 					chizuChoice ? chooser : null, routeLineWidth);
+			drawChizuGlow(tileBox, canvas, topLatitude, leftLongitude, bottomLatitude, rightLongitude,
+					chizuChoice ? route : null, routeLineWidth);
+			chizuShimmerWidth = chizuChoice ? routeLineWidth : 0;
 			boolean shouldShowDirectionArrows = shouldShowDirectionArrows();
 			routeGeometry.setRouteStyleParams(routeLineColor, routeLineWidth, shouldShowDirectionArrows,
 					getDirectionArrowsColor(), actualColoringType, routeInfoAttribute, routeGradientPalette);
@@ -784,6 +808,186 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 
 	@Override
 	public void onDraw(Canvas canvas, RotatedTileBox tileBox, DrawSettings settings) {
+		drawChizuShimmer(canvas, tileBox);
+	}
+
+	/** The selected route's shimmer: a warm light band running along its glow, and sparkles twinkling on it. */
+	private void drawChizuShimmer(@NonNull Canvas canvas, @NonNull RotatedTileBox tileBox) {
+		ChizuRouteCandidates chooser = helper.getChizuCandidates();
+		RouteCalculationResult route = helper.getRoute();
+		float width = chizuShimmerWidth;
+		ChizuTrafficPrefs.Shimmer prefs = ChizuTrafficPrefs.getShimmer(getContext());
+		if (!prefs.on || view == null || view.isCarView() || !helper.isRoutePlanningMode() || !chooser.hasChoice()
+				|| chooser.getSelectedIndex() < 0 || route == null || !route.isCalculated() || width <= 0) {
+			chizuSparkles.clear();
+			return;
+		}
+		List<Location> locations = route.getImmutableAllLocations();
+		if (locations.size() < 2) {
+			return;
+		}
+		MapRendererView mapRenderer = getMapRenderer();
+		int step = Math.max(1, (locations.size() + CHIZU_SHIMMER_MAX_POINTS - 1) / CHIZU_SHIMMER_MAX_POINTS);
+		int n = (locations.size() - 1) / step + 2;
+		float[] xs = new float[n];
+		float[] ys = new float[n];
+		float[] cum = new float[n];
+		int count = 0;
+		for (int i = 0; ; i = Math.min(i + step, locations.size() - 1)) {
+			Location l = locations.get(i);
+			PointF p = NativeUtilities.getPixelFromLatLon(mapRenderer, tileBox, l.getLatitude(), l.getLongitude());
+			xs[count] = p.x;
+			ys[count] = p.y;
+			cum[count] = count == 0 ? 0 : cum[count - 1] + (float) Math.hypot(p.x - xs[count - 1], p.y - ys[count - 1]);
+			count++;
+			if (i == locations.size() - 1) {
+				break;
+			}
+		}
+		float total = cum[count - 1];
+		if (total < 1) {
+			return;
+		}
+		float density = chizuDensity;
+		float core = width + 2 * 3 * density;  // the route line with its black casing stays untouched
+		float outer = width * 3.2f;
+		long now = SystemClock.uptimeMillis();
+
+		canvas.save();
+		canvas.rotate(-tileBox.getRotate(), tileBox.getCenterPixelX(), tileBox.getCenterPixelY());
+
+		// the band: a soft warm light, about an eighth of the route long, running from start to destination
+		float bandLen = Math.max(total * prefs.lengthPercent / 100f, 120 * density);
+		long loopMs = prefs.loopSeconds * 1000L;
+		float phase = (now % loopMs) / (float) loopMs;
+		float bright = prefs.bandPercent / 100f;
+		float centre = phase * (total + bandLen) - bandLen / 2;
+		if (chizuBandBlur != width * 0.5f) {
+			chizuBandBlur = width * 0.5f;
+			chizuBandPaint.setMaskFilter(chizuBandBlur > 0 ? new BlurMaskFilter(chizuBandBlur, BlurMaskFilter.Blur.NORMAL) : null);
+		}
+		chizuBandPaint.setStyle(Paint.Style.STROKE);
+		chizuBandPaint.setStrokeCap(Paint.Cap.ROUND);
+		chizuBandPaint.setStrokeJoin(Paint.Join.ROUND);
+		chizuClearPaint.setStyle(Paint.Style.STROKE);
+		chizuClearPaint.setStrokeCap(Paint.Cap.ROUND);
+		chizuClearPaint.setStrokeJoin(Paint.Join.ROUND);
+		chizuClearPaint.setStrokeWidth(core);
+		chizuClearPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+		int layer = canvas.saveLayer(null, null);
+		chizuBandPaint.setStrokeWidth(outer);
+		chizuBandPaint.setColor(chizuAlpha(0x78, bright) | 0xFFE38A);
+		drawChizuSubPath(canvas, xs, ys, cum, count, centre - bandLen / 2, centre + bandLen / 2, chizuBandPaint);
+		chizuBandPaint.setStrokeWidth(outer * 0.8f);
+		chizuBandPaint.setColor(chizuAlpha(0xB4, bright) | 0xFFF4C8);
+		drawChizuSubPath(canvas, xs, ys, cum, count, centre - bandLen / 4, centre + bandLen / 4, chizuBandPaint);
+		drawChizuSubPath(canvas, xs, ys, cum, count, centre - bandLen, centre + bandLen, chizuClearPaint);
+		canvas.restoreToCount(layer);
+
+		// the sparkles: four-pointed stars on the glow ring, each fading in and out at its own place
+		float amount = prefs.sparklesPercent / 100f;
+		int wanted = Math.round(amount * Math.min(CHIZU_SPARKLES_MAX, Math.max(6, total / (70 * density))));
+		for (int i = chizuSparkles.size() - 1; i >= 0; i--) {
+			float[] s = chizuSparkles.get(i);
+			if (now - (long) s[3] > s[4] && now >= (long) s[3]) {
+				chizuSparkles.remove(i);
+			}
+		}
+		while (chizuSparkles.size() > wanted) {
+			chizuSparkles.remove(chizuSparkles.size() - 1);
+		}
+		while (chizuSparkles.size() < wanted) {
+			// {position along, side, distance into the ring, birth, life, size}
+			chizuSparkles.add(new float[] {chizuRandom.nextFloat(), chizuRandom.nextBoolean() ? 1 : -1,
+					chizuRandom.nextFloat(), now + chizuRandom.nextInt(900), 500 + chizuRandom.nextInt(700),
+					0.6f + chizuRandom.nextFloat() * 0.6f});
+		}
+		chizuSparkPaint.setStyle(Paint.Style.STROKE);
+		chizuSparkPaint.setStrokeCap(Paint.Cap.ROUND);
+		float[] at = new float[4];
+		for (float[] s : chizuSparkles) {
+			float t = (now - s[3]) / s[4];
+			if (t <= 0 || t >= 1) {
+				continue;
+			}
+			float env = (float) Math.sin(Math.PI * t);
+			chizuPointAt(xs, ys, cum, count, s[0] * total, at);
+			float off = s[1] * (core / 2 + (outer / 2 - core / 2) * (0.2f + 0.7f * s[2]));
+			float x = at[0] - at[3] * off;
+			float y = at[1] + at[2] * off;
+			float len = (4 + 9 * env) * density * s[5] * prefs.sparkleSizePercent / 100f;
+			int alpha = (int) (255 * env);
+			chizuSparkPaint.setStrokeWidth(1.6f * density);
+			chizuSparkPaint.setColor((alpha << 24) | 0xFFF6D0);
+			canvas.drawLine(x - len, y, x + len, y, chizuSparkPaint);
+			canvas.drawLine(x, y - len, x, y + len, chizuSparkPaint);
+			float d = len * 0.4f;
+			chizuSparkPaint.setStrokeWidth(1.0f * density);
+			canvas.drawLine(x - d, y - d, x + d, y + d, chizuSparkPaint);
+			canvas.drawLine(x - d, y + d, x + d, y - d, chizuSparkPaint);
+			chizuSparkPaint.setStyle(Paint.Style.FILL);
+			chizuSparkPaint.setColor((alpha << 24) | 0xFFFFFF);
+			canvas.drawCircle(x, y, 1.8f * density * env, chizuSparkPaint);
+			chizuSparkPaint.setStyle(Paint.Style.STROKE);
+		}
+		canvas.restore();
+
+		// next frame (about 30 per second), only while the choice is on screen
+		if (mapRenderer != null) {
+			View v = view.getView();
+			if (v != null) {
+				v.postInvalidateDelayed(33);
+			}
+		}
+	}
+
+	private static int chizuAlpha(int alpha, float factor) {
+		return Math.min(255, Math.round(alpha * factor)) << 24;
+	}
+
+	/** The route between two lengths along it (screen pixels), as one stroke. */
+	private void drawChizuSubPath(@NonNull Canvas canvas, float[] xs, float[] ys, float[] cum, int count,
+	                              float from, float to, @NonNull Paint paint) {
+		from = Math.max(0, from);
+		to = Math.min(cum[count - 1], to);
+		if (to <= from) {
+			return;
+		}
+		float[] at = new float[4];
+		chizuPointAt(xs, ys, cum, count, from, at);
+		chizuBandPath.reset();
+		chizuBandPath.moveTo(at[0], at[1]);
+		for (int i = 0; i < count; i++) {
+			if (cum[i] > from && cum[i] < to) {
+				chizuBandPath.lineTo(xs[i], ys[i]);
+			}
+		}
+		chizuPointAt(xs, ys, cum, count, to, at);
+		chizuBandPath.lineTo(at[0], at[1]);
+		canvas.drawPath(chizuBandPath, paint);
+	}
+
+	/** The point at a length along the route: x, y and the unit direction there. */
+	private static void chizuPointAt(float[] xs, float[] ys, float[] cum, int count, float s, float[] out) {
+		int lo = 0;
+		int hi = count - 1;
+		while (hi - lo > 1) {
+			int mid = (lo + hi) >>> 1;
+			if (cum[mid] <= s) {
+				lo = mid;
+			} else {
+				hi = mid;
+			}
+		}
+		float seg = cum[hi] - cum[lo];
+		float f = seg > 0 ? Math.max(0, Math.min(1, (s - cum[lo]) / seg)) : 0;
+		float dx = xs[hi] - xs[lo];
+		float dy = ys[hi] - ys[lo];
+		float len = (float) Math.hypot(dx, dy);
+		out[0] = xs[lo] + f * dx;
+		out[1] = ys[lo] + f * dy;
+		out[2] = len > 0 ? dx / len : 1;
+		out[3] = len > 0 ? dy / len : 0;
 	}
 
 	@Override
@@ -917,14 +1121,32 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 			for (int i = 0; i < list.size(); i++) {
 				if (i != chooser.getSelectedIndex()) {
 					wanted.add(list.get(i).route);
-					// not selected: shaded (translucent) in its own colour, still told apart from the others
-					colors.add((ChizuRouteCandidateCard.colorFor(i) & 0x00FFFFFF) | 0xB0000000);
+					// not selected: in its own colour at full strength; the selected one wears the gold glow
+					colors.add(list.get(i).color | 0xFF000000);
 				}
 			}
 		}
 		// larger order = lower in OpenGL: well under the selected route's lines
 		chizuAlternatives.draw(tileBox, canvas, top, left, bottom, right, wanted, colors, mainWidth * 0.75f,
 				getBaseOrder() + 5000);
+	}
+
+	private void drawChizuGlow(@NonNull RotatedTileBox tileBox, @Nullable Canvas canvas,
+	                           double top, double left, double bottom, double right,
+	                           @Nullable RouteCalculationResult selected, float mainWidth) {
+		List<RouteCalculationResult> wanted = new ArrayList<>();
+		List<Integer> outer = new ArrayList<>();
+		List<Integer> inner = new ArrayList<>();
+		if (selected != null) {
+			wanted.add(selected);
+			outer.add(CHIZU_GLOW_OUTER);
+			inner.add(CHIZU_GLOW_INNER);
+		}
+		// above the other routes (+5000 and lower), under the selected route's own line and casing
+		chizuGlowOuter.draw(tileBox, canvas, top, left, bottom, right, wanted, outer, mainWidth * 3.2f,
+				getBaseOrder() + 3000);
+		chizuGlowInner.draw(tileBox, canvas, top, left, bottom, right, wanted, inner, mainWidth * 2.0f,
+				getBaseOrder() + 2000);
 	}
 
 	private void drawChizuHalos(@NonNull RotatedTileBox tileBox, @Nullable Canvas canvas,
@@ -1074,6 +1296,8 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 		if (chizuAlternatives != null) {
 			chizuAlternatives.reset();
 			chizuHalos.reset();
+			chizuGlowInner.reset();
+			chizuGlowOuter.reset();
 		}
 		if (routeGeometry != null && routeGeometry.hasMapRenderer()) {
 			routeGeometry.resetSymbolProviders();

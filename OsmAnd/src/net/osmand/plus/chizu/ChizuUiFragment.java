@@ -190,6 +190,20 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addSliderRow(getString(R.string.chizu_traffic_long_yellow), 1, 100, 1000,
 				ChizuTrafficPrefs.getLongYellowMeters(requireContext()), " m",
 				(value, preview) -> ChizuTrafficPrefs.setLongYellowMeters(requireContext(), value), null);
+		addSubgroup(R.string.chizu_subgroup_shimmer, accent, 1);
+		ChizuTrafficPrefs.Shimmer shimmer = ChizuTrafficPrefs.getShimmer(requireContext());
+		addSwitchRow(R.string.chizu_shimmer, R.string.chizu_shimmer_descr, 2, shimmer.on,
+				checked -> ChizuTrafficPrefs.setShimmerOn(requireContext(), checked));
+		addSliderRow(getString(R.string.chizu_shimmer_loop), 2, 1, 10, shimmer.loopSeconds, " s",
+				(value, preview) -> ChizuTrafficPrefs.setShimmerLoopSeconds(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_shimmer_band), 2, 0, 200, shimmer.bandPercent, "%",
+				(value, preview) -> ChizuTrafficPrefs.setShimmerBandPercent(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_shimmer_length), 2, 3, 50, shimmer.lengthPercent, "%",
+				(value, preview) -> ChizuTrafficPrefs.setShimmerLengthPercent(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_shimmer_sparkles), 2, 0, 300, shimmer.sparklesPercent, "%",
+				(value, preview) -> ChizuTrafficPrefs.setShimmerSparklesPercent(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_shimmer_sparkle_size), 2, 30, 300, shimmer.sparkleSizePercent, "%",
+				(value, preview) -> ChizuTrafficPrefs.setShimmerSparkleSizePercent(requireContext(), value), null);
 
 		// ===== My driving speeds =====
 		View speedsSection = null;

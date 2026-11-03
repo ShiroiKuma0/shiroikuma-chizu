@@ -176,6 +176,10 @@ class RouteRecalculationHelper {
 			net.osmand.plus.chizu.ChizuDriveLog.log(String.format(java.util.Locale.US,
 					"predict %s dist=%d m time=%d s eta=%tR following=%b", newRoute ? "new" : "recalc",
 					res.getWholeDistance(), left, System.currentTimeMillis() + left * 1000L, isFollowingMode())); // 白い熊 地図: predictions against arrivals
+			if (routingHelper.isRoutePlanningMode()) {
+				VoiceRouter vr = routingHelper.getVoiceRouter();
+				app.runInUIThread(vr::chizuPrefetchPlanned); // after the route is in place
+			}
 		}
 		if (isFollowingMode()) {
 			Location lastFixedLocation = getLastFixedLocation();
@@ -295,6 +299,7 @@ class RouteRecalculationHelper {
 					+ " onlyStart=" + onlyStartPointChanged + " prev=" + (previousRoute != null)
 					+ " countInInterval=" + recalculateCountInInterval + " wait=" + evalWaitInterval
 					+ " by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
+			net.osmand.plus.voice.ChizuVoice.get(app).warmUp(); // 白い熊 地図: 音声 answers before the first prompt
 			ApplicationMode mode = getAppMode();
 			RouteCalculationParams params = new RouteCalculationParams();
 			params.start = start;
