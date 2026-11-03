@@ -17,6 +17,33 @@ public final class ChizuTrafficPrefs {
 	private static final String INTERVAL_MIN = "traffic_interval_min";
 	private static final String MIN_SAVING_MIN = "traffic_min_saving_min";
 	private static final String LONG_YELLOW_M = "traffic_long_yellow_m";
+	private static final String SHIMMER = "traffic_shimmer";
+	private static final String SHIMMER_LOOP_S = "traffic_shimmer_loop_s";
+	private static final String SHIMMER_BAND_PCT = "traffic_shimmer_band_pct";
+	private static final String SHIMMER_LENGTH_PCT = "traffic_shimmer_length_pct";
+	private static final String SHIMMER_SPARKLES_PCT = "traffic_shimmer_sparkles_pct";
+	private static final String SHIMMER_SPARKLE_SIZE_PCT = "traffic_shimmer_sparkle_size_pct";
+
+	/** The selected route's shimmer, read on every frame: cached here, refreshed by every setter. */
+	public static final class Shimmer {
+		public final boolean on;
+		public final int loopSeconds;
+		public final int bandPercent;
+		public final int lengthPercent;
+		public final int sparklesPercent;
+		public final int sparkleSizePercent;
+
+		Shimmer(@NonNull SharedPreferences p) {
+			on = p.getBoolean(SHIMMER, true);
+			loopSeconds = Math.max(1, p.getInt(SHIMMER_LOOP_S, 3));
+			bandPercent = p.getInt(SHIMMER_BAND_PCT, 100);
+			lengthPercent = Math.max(1, p.getInt(SHIMMER_LENGTH_PCT, 12));
+			sparklesPercent = p.getInt(SHIMMER_SPARKLES_PCT, 100);
+			sparkleSizePercent = Math.max(10, p.getInt(SHIMMER_SPARKLE_SIZE_PCT, 100));
+		}
+	}
+
+	private static volatile Shimmer shimmer;
 
 	private ChizuTrafficPrefs() {
 	}
@@ -63,5 +90,45 @@ public final class ChizuTrafficPrefs {
 
 	public static void setLongYellowMeters(@NonNull Context context, int meters) {
 		prefs(context).edit().putInt(LONG_YELLOW_M, meters).apply();
+	}
+
+	@NonNull
+	public static Shimmer getShimmer(@NonNull Context context) {
+		Shimmer s = shimmer;
+		if (s == null) {
+			s = new Shimmer(prefs(context));
+			shimmer = s;
+		}
+		return s;
+	}
+
+	public static void setShimmerOn(@NonNull Context context, boolean on) {
+		prefs(context).edit().putBoolean(SHIMMER, on).commit();
+		shimmer = null;
+	}
+
+	public static void setShimmerLoopSeconds(@NonNull Context context, int seconds) {
+		putShimmer(context, SHIMMER_LOOP_S, seconds);
+	}
+
+	public static void setShimmerBandPercent(@NonNull Context context, int percent) {
+		putShimmer(context, SHIMMER_BAND_PCT, percent);
+	}
+
+	public static void setShimmerLengthPercent(@NonNull Context context, int percent) {
+		putShimmer(context, SHIMMER_LENGTH_PCT, percent);
+	}
+
+	public static void setShimmerSparklesPercent(@NonNull Context context, int percent) {
+		putShimmer(context, SHIMMER_SPARKLES_PCT, percent);
+	}
+
+	public static void setShimmerSparkleSizePercent(@NonNull Context context, int percent) {
+		putShimmer(context, SHIMMER_SPARKLE_SIZE_PCT, percent);
+	}
+
+	private static void putShimmer(@NonNull Context context, @NonNull String key, int value) {
+		prefs(context).edit().putInt(key, value).commit();
+		shimmer = null;
 	}
 }

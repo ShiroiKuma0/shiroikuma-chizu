@@ -98,14 +98,15 @@ public class ChizuRouteCandidateCard extends MapBaseCard {
 		eta.setText(OsmAndFormatter.getFormattedTimeShort(seconds, true));
 
 		GradientDrawable bar = new GradientDrawable();
-		bar.setColor(colorFor(index));
+		bar.setColor(candidate != null ? candidate.color : colorFor(index));
 		bar.setCornerRadius(AndroidUtils.dpToPx(app, 4));
 		swatch.setBackground(bar);
 
 		if (selected) {
 			GradientDrawable frame = new GradientDrawable();
 			frame.setColor(0x00000000);
-			frame.setStroke(AndroidUtils.dpToPx(app, 2), colorFor(index));
+			// gold, like the glow around the selected route on the map
+			frame.setStroke(AndroidUtils.dpToPx(app, 3), 0xFFFFD700);
 			row.setForeground(frame);
 		} else {
 			row.setForeground(null);
