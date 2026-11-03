@@ -432,6 +432,7 @@ public class VoiceRouter {
 		// If routing is changed update status to unknown
 		if (next != nextRouteDirection) {
 			nextRouteDirection = next;
+			chizuPrefetchDue = true; // 白い熊 地図: a turn passed or a new route: render the coming prompts
 			currentStatus = STATUS_UNKNOWN;
 			suppressDest = false;
 			playedAndArriveAtTarget = false;
@@ -439,6 +440,10 @@ public class VoiceRouter {
 			if (playGoAheadDist != -1) {
 				playGoAheadDist = 0;
 			}
+		}
+		if (chizuPrefetchDue && !repeat) {
+			chizuPrefetchDue = false;
+			chizuPrefetch();
 		}
 
 		if (!repeat) {
@@ -466,28 +471,7 @@ public class VoiceRouter {
 		// Note: getNextRouteDirectionInfoAfter(nextInfo, x, y).distanceTo is distance from nextInfo, not from current position!
 		// STATUS_TURN = "Turn (now)"
 		if ((repeat || statusNotPassed(STATUS_TURN)) && atd.isTurnStateActive(speed, dist, STATE_TURN_NOW)) {
-			if (nextNextInfo != null && !atd.isTurnStateNotPassed(0, nextNextInfo.distanceTo, STATE_TURN_IN)) {
-				playMakeTurn(currentSegment, next, nextNextInfo);
-			} else {
-				playMakeTurn(currentSegment, next, null);
-			}
-			if (!next.getTurnType().goAhead() && isTargetPoint(nextNextInfo) && nextNextInfo != null) {
-				// !goAhead() avoids isolated "and arrive.." prompt, as goAhead() is not pronounced
-				if (!atd.isTurnStateNotPassed(0, nextNextInfo.distanceTo, STATE_TURN_IN)) {
-					// Issue #2865: Ensure a distance associated with the destination arrival is always announced, either here, or in subsequent "Turn in" prompt
-					// Distance fon non-straights already announced in "Turn (now)"'s nextnext  code above
-					if ((nextNextInfo != null) && (nextNextInfo.directionInfo != null) && nextNextInfo.directionInfo.getTurnType().goAhead()) {
-						playThen();
-						playGoAhead(nextNextInfo.distanceTo, next, new StreetName());
-					}
-					playAndArriveAtDestination(nextNextInfo);
-				} else if (!atd.isTurnStateNotPassed(0, nextNextInfo.distanceTo / 1.2f, STATE_TURN_IN)) {
-					// 1.2 is safety margin should the subsequent "Turn in" prompt not fit in amy more
-					playThen();
-					playGoAhead(nextNextInfo.distanceTo, next, new StreetName());
-					playAndArriveAtDestination(nextNextInfo);
-				}
-			}
+			playTurnNow(currentSegment, next, nextNextInfo);
 			nextStatusAfter(STATUS_TURN);
 
 		// STATUS_TURN_IN = "Turn in ..."
@@ -531,6 +515,87 @@ public class VoiceRouter {
 			playGoAheadDist = 0;
 			playGoAhead(dist, next, getSpeakableStreetName(currentSegment, next, false));
 		}
+	}
+
+	// 白い熊 地図: the “turn (now)” prompt of a turn, with the turn after it and the arrival when they
+	// are close. Its own method so that the prompts of coming turns can be worked out ahead
+	// (chizuPrefetch) by the very code that will speak them.
+	private void playTurnNow(RouteSegmentResult currentSegment, RouteDirectionInfo next, NextDirectionInfo nextNextInfo) {
+		if (nextNextInfo != null && !atd.isTurnStateNotPassed(0, nextNextInfo.distanceTo, STATE_TURN_IN)) {
+			playMakeTurn(currentSegment, next, nextNextInfo);
+		} else {
+			playMakeTurn(currentSegment, next, null);
+		}
+		if (!next.getTurnType().goAhead() && isTargetPoint(nextNextInfo) && nextNextInfo != null) {
+			// !goAhead() avoids isolated "and arrive.." prompt, as goAhead() is not pronounced
+			if (!atd.isTurnStateNotPassed(0, nextNextInfo.distanceTo, STATE_TURN_IN)) {
+				// Issue #2865: Ensure a distance associated with the destination arrival is always announced, either here, or in subsequent "Turn in" prompt
+				// Distance fon non-straights already announced in "Turn (now)"'s nextnext  code above
+				if ((nextNextInfo != null) && (nextNextInfo.directionInfo != null) && nextNextInfo.directionInfo.getTurnType().goAhead()) {
+					playThen();
+					playGoAhead(nextNextInfo.distanceTo, next, new StreetName());
+				}
+				playAndArriveAtDestination(nextNextInfo);
+			} else if (!atd.isTurnStateNotPassed(0, nextNextInfo.distanceTo / 1.2f, STATE_TURN_IN)) {
+				// 1.2 is safety margin should the subsequent "Turn in" prompt not fit in amy more
+				playThen();
+				playGoAhead(nextNextInfo.distanceTo, next, new StreetName());
+				playAndArriveAtDestination(nextNextInfo);
+			}
+		}
+	}
+
+	// 白い熊 地図: while set on a thread, play() collects the sentences instead of speaking them
+	private final ThreadLocal<List<String>> chizuCapture = new ThreadLocal<>();
+	private final ThreadLocal<Boolean> chizuSuppressDest = new ThreadLocal<>();
+	private volatile boolean chizuPrefetchDue;
+
+	private boolean chizuSuppressDest() {
+		Boolean v = chizuSuppressDest.get();
+		return v != null ? v : suppressDest;
+	}
+
+	/**
+	 * 白い熊 地図: works out the “turn (now)” prompts of the next three turns and the arrival — with
+	 * and without the destination signs, whichever the turn-in prompt leaves — and has 白い熊 音声
+	 * render them ahead, so they play the moment they are due (net.osmand.plus.voice.ChizuVoice).
+	 */
+	private void chizuPrefetch() {
+		CommandPlayer pl = player;
+		if (!(pl instanceof net.osmand.plus.voice.JsTtsCommandPlayer)
+				|| !net.osmand.plus.voice.ChizuVoice.get(app).isActive(pl.getLanguage())) {
+			return;
+		}
+		RouteCalculationResult route = router.getRoute();
+		if (route == null || !route.isCalculated()) {
+			return;
+		}
+		List<RouteSegmentResult> segments = route.getImmutableAllSegments();
+		List<String> texts = new ArrayList<>();
+		chizuCapture.set(texts);
+		try {
+			NextDirectionInfo info = router.getNextRouteDirectionInfo(new NextDirectionInfo(), true);
+			for (int k = 0; k < 3 && info != null && info.directionInfo != null; k++) {
+				RouteDirectionInfo next = info.directionInfo;
+				NextDirectionInfo nextNext = router.getNextRouteDirectionInfoAfter(info, new NextDirectionInfo(), true);
+				int before = next.routePointOffset - 1;
+				RouteSegmentResult segment = before >= 0 && before < segments.size() ? segments.get(before) : null;
+				for (boolean suppress : new boolean[] {false, true}) {
+					chizuSuppressDest.set(suppress);
+					playTurnNow(segment, next, nextNext);
+				}
+				info = nextNext;
+			}
+			chizuSuppressDest.remove();
+			net.osmand.plus.helpers.TargetPoint target = app.getTargetPointsHelper().getPointToNavigate();
+			arrivedDestinationPoint(target == null ? "" : target.getOnlyName());
+		} catch (RuntimeException e) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("voice prefetch failed: " + e);
+		} finally {
+			chizuCapture.remove();
+			chizuSuppressDest.remove();
+		}
+		net.osmand.plus.voice.ChizuVoice.get(app).prefetch(texts);
 	}
 
 	public void announceCurrentDirection(Location currentLocation) {
@@ -827,14 +892,14 @@ public class VoiceRouter {
 			if (tParam != null) {
 				if (exitInfo != null && !Algorithms.isEmpty(exitInfo.getRef()) && settings.SPEAK_EXIT_NUMBER_NAMES.get()) {
 					String stringRef = getSpeakableExitRef(exitInfo.getRef());
-					p.takeExit(tParam, stringRef, getIntRef(exitInfo.getRef()), getSpeakableExitName(next, exitInfo, !suppressDest));
+					p.takeExit(tParam, stringRef, getIntRef(exitInfo.getRef()), getSpeakableExitName(next, exitInfo, !chizuSuppressDest()));
 				} else {
-					p.turn(tParam, getSpeakableStreetName(currentSegment, next, !suppressDest));
+					p.turn(tParam, getSpeakableStreetName(currentSegment, next, !chizuSuppressDest()));
 				}
 			} else if (next.getTurnType().isRoundAbout()) {
-				p.roundAbout(next.getTurnType().getTurnAngle(), next.getTurnType().getExitOut(), getSpeakableStreetName(currentSegment, next, !suppressDest));
+				p.roundAbout(next.getTurnType().getTurnAngle(), next.getTurnType().getExitOut(), getSpeakableStreetName(currentSegment, next, !chizuSuppressDest()));
 			} else if (next.getTurnType().getValue() == TurnType.TU || next.getTurnType().getValue() == TurnType.TRU) {
-				p.makeUT(getSpeakableStreetName(currentSegment, next, !suppressDest));
+				p.makeUT(getSpeakableStreetName(currentSegment, next, !chizuSuppressDest()));
 				// Do not announce goAheads
 				//} else if (next.getTurnType().getValue() == TurnType.C)) {
 				//	play.goAhead();
@@ -1001,6 +1066,16 @@ public class VoiceRouter {
 	}
 
 	protected void play(CommandBuilder p) {
+		List<String> capture = chizuCapture.get();
+		if (capture != null) {
+			if (p != null && player instanceof net.osmand.plus.voice.JsTtsCommandPlayer) {
+				String text = ((net.osmand.plus.voice.JsTtsCommandPlayer) player).chizuTextOf(p);
+				if (!text.isEmpty()) {
+					capture.add(text);
+				}
+			}
+			return;
+		}
 		if (p != null) {
 			List<String> played = p.play();
 			notifyOnVoiceMessage(p.getCommandsList(), played);

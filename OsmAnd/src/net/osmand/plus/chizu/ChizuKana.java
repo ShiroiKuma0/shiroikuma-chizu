@@ -57,7 +57,10 @@ public final class ChizuKana {
 		while (w.find()) {
 			String word = w.group();
 			String kana;
-			if (isAbbreviation(word)) {
+			String english = ENGLISH.get(word.toLowerCase(Locale.ROOT));
+			if (english != null) {
+				kana = english; // a name 白い熊 gave a place in English (“Home”), read as English
+			} else if (isAbbreviation(word)) {
 				kana = word; // ČD, OC: the engine spells these, as they should be
 			} else {
 				kana = convertWord(expand(word, czech), czech);
@@ -68,6 +71,31 @@ public final class ChizuKana {
 			sb.append(kana);
 		}
 		return sb.toString();
+	}
+
+	/**
+	 * Common English words of place names — favourites such as “Home” or “Work” — in their English
+	 * reading; by Czech rules “Home” came out as ホメ.
+	 */
+	private static final java.util.Map<String, String> ENGLISH = new java.util.HashMap<>();
+
+	static {
+		String[][] words = {
+				{"home", "ホーム"}, {"work", "ワーク"}, {"office", "オフィス"}, {"school", "スクール"},
+				{"shop", "ショップ"}, {"store", "ストア"}, {"parking", "パーキング"}, {"garage", "ガレージ"},
+				{"gym", "ジム"}, {"hotel", "ホテル"}, {"airport", "エアポート"}, {"station", "ステーション"},
+				{"hospital", "ホスピタル"}, {"restaurant", "レストラン"}, {"cafe", "カフェ"}, {"coffee", "コーヒー"},
+				{"park", "パーク"}, {"mall", "モール"}, {"center", "センター"}, {"centre", "センター"},
+				{"house", "ハウス"}, {"my", "マイ"}, {"the", "ザ"}, {"car", "カー"}, {"wash", "ウォッシュ"},
+				{"bank", "バンク"}, {"post", "ポスト"}, {"club", "クラブ"}, {"church", "チャーチ"},
+				{"market", "マーケット"}, {"street", "ストリート"}, {"road", "ロード"}, {"city", "シティ"},
+				{"north", "ノース"}, {"south", "サウス"}, {"east", "イースト"}, {"west", "ウェスト"},
+				{"gas", "ガス"}, {"service", "サービス"}, {"doctor", "ドクター"}, {"dentist", "デンティスト"},
+				{"friend", "フレンド"}, {"family", "ファミリー"}, {"mom", "マム"}, {"dad", "ダッド"},
+		};
+		for (String[] w : words) {
+			ENGLISH.put(w[0], w[1]);
+		}
 	}
 
 	private static boolean isAbbreviation(String word) {

@@ -219,6 +219,19 @@ public final class ChizuSpeeds {
 		prefs(context).edit().putInt("eta_minutes", minutes).apply();
 	}
 
+	/**
+	 * The time a traffic light costs on average, seconds. The car profile charges 20 s of time and a
+	 * further 15 s of route-only penalty (“not through the city”); with own speeds a light costs
+	 * exactly this, in the route choice and in the arrival time alike.
+	 */
+	public static int getTrafficLightSeconds(@NonNull Context context) {
+		return prefs(context).getInt("traffic_light_s", 20);
+	}
+
+	public static void setTrafficLightSeconds(@NonNull Context context, int seconds) {
+		prefs(context).edit().putInt("traffic_light_s", seconds).apply();
+	}
+
 	/** The speed set for a row; 0 means OsmAnd's own. */
 	public static int get(@NonNull Context context, @NonNull Row row) {
 		return prefs(context).getInt("row_" + row.no, row.preset);
@@ -364,6 +377,13 @@ public final class ChizuSpeeds {
 				rule.registerAndTagValueCondition("highway", h, false);
 			}
 		}
+		int light = getTrafficLightSeconds(context);
+		RouteAttributeEvalRule lightTime = router.getObjContext(RouteDataObjectAttribute.OBSTACLES)
+				.chizuInsertRule(0, String.valueOf(light), null);
+		lightTime.registerAndTagValueCondition("highway", "traffic_signals", false);
+		RouteAttributeEvalRule lightPenalty = router.getObjContext(RouteDataObjectAttribute.ROUTING_OBSTACLES)
+				.chizuInsertRule(0, "0", null);
+		lightPenalty.registerAndTagValueCondition("highway", "traffic_signals", false);
 		int at = 0;
 		for (boolean tunnel : new boolean[] {true, false}) {
 			for (String h : highways) {

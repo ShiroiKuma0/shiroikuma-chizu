@@ -314,7 +314,7 @@ tasks.register('buildOsmAndCore', Exec) {
 	String tskReqStr = gradle.getStartParameter().getTaskRequests().toString().toLowerCase()
 	String flavour = ""
 	if (!tskReqStr.contains("fat")) {
-		if (tskReqStr.contains("arm64")) {
+		if (tskReqStr.contains("arm64") || tskReqStr.contains("buildapk")) { // 白い熊 地図: buildApk is the arm64 build
 			flavour = flavour.length() == 0 ? "ARM64_ONLY" : ""
 		}
 		if (tskReqStr.contains("armv7")) {
@@ -329,6 +329,20 @@ tasks.register('buildOsmAndCore', Exec) {
 	}
 
 	description "Build Legacy OsmAndCore"
+
+	// 白い熊 地図: the native route search lives in this library; without an NDK the script skipped
+	// it silently and every route ran in Java. The NDK path comes from local.properties (chizu.ndk.dir)
+	if (System.getenv("ANDROID_NDK") == null) {
+		def lp = new Properties()
+		def lpFile = rootProject.file("local.properties")
+		if (lpFile.exists()) {
+			lpFile.withInputStream { lp.load(it) }
+		}
+		def ndkDir = lp.getProperty("chizu.ndk.dir")
+		if (ndkDir != null && new File(ndkDir).isDirectory()) {
+			environment "ANDROID_NDK", ndkDir
+		}
+	}
 
 	if (!Os.isFamily(Os.FAMILY_WINDOWS)) {
 		if (flavour.length() > 0) {

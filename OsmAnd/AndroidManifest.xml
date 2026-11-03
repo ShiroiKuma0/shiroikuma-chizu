@@ -63,6 +63,8 @@
 		android:xlargeScreens="true" android:anyDensity="true" />
 
 	<queries>
+		<!-- 白い熊 地図: 白い熊 音声 renders the voice prompts ahead (ChizuVoice) -->
+		<package android:name="shiroikuma.onse" />
 		<package android:name="net.osmand.srtmPlugin" />
 		<package android:name="net.osmand.srtmPlugin.paid" />
 		<package android:name="net.osmand.skimapsPlugin" />
@@ -132,6 +134,9 @@
 		     the UNAUTHENTICATED half of the surface, deliberately. It only ever writes where it was
 		     told to and reports what it did. Anything that moves data through a caller-supplied
 		     descriptor lives behind the provider below, which knows who is calling. -->
+		<receiver
+			android:name="net.osmand.plus.chizu.ChizuDiagReceiver"
+			android:exported="false" />
 		<receiver
 			android:name="net.osmand.plus.chizu.ChizuStateExportReceiver"
 			android:exported="true">
