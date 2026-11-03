@@ -122,7 +122,7 @@ public class ChizuRouteStatsStrip {
 			meters = c.distance;
 			shown = c;
 			label = app.getString(c.kind.label);
-			color = ChizuRouteCandidateCard.colorFor(selected);
+			color = chooser.colorOf(selected);
 		} else {
 			seconds = helper.getLeftTime();
 			meters = helper.getLeftDistance();

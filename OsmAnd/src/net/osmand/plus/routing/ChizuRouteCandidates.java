@@ -98,6 +98,8 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		public final float adjustedTime;
 		public final float jamDelay;
 		public final int distance;
+		/** Line and card colour, by its time among the routes shown: fastest yellow, middle blue, slowest red. */
+		public volatile int color = 0xFFFFFF00;
 
 		Candidate(@NonNull Kind kind, @NonNull RouteCalculationResult route, @NonNull List<RouteSegmentResult> segments,
 		          @NonNull List<Level> levels, @NonNull Set<Long> bans) {
@@ -373,17 +375,19 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		net.osmand.plus.chizu.ChizuDriveLog.log("candidates done in " + (System.currentTimeMillis() - t0) + " ms, " + candidates.size() + " shown"); // 白い熊 地図 drive log
 	}
 
+	/** The colour of the route at this place in the list. */
+	public int colorOf(int index) {
+		List<Candidate> list = candidates;
+		return index >= 0 && index < list.size() ? list.get(index).color : 0xFFFFFF00;
+	}
+
 	/** Orders and merges what has been calculated so far and shows it. Worker thread. */
 	private void publish(int gen, @NonNull List<Candidate> variantsSoFar, @Nullable Candidate shortest,
 	                     @NonNull Candidate fastest, boolean done) {
 		// every route, the plain one and the shortest included, ranked by its time with traffic;
-		// a traffic variant slower than the plain route is a pointless detour and is left out
-		List<Candidate> all = new ArrayList<>();
-		for (Candidate c : variantsSoFar) {
-			if (c.adjustedTime < fastest.adjustedTime) {
-				all.add(c);
-			}
-		}
+		// slower routes too (白い熊, 2026-11-03): calculated anyway, so shown when they really differ
+		List<Candidate> all = new ArrayList<>(variantsSoFar);
+		StringBuilder why = done ? new StringBuilder() : null; // 白い熊 地図 drive log: each route's fate
 		all.add(fastest);
 		if (shortest != null) {
 			all.add(shortest);
@@ -392,11 +396,25 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		// near-duplicates go into the faster of the two
 		List<Candidate> shown = new ArrayList<>();
 		for (Candidate c : all) {
-			if (!isDuplicate(c, shown)) {
+			Candidate twin = duplicateOf(c, shown);
+			if (twin == null) {
 				shown.add(c);
+				if (why != null) {
+					why.append(String.format(java.util.Locale.US, " | %s %d m %.0f s (jams %.0f s): shown #%d",
+							c.kind, c.distance, c.adjustedTime, c.jamDelay, shown.size()));
+				}
+			} else if (why != null) {
+				why.append(String.format(java.util.Locale.US, " | %s %d m %.0f s: dropped, shares %.0f%%/%.0f%% of its roads with %s %.0f s",
+						c.kind, c.distance, c.adjustedTime,
+						100 * ChizuTraffic.sharedFraction(c.segments, twin.segments),
+						100 * ChizuTraffic.sharedFraction(twin.segments, c.segments), twin.kind, twin.adjustedTime));
 			}
 		}
+		if (why != null) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("candidate ranking:" + why);
+		}
 		List<Candidate> result = shown.size() > 1 ? shown : Collections.emptyList();
+		colourByTime(result);
 		app.runInUIThread(() -> {
 			if (gen != generation) {
 				return;
@@ -413,14 +431,30 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 		});
 	}
 
-	private static boolean isDuplicate(@NonNull Candidate c, @NonNull List<Candidate> others) {
+	/** Fastest yellow, slowest red, blue halfway in time; the hue moves through green, cyan and violet. */
+	private static void colourByTime(@NonNull List<Candidate> shown) {
+		if (shown.isEmpty()) {
+			return;
+		}
+		float min = shown.get(0).adjustedTime;
+		float max = shown.get(shown.size() - 1).adjustedTime;
+		for (Candidate c : shown) {
+			float t = max > min ? (c.adjustedTime - min) / (max - min) : 0f;
+			// hue 60 (yellow) → 230 (blue) at t = 0.5 → 360 (red)
+			float hue = t <= 0.5f ? 60f + t * 2f * 170f : 230f + (t - 0.5f) * 2f * 130f;
+			c.color = android.graphics.Color.HSVToColor(new float[] {hue % 360f, 1f, 1f});
+		}
+	}
+
+	@Nullable
+	private static Candidate duplicateOf(@NonNull Candidate c, @NonNull List<Candidate> others) {
 		for (Candidate o : others) {
 			if (ChizuTraffic.sharedFraction(c.segments, o.segments) > DUPLICATE_SHARE
 					&& ChizuTraffic.sharedFraction(o.segments, c.segments) > DUPLICATE_SHARE) {
-				return true;
+				return o;
 			}
 		}
-		return false;
+		return null;
 	}
 
 	@Nullable

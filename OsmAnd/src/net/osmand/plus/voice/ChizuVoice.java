@@ -182,6 +182,13 @@ public final class ChizuVoice {
 		return available;
 	}
 
+	/** Route planning started: ask 音声 now, so the first prompt (“route set”) is already pre-rendered. */
+	public void warmUp() {
+		if (!available && isEnabled(app) && onseIsTtsEngine()) {
+			pingIfDue();
+		}
+	}
+
 	private boolean onseIsTtsEngine() {
 		try {
 			String engine = JsTtsCommandPlayer.chizuDefaultEngine();
