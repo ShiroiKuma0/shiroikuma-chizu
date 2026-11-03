@@ -6,11 +6,11 @@
 
 **Offline OpenStreetMap navigation, restyled in black and yellow.**
 
-A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless backup an automation app can trigger and a verified-caller data door that survives a wipe, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, nothing reported to osmand.net, an Android Auto that opens straight onto a 3D map in the same colors, Waze-like route choice and automatic, announced reroutes around traffic jams read off Google’s traffic tiles without telling Google who is asking, routes priced at your own driving speed per road type and limit, and Japanese voice guidance that reads Czech street names in katakana.
+A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**: a full black-yellow rebrand, a live-preview theming page for colors, fonts and sizes, one-archive export/import of everything settable (maps included), a headless backup an automation app can trigger and a verified-caller data door that survives a wipe, an always-visible position marker, walks taken in from a sister app and drawn as map pictures, tile-exact base maps rendered on request, shared main storage, themed in-app flashes, nothing reported to osmand.net, an Android Auto that opens straight onto a 3D map in the same colors, Waze-like route choice — every route in a colour of its time, the chosen one in a shimmering gold glow — and automatic, announced reroutes around traffic jams read off Google’s traffic tiles without telling Google who is asking, routes priced at your own driving speed per road type and limit, Japanese voice guidance that reads Czech street names in katakana and plays prompts pre-rendered by 白い熊 音声, the native route search built in, and a Diagnostics page where every log is off until you switch it on.
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.5.0+023`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.5.0+034`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -88,9 +88,9 @@ The colours come from the same theming page as the rest of the app, so recolouri
 ---
 
 ## 🚦 Around the jams, Waze-style — without Waze
-Plan a car route and 地図 reads Google’s live traffic layer along it — the same red and yellow you see on the traffic overlay — and works out the alternatives itself: one that avoids every red street, one that also avoids long yellow crawls, one that avoids yellow altogether, the plain shortest, and at the bottom the plain fastest that ignores traffic. They are ranked by a traffic-adjusted time, near-duplicates are merged, and when they all come out the same there is no chooser at all.
+Plan a car route and 地図 reads Google’s live traffic layer along it — the same red and yellow you see on the traffic overlay — and works out the alternatives itself: one that avoids every red street, one that also avoids long yellow crawls, one that avoids yellow altogether, the plain shortest, and at the bottom the plain fastest that ignores traffic. They are ranked by their time with traffic; every route that really differs is offered, slower ones included, and only near-duplicates are merged. When they all come out the same there is no chooser at all.
 
-All of them are drawn on the map at once. The selected route carries a dark casing and its own colour, the others sit beside it thinner but each in a colour of its own, and a soft halo lifts the lot off the street grid while the streets themselves turn pale for the preview. Tap a line on the map — or a card in the pull-up — to pick it; a strip at the top shows its time, distance, arrival and the minutes still spent in traffic, even with the pull-up closed. The preview map turns with two fingers and has a face-north button.
+All of them are drawn on the map at once, each in the colour of its time: the fastest yellow, the slowest red, the middle blue, the hue running between them — on the line, its card and the top strip alike. None is ever dimmed. The selected one wears a gold glow instead, with a warm light running along it from start to destination and sparkles twinkling on it (speed, brightness, length and sparkles are all settable, or the glow can stay steady). A soft halo lifts the lot off the street grid while the streets themselves turn pale for the preview, and the preview map always faces north. Tap a line on the map — or a card in the pull-up — to pick it; a strip at the top shows its time, distance, arrival and the minutes still spent in traffic, even with the pull-up closed. The preview map turns with two fingers and has a face-north button.
 
 While driving it keeps looking. Every minute, and right after every off-route reroute, the rest of the route is weighed against a fresh fastest route and a fresh route around the jams of that moment. When one of them saves enough, 地図 simply takes it and says so — “Rerouted around traffic, about 6 minutes faster” — because nobody can answer a question while driving. An off-route reroute is always planned afresh, so a tunnel you chose instead of the planned street is found at once rather than steered back onto the old line.
 
@@ -108,6 +108,13 @@ To tune the sliders against reality, every drive — navigating or not — is wr
 ## 🗣️ Japanese voice that can say Czech street names
 A Japanese voice spells unknown Latin words letter by letter, so “Jižní spojka” came out as a string of letters. Street names now go to it in katakana — by Czech pronunciation rules in Czechia (long vowels, ě, devoicing), by rough general ones elsewhere — with abbreviations such as “nám.” and “tř.” spelled out and road numbers left as they are.
 
+With 白い熊 音声 installed, the prompts are rendered by its Japanese voice ahead of time — the first turns as soon as a route is set, the “route set” announcement while you are still choosing — and played exactly on cue, so Start speaks at once. Stale prompts are dropped, and nothing is said after arrival.
+
+---
+
+## 🩺 Diagnostics, off until you want them
+One page in the 白い熊 地図 settings holds every diagnostic, each behind its own switch and all off by default: position and roads (the drive log, off-route checks, the road log for tuning speeds), routing and traffic, voice guidance, map and car screen, app responsiveness. The files live in the app’s own diag directory; the page shows what is stored, keeps it for as many days as you set, exports it to a dated subdirectory of a directory you pick, shares it, or purges it behind a warning that says how many files, how big and which days and hours. While anything records, a notification offers Mark — a numbered marker in the log for “this moment, look here” — and Turn all off.
+
 ---
 
 ## 🔒 Nothing sent home
@@ -122,7 +129,8 @@ A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) (app id `shiroikuma.chiz
 ```bash
 git clone git@github.com:ShiroiKuma0/shiroikuma-chizu.git
 git clone --depth 1 https://github.com/osmandapp/OsmAnd-resources.git resources  # sibling checkout
+git clone https://github.com/osmandapp/OsmAnd-core-legacy.git core-legacy       # sibling checkout, native route search
 cd shiroikuma-chizu
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ANDROID_HOME=$HOME/android-sdk ./gradlew buildApk
 ```
-Builds the signed `androidFullOpenglArm64Release` variant (full feature set, 3D OpenGL core, arm64) and copies `shiroikuma-chizu_<version>_arm64-v8a.apk` to `~/tmp/`. Signing expects a gitignored `keystore.properties` (see `keystore.properties.example`). The build downloads the mini world basemap and the prebuilt OpenGL core from `builder.osmand.net` at build time.
+Builds the signed `androidFullOpenglArm64Release` variant (full feature set, 3D OpenGL core, arm64) and copies `shiroikuma-chizu_<version>_arm64-v8a.apk` to `~/tmp/`. Signing expects a gitignored `keystore.properties` (see `keystore.properties.example`). The native route search (`libosmand.so`) is built from `core-legacy` with the NDK named by `chizu.ndk.dir` in the gitignored `local.properties`; without it every route runs in the slower Java search. The build downloads the mini world basemap and the prebuilt OpenGL core from `builder.osmand.net` at build time.
