@@ -472,6 +472,10 @@ public class RoutingHelper {
 				double allowableDeviation = route.getRouteRecalcDistance();
 				if (allowableDeviation <= 0) {
 					allowableDeviation = getDefaultAllowedDeviation(settings, route.getAppMode(), posTolerance);
+				} else if (currentLocation.hasAccuracy()) {
+					// 白い熊 地図 +061: a weak fix is allowed as far out as its own error (1.5 × accuracy, at most 150 m):
+					// at 50 m, 30 m fixes threw 54 off-routes and 47 recalculations into 16 minutes (2026-11-06)
+					allowableDeviation = Math.max(allowableDeviation, Math.min(150, 1.5 * currentLocation.getAccuracy()));
 				}
 
 				// 2. Analyze if we need to recalculate route
@@ -483,9 +487,15 @@ public class RoutingHelper {
 						distOrth = RoutingHelperUtils.getOrthogonalDistance(currentLocation, routeNodes.get(currentRoute - 1), routeNodes.get(currentRoute));
 					}
 					if (distOrth > allowableDeviation) {
-						log.info("Recalculate route, because correlation  : " + distOrth); //$NON-NLS-1$
-						isDeviatedFromRoute = true;
-						calculateRoute = !settings.DISABLE_OFFROUTE_RECALC.get();
+						// 白い熊 地図 +061: off the route only after three fixes in a row, not one stray fix
+						chizuOffCount++;
+						if (chizuOffCount >= 3) {
+							log.info("Recalculate route, because correlation  : " + distOrth); //$NON-NLS-1$
+							isDeviatedFromRoute = true;
+							calculateRoute = !settings.DISABLE_OFFROUTE_RECALC.get();
+						}
+					} else {
+						chizuOffCount = 0;
 					}
 				}
 				// 3. Identify wrong movement direction
@@ -773,6 +783,8 @@ public class RoutingHelper {
 		}
 		return currentRoute;
 	}
+
+	private int chizuOffCount; // 白い熊 地図 +061: fixes in a row beyond the allowed deviation
 
 	public static float getPosTolerance(float accuracy) {
 		if (accuracy > 0) {
