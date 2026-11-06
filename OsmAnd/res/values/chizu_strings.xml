@@ -97,6 +97,8 @@
 	<string name="chizu_traffic_interval">Re-check while driving</string>
 	<string name="chizu_traffic_min_saving">Reroute when it saves</string>
 	<string name="chizu_traffic_long_yellow">Long yellow from</string>
+	<string name="chizu_traffic_chosen_delay">A chosen slower route is reconsidered when it gets later by</string>
+	<string name="chizu_traffic_chosen_delay_descr">Picking a slower route keeps it: no switching to the fastest, and off it 地図 steers you back onto it. Only when its own arrival time slips by this much is a faster way looked for. The fastest route is still checked every minute.</string>
 	<string name="chizu_subgroup_shimmer">Selected route at planning</string>
 	<string name="chizu_shimmer">Shimmer</string>
 	<string name="chizu_shimmer_descr">A light band runs along the gold glow of the selected route and sparkles twinkle on it. Off: the glow stays steady.</string>
@@ -110,6 +112,9 @@
 	<string name="chizu_traffic_avoid_yellow">Around all slow traffic</string>
 	<string name="chizu_traffic_shortest">Shortest distance</string>
 	<string name="chizu_traffic_ignores">Fastest</string>
+	<string name="chizu_traffic_alternative">Another way</string>
+	<string name="chizu_traffic_also_shortest">also the shortest</string>
+	<string name="chizu_traffic_via">via %1$s</string>
 	<string name="chizu_traffic_checking">Checking traffic…</string>
 	<string name="chizu_traffic_jam_on_route">traffic +%1$d min</string>
 	<string name="chizu_traffic_no_jam">traffic 0 min</string>
@@ -127,6 +132,7 @@
 	<string name="chizu_speeds_eta_minutes">Span of the recent speed</string>
 	<string name="chizu_speeds_extra_note">Every road counts as at least the slowest speed. The fastest is always your fastest row. The Travel speed screen of the car profile is greyed out while this is on.</string>
 	<string name="chizu_speeds_traffic_light">Time lost at a traffic light</string>
+	<string name="chizu_speeds_turn">Time lost at a turn</string>
 	<string name="chizu_section_voice">Voice</string>
 	<string name="chizu_voice_prerender">Prompts rendered ahead by 白い熊 音声</string>
 	<string name="chizu_voice_prerender_descr">With 白い熊 音声 as the system voice (1.0+016 or newer) and Japanese guidance, the coming turn prompts are rendered sentence by sentence before they are due and played by 地図 the moment they are. A prompt still rendering when a newer one comes is dropped, and nothing is said after the arrival. Off, or without 音声: the plain TTS engine.</string>
@@ -136,6 +142,10 @@
 	<string name="chizu_diag_note">All off by default. While a switch is on, its lines go to %1$s — read them there with adb, or export them below.</string>
 	<string name="chizu_diag_location">Location fixes</string>
 	<string name="chizu_diag_location_descr">Every fix from the phone and the car: position, accuracy, speed, bearing, its true delay and how far the clock is off. About one line a second while moving.</string>
+	<string name="chizu_diag_gnss">Raw satellite fixes</string>
+	<string name="chizu_diag_perf">CPU, memory and battery</string>
+	<string name="chizu_diag_perf_descr">Once a minute: 地図’s processor time by thread (route searches, map drawing, car screen, voice, location), its native, graphics and Java memory, whether the map is drawn on the phone or the car screen, and the battery’s level, current, temperature and the phone’s thermal state. Finds what heats the phone and what holds memory.</string>
+	<string name="chizu_diag_gnss_descr">Every fix the receiver gives, before 地図 filters it, and what became of it (kept, taken as a poor fix, dropped), with the satellites used, the strongest signals and, every few seconds, the whole sky: each satellite’s elevation, direction and signal. Shows a valley hiding the low satellites, a receiver that stops, or fixes thrown away. About two lines a second while navigating.</string>
 	<string name="chizu_diag_off_route">Off-route checks</string>
 	<string name="chizu_diag_off_route_descr">While navigating, the off-route check of every fix: distance from the route, the allowed deviation, wrong direction, and whether it recalculates.</string>
 	<string name="chizu_diag_routing">Route calculation</string>
@@ -186,4 +196,18 @@
 	<string name="chizu_diag_all_off_done">All diagnostics turned off.</string>
 	<string name="chizu_diag_notification_note">While any switch is on, a notification says so; its Mark button writes a numbered marker into the drive log, so the moment something goes wrong is easy to find.</string>
 	<string name="chizu_diag_counting">Stored: counting…</string>
+	<!-- 白い熊 地図 +045: the overlay opacity guard -->
+	<string name="chizu_overlay_hidden">Satellite overlay hidden — opacity %1$d %%. Long-press the slider to change it.</string>
+	<string name="chizu_overlay_restored">Satellite overlay was at %1$d %% — restored to %2$d %%.</string>
+	<string name="chizu_car_surface_lost">地図 restarted and lost the car screen — tap 地図 to open it again.</string>
+	<!-- 白い熊 地図 +050: route names on the chooser -->
+	<string name="chizu_route_fastest">Fastest</string>
+	<string name="chizu_route_fastest_shortest">Fastest and shortest</string>
+	<string name="chizu_route_shortest">Shortest</string>
+	<string name="chizu_route_around_jams">Around the jams</string>
+	<string name="chizu_route_main_roads">More main roads</string>
+	<string name="chizu_route_side_streets">More side streets</string>
+	<string name="chizu_route_fewer_turns">Fewer turns</string>
+	<string name="chizu_route_shorter">Shorter, slower</string>
+	<string name="chizu_route_longer">Longer way</string>
 </resources>

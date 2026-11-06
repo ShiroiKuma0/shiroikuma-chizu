@@ -212,6 +212,9 @@ public abstract class TilesCache<T> {
 
 	protected abstract T getTileObject(@NonNull TileLoadDownloadRequest req);
 
+	// 白い熊 地図 +048: 15 minutes (was 3): the view's tiles change with where the car is, not with the clock
+	private static final long CHIZU_MIN_EXPIRATION_MS = 15 * 60 * 1000L;
+
 	protected boolean isExpired(TileLoadDownloadRequest req) {
 		if (req.tileSource.getExpirationTimeMillis() != -1 && req.url != null && req.dirWithTiles.canRead()) {
 			long lastModified = req.tileSource.getTileModifyTime(req.xTile, req.yTile, req.zoom,
@@ -224,6 +227,11 @@ public abstract class TilesCache<T> {
 	protected boolean isExpired(TileLoadDownloadRequest req, long lastModified) {
 		long time = System.currentTimeMillis();
 		long ts = req.tileSource.getExpirationTimeMillis();
+		if (ts != -1) {
+			// 白い熊 地図 +041: never fetched again sooner than every 3 minutes (traffic tiles expired faster,
+			// and every tile re-downloaded, decoded and copied cost the car screen its processor)
+			ts = Math.max(ts, CHIZU_MIN_EXPIRATION_MS);
+		}
 		return ts != -1 && req.url != null && time - lastModified > ts;
 	}
 

@@ -1119,6 +1119,54 @@ public class RouteCalculationResult {
 		return null;
 	}
 
+	/**
+	 * 白い熊 地図: like {@link #getUpcomingTunnel}, but the whole chain — tunnels joined by open
+	 * stretches shorter than {@code maxGap} metres, up to {@code maxLength} metres in all. Stock stops at
+	 * the end of the first tunnel; on 2026-11-05 that was the end of Strahov, and the position then
+	 * stood still for 8 minutes through Blanka.
+	 */
+	@Nullable
+	public List<RouteSegmentResult> getChizuTunnelChain(float distToStart, float maxGap, float maxLength) {
+		List<RouteSegmentResult> first = getUpcomingTunnel(distToStart);
+		if (first == null || first.isEmpty()) {
+			return first;
+		}
+		int cs = segments.indexOf(first.get(first.size() - 1));
+		if (cs < 0) {
+			return first;
+		}
+		List<RouteSegmentResult> chain = new ArrayList<>(first);
+		float length = 0;
+		for (RouteSegmentResult r : first) {
+			length += r.getDistance();
+		}
+		List<RouteSegmentResult> open = new ArrayList<>();
+		float openLength = 0;
+		RouteSegmentResult prev = first.get(first.size() - 1);
+		for (int i = cs + 1; i < segments.size() && length < maxLength; i++) {
+			RouteSegmentResult segment = segments.get(i);
+			if (segment == prev) {
+				continue;
+			}
+			prev = segment;
+			if (segment.getObject().tunnel()) {
+				chain.addAll(open);
+				length += openLength;
+				open.clear();
+				openLength = 0;
+				chain.add(segment);
+				length += segment.getDistance();
+			} else {
+				open.add(segment);
+				openLength += segment.getDistance();
+				if (openLength > maxGap) {
+					break;
+				}
+			}
+		}
+		return chain;
+	}
+
 	public float getCurrentMaxSpeed(int profile) {
 		RouteSegmentResult res = getCurrentSegmentResult();
 		if (res != null) {

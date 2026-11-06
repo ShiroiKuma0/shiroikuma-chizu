@@ -14,9 +14,10 @@ public final class ChizuTrafficPrefs {
 
 	private static final String ENABLED = "traffic_enabled";
 	private static final String CHOOSER = "traffic_chooser";
-	private static final String INTERVAL_MIN = "traffic_interval_min";
+	private static final String INTERVAL_MIN = "traffic_interval_min_v2"; // 白い熊 地図 +040: default 3 min (1 min ate the battery), old value dropped
 	private static final String MIN_SAVING_MIN = "traffic_min_saving_min";
 	private static final String LONG_YELLOW_M = "traffic_long_yellow_m";
+	private static final String CHOSEN_DELAY_MIN = "traffic_chosen_delay_min";
 	private static final String SHIMMER = "traffic_shimmer";
 	private static final String SHIMMER_LOOP_S = "traffic_shimmer_loop_s";
 	private static final String SHIMMER_BAND_PCT = "traffic_shimmer_band_pct";
@@ -69,7 +70,7 @@ public final class ChizuTrafficPrefs {
 	}
 
 	public static int getIntervalMinutes(@NonNull Context context) {
-		return Math.max(1, prefs(context).getInt(INTERVAL_MIN, 1));
+		return Math.max(1, prefs(context).getInt(INTERVAL_MIN, 3));
 	}
 
 	public static void setIntervalMinutes(@NonNull Context context, int minutes) {
@@ -90,6 +91,15 @@ public final class ChizuTrafficPrefs {
 
 	public static void setLongYellowMeters(@NonNull Context context, int meters) {
 		prefs(context).edit().putInt(LONG_YELLOW_M, meters).apply();
+	}
+
+	/** A slower route picked on purpose is reconsidered only once it would arrive this much later. */
+	public static int getChosenDelayMinutes(@NonNull Context context) {
+		return Math.max(1, prefs(context).getInt(CHOSEN_DELAY_MIN, 5));
+	}
+
+	public static void setChosenDelayMinutes(@NonNull Context context, int minutes) {
+		prefs(context).edit().putInt(CHOSEN_DELAY_MIN, minutes).apply();
 	}
 
 	@NonNull

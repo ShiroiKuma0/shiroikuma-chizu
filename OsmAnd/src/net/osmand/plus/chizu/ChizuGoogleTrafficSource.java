@@ -48,6 +48,16 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 	private static final Log LOG = PlatformUtil.getLog(ChizuGoogleTrafficSource.class);
 
 	private static final int ZOOM = 15;
+	/**
+	 * 白い熊 地図 +048: main roads are read at zoom 13 — one tile for sixteen at 15. Google draws the same
+	 * main roads with their traffic at 13 and 14; only 15 adds the secondary and tertiary streets, so those
+	 * alone are still read there (compared 2026-11-06, Nusle/Pankrác).
+	 */
+	private static final int MAIN_ZOOM = 13;
+	private static final int MAIN_SEARCH_RIGHT_PX = 5;
+	private static final int MAIN_SEARCH_LEFT_PX = 3;
+	private static final java.util.Set<String> MAIN_ROADS = new java.util.HashSet<>(java.util.Arrays.asList(
+			"motorway", "motorway_link", "trunk", "trunk_link", "primary", "primary_link"));
 	private static final int TILE = 256;
 	private static final String URL = "https://mts%d.google.com/vt/lyrs=m,traffic&x=%d&y=%d&z=%d"
 			+ "&apistyle=s.t%%3A0%%7Cp.v%%3Aoff";
@@ -90,13 +100,19 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 
 	private static final class Sample {
 		final int segment;
-		final double px; // global pixel coordinates at ZOOM
+		final int zoom;
+		final double px; // global pixel coordinates at zoom
 		final double py;
 		final double dx; // unit direction of travel in pixel space
 		final double dy;
 
 		Sample(int segment, double px, double py, double dx, double dy) {
+			this(segment, ZOOM, px, py, dx, dy);
+		}
+
+		Sample(int segment, int zoom, double px, double py, double dx, double dy) {
 			this.segment = segment;
+			this.zoom = zoom;
 			this.px = px;
 			this.py = py;
 			this.dx = dx;
@@ -184,6 +200,7 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 
 	private static void addSamples(int index, @NonNull RouteSegmentResult segment, @NonNull List<Sample> out) {
 		RouteDataObject o = segment.getObject();
+		int zoom = MAIN_ROADS.contains(o.getHighway()) ? MAIN_ZOOM : ZOOM;
 		int start = segment.getStartPointIndex();
 		int end = segment.getEndPointIndex();
 		if (start == end || o.getPointsLength() == 0) {
@@ -227,15 +244,15 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 			double t = lens[piece] > 0 ? (d - pieceStart) / lens[piece] : 0;
 			double[] a = pts.get(piece);
 			double[] b = pts.get(piece + 1);
-			double ax = MapUtils.getTileNumberX(ZOOM, a[1]) * TILE;
-			double ay = MapUtils.getTileNumberY(ZOOM, a[0]) * TILE;
-			double bx = MapUtils.getTileNumberX(ZOOM, b[1]) * TILE;
-			double by = MapUtils.getTileNumberY(ZOOM, b[0]) * TILE;
+			double ax = MapUtils.getTileNumberX(zoom, a[1]) * TILE;
+			double ay = MapUtils.getTileNumberY(zoom, a[0]) * TILE;
+			double bx = MapUtils.getTileNumberX(zoom, b[1]) * TILE;
+			double by = MapUtils.getTileNumberY(zoom, b[0]) * TILE;
 			double len = Math.hypot(bx - ax, by - ay);
 			if (len == 0) {
 				continue;
 			}
-			out.add(new Sample(index, ax + (bx - ax) * t, ay + (by - ay) * t, (bx - ax) / len, (by - ay) / len));
+			out.add(new Sample(index, zoom, ax + (bx - ax) * t, ay + (by - ay) * t, (bx - ax) / len, (by - ay) / len));
 		}
 	}
 
@@ -243,9 +260,10 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 		// right of travel with y pointing down is (-dy, dx)
 		double rx = -s.dy;
 		double ry = s.dx;
-		byte c = scan(s, rx, ry, 0, SEARCH_RIGHT_PX, tiles);
+		boolean main = s.zoom == MAIN_ZOOM;
+		byte c = scan(s, rx, ry, 0, main ? MAIN_SEARCH_RIGHT_PX : SEARCH_RIGHT_PX, tiles);
 		if (c == NONE) {
-			c = scan(s, -rx, -ry, 1, SEARCH_LEFT_PX, tiles);
+			c = scan(s, -rx, -ry, 1, main ? MAIN_SEARCH_LEFT_PX : SEARCH_LEFT_PX, tiles);
 		}
 		return c == OTHER ? NONE : c;
 	}
@@ -256,7 +274,7 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 		int[] run = new int[6];
 		boolean inLine = false;
 		for (int k = from; k <= to; k++) {
-			byte c = pixel(s.px + nx * k, s.py + ny * k, tiles);
+			byte c = pixel(s.zoom, s.px + nx * k, s.py + ny * k, tiles);
 			if (c != NONE) {
 				inLine = true;
 				run[c]++;
@@ -278,18 +296,19 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 		return best;
 	}
 
-	private static byte pixel(double gx, double gy, @NonNull Map<Long, byte[]> tiles) {
+	private static byte pixel(int zoom, double gx, double gy, @NonNull Map<Long, byte[]> tiles) {
 		int x = (int) Math.floor(gx);
 		int y = (int) Math.floor(gy);
-		byte[] tile = tiles.get(key(Math.floorDiv(x, TILE), Math.floorDiv(y, TILE)));
+		byte[] tile = tiles.get(key(zoom, Math.floorDiv(x, TILE), Math.floorDiv(y, TILE)));
 		if (tile == null) {
 			return NONE;
 		}
 		return tile[Math.floorMod(y, TILE) * TILE + Math.floorMod(x, TILE)];
 	}
 
-	private static long key(int tx, int ty) {
-		return ((long) tx << 32) | (ty & 0xffffffffL);
+	/** zoom in the top 5 bits; x and y need at most 2^zoom ≤ 2^17 each at the zooms used here */
+	private static long key(int zoom, int tx, int ty) {
+		return ((long) zoom << 58) | ((long) (tx & 0x1fffffff) << 29) | (ty & 0x1fffffffL);
 	}
 
 	@NonNull
@@ -302,7 +321,7 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 				for (int oy = -reach; oy <= reach; oy += reach) {
 					int tx = (int) Math.floor((s.px + ox) / TILE);
 					int ty = (int) Math.floor((s.py + oy) / TILE);
-					wanted.put(key(tx, ty), new int[] {tx, ty});
+					wanted.put(key(s.zoom, tx, ty), new int[] {s.zoom, tx, ty});
 				}
 			}
 		}
@@ -320,7 +339,7 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 		for (Map.Entry<Long, int[]> e : wanted.entrySet()) {
 			if (!result.containsKey(e.getKey())) {
 				int[] xy = e.getValue();
-				pending.put(e.getKey(), fetchers.submit(() -> fetch(xy[0], xy[1])));
+				pending.put(e.getKey(), fetchers.submit(() -> fetch(xy[0], xy[1], xy[2])));
 			}
 		}
 		int failed = 0;
@@ -341,12 +360,20 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 			}
 		}
 		LOG.info("Traffic tiles: " + wanted.size() + " needed, " + pending.size() + " fetched, " + failed + " failed");
+		int main = 0;
+		for (int[] w : wanted.values()) {
+			if (w[0] == MAIN_ZOOM) {
+				main++;
+			}
+		}
+		ChizuDriveLog.log("traffic tiles: " + wanted.size() + " needed (" + main + " at z" + MAIN_ZOOM + ", "
+				+ (wanted.size() - main) + " at z" + ZOOM + "), " + pending.size() + " fetched, " + failed + " failed"); // 白い熊 地図 +048
 		return result;
 	}
 
 	@Nullable
-	private static byte[] fetch(int tx, int ty) {
-		String url = String.format(Locale.US, URL, Math.floorMod(tx + ty, 4), tx, ty, ZOOM);
+	private static byte[] fetch(int zoom, int tx, int ty) {
+		String url = String.format(Locale.US, URL, Math.floorMod(tx + ty, 4), tx, ty, zoom);
 		HttpURLConnection connection = null;
 		try {
 			connection = ChizuTileIdentity.open(url, null, null);

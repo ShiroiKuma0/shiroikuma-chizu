@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<!-- 白い熊 地図: view tag holding the next-turn box's recalculation spinner -->
+	<item name="chizu_recalc_spinner" type="id" />
+</resources>

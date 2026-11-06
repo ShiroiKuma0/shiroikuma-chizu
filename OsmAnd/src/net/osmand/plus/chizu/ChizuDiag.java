@@ -33,7 +33,8 @@ import java.util.TreeMap;
  * contract as 白い熊 Jami's and 白い熊 考直's Diagnostics.
  *
  * Everything goes to “/sdcard/Android/data/shiroikuma.chizu/files/diag/” (the app's own data
- * directory, readable with adb): the drive log “chizu-drive_<day>.log”, whose lines are sorted into
+ * directory, readable with adb): the drive log “chizu-drive_<day>.txt” (not “.log”: EMUI’s nightly
+ * clean-up deletes those as junk), whose lines are sorted into
  * the groups below by their first word, and the road-section log “chizu-roads_<day>.tsv”.
  */
 public final class ChizuDiag {
@@ -42,6 +43,9 @@ public final class ChizuDiag {
 	public static final String DIR = "diag";
 	static final String DRIVE_PREFIX = "chizu-drive_";
 	static final String ROADS_PREFIX = "chizu-roads_";
+	// EMUI's nightly clean-up (Phone Manager, while charging) deletes "*.log" under Android/data as junk
+	static final String DRIVE_EXT = ".txt";
+	static final String OLD_DRIVE_EXT = ".log";
 	private static final String KEY_EXPORT_TREE = "export_tree";
 	private static final String KEY_KEEP_DAYS = "keep_days";
 	private static final String CHANNEL = "chizu_diag";
@@ -53,6 +57,7 @@ public final class ChizuDiag {
 	/** A switchable group of the drive log, or the road log. */
 	public enum Group {
 		LOCATION("loc", R.string.chizu_diag_location, R.string.chizu_diag_location_descr),
+		GNSS("gnss", R.string.chizu_diag_gnss, R.string.chizu_diag_gnss_descr),
 		OFF_ROUTE("chk", R.string.chizu_diag_off_route, R.string.chizu_diag_off_route_descr),
 		ROUTING("routing", R.string.chizu_diag_routing, R.string.chizu_diag_routing_descr),
 		TRAFFIC("traffic", R.string.chizu_diag_traffic, R.string.chizu_diag_traffic_descr),
@@ -60,6 +65,7 @@ public final class ChizuDiag {
 		MAP("map", R.string.chizu_diag_map, R.string.chizu_diag_map_descr),
 		CAR("car", R.string.chizu_diag_car, R.string.chizu_diag_car_descr),
 		UI("ui", R.string.chizu_diag_ui, R.string.chizu_diag_ui_descr),
+		PERF("perf", R.string.chizu_diag_perf, R.string.chizu_diag_perf_descr),
 		ROADS("roads", R.string.chizu_diag_roads, R.string.chizu_diag_roads_descr);
 
 		public final String key;
@@ -139,6 +145,10 @@ public final class ChizuDiag {
 			case "loc":
 			case "tunnel":
 				return Group.LOCATION;
+			case "gnss":
+				return Group.GNSS;
+			case "perf":
+				return Group.PERF;
 			case "chk":
 				return Group.OFF_ROUTE;
 			case "traffic":
@@ -186,6 +196,7 @@ public final class ChizuDiag {
 		List<File> sources = new ArrayList<>();
 		sources.add(new File(Environment.getExternalStorageDirectory(), "tmp"));
 		sources.add(c.getExternalFilesDir(null));
+		sources.add(target); // its own old "*.log" drive logs become "*.txt"
 		int moved = 0;
 		for (File src : sources) {
 			File[] files = src == null ? null : src.listFiles();
@@ -193,9 +204,17 @@ public final class ChizuDiag {
 				continue;
 			}
 			for (File f : files) {
-				if (isDiagFile(f.getName()) && f.isFile()) {
+				String name = f.getName();
+				if (isDiagFile(name) && f.isFile()) {
+					if (name.endsWith(OLD_DRIVE_EXT)) {
+						name = name.substring(0, name.length() - OLD_DRIVE_EXT.length()) + DRIVE_EXT;
+					}
+					File to = new File(target, name);
+					if (to.equals(f)) {
+						continue;
+					}
 					try {
-						moveInto(f, new File(target, f.getName()));
+						moveInto(f, to);
 						moved++;
 					} catch (Exception e) {
 						// left where it was; the next start tries again
@@ -232,7 +251,7 @@ public final class ChizuDiag {
 	}
 
 	static boolean isDiagFile(@NonNull String name) {
-		return (name.startsWith(DRIVE_PREFIX) && name.endsWith(".log"))
+		return (name.startsWith(DRIVE_PREFIX) && (name.endsWith(DRIVE_EXT) || name.endsWith(OLD_DRIVE_EXT)))
 				|| (name.startsWith(ROADS_PREFIX) && name.endsWith(".tsv"));
 	}
 

@@ -52,7 +52,20 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 
 	private static final double VISIBLE_AREA_Y_MIN_DETECTION_SIZE = 1.025;
 	private static final int MAP_RENDER_MESSAGE = OsmAndConstants.UI_HANDLER_MAP_VIEW + 7;
-	private static final int MAX_FRAME_RATE = 20;
+	private static final int MAX_FRAME_RATE = 10; // 白い熊 地図 +041: was 20 — half the frames, half the copying
+	/** 白い熊 地図 +045: car frames stop now and then (seen after the app restarted under a live car session). */
+	private static final long CHIZU_STALL_MS = 10_000;
+	private volatile long chizuLastFrameMs;
+	private long chizuLastDrawMs;
+	private volatile long chizuLastGlFrameMs;
+	private long chizuLastErrorMs;
+	private static final int CHIZU_HELD_MESSAGE = OsmAndConstants.UI_HANDLER_MAP_VIEW + 18;
+	private int chizuRecoveries;
+	private final Runnable chizuWatchdog = this::chizuCheckFrames;
+	private Lifecycle chizuLifecycle;
+
+	/** 白い熊 地図 +043: the frame rate in use; the test receiver may change it. */
+	private static volatile int chizuFrameRate = MAX_FRAME_RATE;
 	private static final long KEEP_3D_DELAY_MS = 400;
 	public static final int PINCH_TO_ZOOM_ITERATION_DELAY = 200;
 
@@ -164,6 +177,8 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 		public void onSurfaceAvailable(@NonNull SurfaceContainer surfaceContainer) {
 			synchronized (SurfaceRenderer.this) {
 				Log.i(TAG, "Surface available " + surfaceContainer);
+				net.osmand.plus.chizu.ChizuDriveLog.log("car surface available " + surfaceContainer.getWidth() + "x" + surfaceContainer.getHeight()
+						+ " mapView=" + (mapView != null)); // 白い熊 地図 +045
 				if (surface != null) {
 					surface.release();
 				}
@@ -182,6 +197,11 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 					mapView.setupRenderingView();
 				}
 				renderFrame();
+				chizuLastFrameMs = android.os.SystemClock.elapsedRealtime();
+				getApp().getUiHandler().removeCallbacks(chizuWatchdog);
+				getApp().runInUIThread(chizuWatchdog, CHIZU_STALL_MS);
+				// 白い熊 地図 +045: a next-to-invisible overlay is said at every car-screen start
+				getApp().runInUIThread(() -> net.osmand.plus.chizu.ChizuOverlayGuard.check("car screen started"), 3000);
 			}
 		}
 
@@ -206,6 +226,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 		public void onSurfaceDestroyed(@NonNull SurfaceContainer surfaceContainer) {
 			synchronized (SurfaceRenderer.this) {
 				Log.i(TAG, "Surface destroyed");
+				net.osmand.plus.chizu.ChizuDriveLog.log("car surface destroyed"); // 白い熊 地図 +045
 				if (surface != null) {
 					surface.release();
 					surface = null;
@@ -254,6 +275,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 		this.handler = new Handler();
 		this.carContext = carContext;
 		this.surfaceView = new CarSurfaceView(carContext, this);
+		this.chizuLifecycle = lifecycle;
 		lifecycle.addObserver(this);
 	}
 
@@ -271,11 +293,16 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	@Override
 	public void onCreate(@NonNull LifecycleOwner owner) {
 		Log.i(TAG, "SurfaceRenderer created");
+		net.osmand.plus.chizu.ChizuDriveLog.log("car surface callback registered (renderer created)"); // 白い熊 地図 +045
 		try {
 			carContext.getCarService(AppManager.class).setSurfaceCallback(mSurfaceCallback);
 		} catch (SecurityException | HostException e) {
 			Log.e(TAG, "setSurfaceCallback failed ", e);
+			net.osmand.plus.chizu.ChizuDriveLog.log("car surface callback failed: " + e);
 		}
+		chizuLastFrameMs = android.os.SystemClock.elapsedRealtime();
+		getApp().getUiHandler().removeCallbacks(chizuWatchdog);
+		getApp().runInUIThread(chizuWatchdog, CHIZU_STALL_MS);
 	}
 
 	/**
@@ -299,7 +326,23 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	@Override
 	public void onFrameReady(MapRendererView mapRendererView) {
 		//renderFrame();
+		net.osmand.plus.chizu.ChizuPerfLog.carAsk("gl frame ready"); // 白い熊 地図 +046
 		sendRenderFrameMsg();
+		// 白い熊 地図 +047: setMaximumFrameRate holds only the phone's on-screen renderer; the car's off-screen
+		// one drew ~38 frames a second while the map moved (8–11 even at a limit of 2) — 70 % of a core for
+		// frames the car never showed. This runs on its GL thread, so waiting here holds it to the rate.
+		if (mapRendererView == offscreenMapRendererView) {
+			long now = android.os.SystemClock.uptimeMillis();
+			long wait = chizuLastGlFrameMs + 1000 / Math.max(1, chizuFrameRate) - now;
+			if (wait > 0 && wait <= 1000) {
+				try {
+					Thread.sleep(wait);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			}
+			chizuLastGlFrameMs = android.os.SystemClock.uptimeMillis();
+		}
 	}
 
 	/**
@@ -328,6 +371,124 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 				}
 			}
 		}
+	}
+
+	/**
+	 * 白い熊 地図 +045: every {@value #CHIZU_STALL_MS} ms while the car surface lives — when no frame has
+	 * reached it for that long, write down why and attach the map to the car screen again.
+	 */
+	private void chizuCheckFrames() {
+		if (chizuLifecycle == null || !chizuLifecycle.getCurrentState().isAtLeast(Lifecycle.State.CREATED)) {
+			return; // the car session is over
+		}
+		Surface surface = this.surface;
+		long idle = android.os.SystemClock.elapsedRealtime() - chizuLastFrameMs;
+		if (surface == null || !surface.isValid()) {
+			// a session with no surface draws nothing: seen after the app restarted under a live car
+			// session — ask the host again for the surface
+			if (idle >= CHIZU_STALL_MS && chizuRecoveries < 6) {
+				chizuRecoveries++;
+				net.osmand.plus.chizu.ChizuDriveLog.log("car session has no surface for " + idle / 1000
+						+ " s — asking the car for it again (#" + chizuRecoveries + ")");
+				try {
+					carContext.getCarService(AppManager.class).setSurfaceCallback(mSurfaceCallback);
+				} catch (RuntimeException e) {
+					net.osmand.plus.chizu.ChizuDriveLog.log("car surface callback failed: " + e);
+				}
+			}
+			getApp().runInUIThread(chizuWatchdog, CHIZU_STALL_MS);
+			return;
+		}
+		if (idle >= CHIZU_STALL_MS) {
+			OsmandMapTileView mv = mapView;
+			android.view.View v = mv == null ? null : mv.getView();
+			String state = "mapView=" + (mv == null ? "none" : "set")
+					+ " view=" + (v == null ? "none" : v.getClass().getSimpleName())
+					+ " renderer=" + (mv == null || mv.getMapRenderer() == null ? "none"
+					: mv.getMapRenderer() == offscreenMapRendererView ? "car" : "other")
+					+ " offscreen=" + (offscreenMapRendererView != null);
+			chizuRecoveries++;
+			net.osmand.plus.chizu.ChizuDriveLog.log("car frames stalled " + idle / 1000 + " s: " + state
+					+ " — attaching the map to the car screen again (#" + chizuRecoveries + ")");
+			synchronized (this) {
+				if (mv != null) {
+					mv.setView(surfaceView);
+					if (mv.getMapRenderer() != offscreenMapRendererView) {
+						setupOffscreenRenderer();
+					}
+					mv.refreshMap();
+				}
+			}
+			renderFrame();
+		}
+		getApp().runInUIThread(chizuWatchdog, CHIZU_STALL_MS);
+	}
+
+	/**
+	 * 白い熊 地図 +047: after 地図 restarts under a running car session, the surface Android Auto hands over
+	 * refuses every draw (lockCanvas: IllegalArgumentException) and the car screen freezes on its last
+	 * picture. Switching to another app on the car screen and back gives a fresh, working surface; the app
+	 * can't ask for one itself, so after {@value #CHIZU_LOCK_FAIL_MS} ms of refused draws it closes its car
+	 * session — the car's launcher shows, and the next tap on 地図 starts with a fresh surface.
+	 */
+	private static final long CHIZU_LOCK_FAIL_MS = 4000;
+	private long chizuLockFailSince;
+	private boolean chizuLockFailHandled;
+
+	private void chizuOnLockFailed(@NonNull Exception e, long now) {
+		if (!(e instanceof IllegalArgumentException) || chizuLockFailHandled) {
+			return;
+		}
+		if (chizuLockFailSince == 0) {
+			chizuLockFailSince = now;
+		}
+		// only when the draws have failed for a while and no frame got through meanwhile
+		if (now - chizuLockFailSince < CHIZU_LOCK_FAIL_MS || now - chizuLastFrameMs < CHIZU_LOCK_FAIL_MS) {
+			return;
+		}
+		chizuLockFailHandled = true;
+		net.osmand.plus.chizu.ChizuDriveLog.log("car surface refuses every draw for " + (now - chizuLockFailSince) / 1000
+				+ " s — closing the car session so the next start gets a fresh surface");
+		getApp().runInUIThread(() -> {
+			try {
+				getApp().getToastHelper().showCarToast(getApp().getString(net.osmand.plus.R.string.chizu_car_surface_lost), true);
+			} catch (RuntimeException ignored) {
+			}
+			getApp().runInUIThread(() -> {
+				try {
+					carContext.finishCarApp();
+				} catch (RuntimeException ex) {
+					net.osmand.plus.chizu.ChizuDriveLog.log("car session close failed: " + ex);
+				}
+			}, 2500);
+		});
+	}
+
+	/** 白い熊 地図 +043 test receiver: the car map's frame rate, now and for the next session. */
+	public void chizuSetFrameRate(int fps) {
+		chizuFrameRate = fps;
+		synchronized (this) {
+			if (offscreenMapRendererView != null) {
+				offscreenMapRendererView.setMaximumFrameRate(fps);
+			}
+		}
+	}
+
+	public static void chizuSetDefaultFrameRate(int fps) {
+		chizuFrameRate = fps;
+	}
+
+	/** 白い熊 地図 +043 test receiver: flat or 3D, as if the 2D/3D button were pressed. */
+	public boolean chizuSetFlat(boolean flat) {
+		OsmandMapTileView mv = mapView;
+		if (mv == null) {
+			return false;
+		}
+		boolean isFlat = mv.getElevationAngle() >= DEFAULT_ELEVATION_ANGLE;
+		if (isFlat != flat) {
+			handleTilt();
+		}
+		return true;
 	}
 
 	/**
@@ -377,6 +538,8 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	}
 
 	public void setMapView(OsmandMapTileView mapView) {
+		net.osmand.plus.chizu.ChizuDriveLog.log("car map view " + (mapView == null ? "detached" : "attached") + " surface=" + (surface != null)
+				+ " by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 +045
 		if (mapView == null) {
 			stopOffscreenRenderer();
 			return;
@@ -456,7 +619,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 							offscreenMapRendererView.resumeSymbolsUpdate();
 							offscreenMapRendererView.setSymbolsUpdateInterval(SYMBOLS_UPDATE_INTERVAL);
 							offscreenMapRendererView.setSymbolsFade(getApp().getSettings().BATTERY_SAVING_MODE.get() ? 0 : 300, -1);
-							offscreenMapRendererView.setMaximumFrameRate(MAX_FRAME_RATE);
+							offscreenMapRendererView.setMaximumFrameRate(chizuFrameRate);
 							mapRendererContext.setMapRendererView(offscreenMapRendererView);
 							mapView.setMinAllowedElevationAngle(MIN_ALLOWED_ELEVATION_ANGLE_AA);
 							float elevationAngle = mapView.normalizeElevationAngle(getApp().getSettings().getLastKnownMapElevation());
@@ -530,8 +693,15 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 		RotatedTileBox tileBox = mapView.getRotatedTileBox();
 		try {
 			renderFrame(tileBox, drawSettings);
-		} catch (Exception ignored) {
-			// Ignored
+		} catch (Exception e) {
+			// 白い熊 地図 +046: was swallowed — and a car screen that never draws looked just like this
+			long now = android.os.SystemClock.elapsedRealtime();
+			chizuOnLockFailed(e, now);
+			if (now - chizuLastErrorMs > 10_000) {
+				chizuLastErrorMs = now;
+				net.osmand.plus.chizu.ChizuDriveLog.log("car frame failed: " + e + " at "
+						+ (e.getStackTrace().length > 0 ? e.getStackTrace()[0] : "?"));
+			}
 		}
 	}
 
@@ -540,6 +710,23 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 			// Surface is not available, or has been destroyed, skip this frame.
 			return;
 		}
+		// 白い熊 地図 +046: the copy to the car screen is held to the frame rate too. The map engine was
+		// capped, but every map refresh copied a frame of its own — 15–20 a second while the phone's map
+		// was in the background, three times the CPU. A frame asked for too soon is drawn once, later.
+		long chizuNow = android.os.SystemClock.elapsedRealtime();
+		long chizuWait = chizuLastDrawMs + 1000 / Math.max(1, chizuFrameRate) - chizuNow;
+		if (chizuWait > 0 && !drawSettings.isUpdateVectorRendering()) {
+			net.osmand.plus.chizu.ChizuPerfLog.carAsk("held back");
+			if (!handler.hasMessages(CHIZU_HELD_MESSAGE)) {
+				Message held = Message.obtain(handler, this::renderFrame);
+				held.what = CHIZU_HELD_MESSAGE;
+				handler.sendMessageDelayed(held, chizuWait);
+			}
+			return;
+		}
+		handler.removeMessages(CHIZU_HELD_MESSAGE);
+		chizuLastDrawMs = chizuNow;
+		long chizuT0 = android.os.SystemClock.elapsedRealtime();
 		Canvas canvas = surface.lockCanvas(null);
 		try {
 			canvas.drawColor(Color.LTGRAY);
@@ -565,6 +752,9 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 			}
 		} finally {
 			surface.unlockCanvasAndPost(canvas);
+			net.osmand.plus.chizu.ChizuPerfLog.carFrame(android.os.SystemClock.elapsedRealtime() - chizuT0); // 白い熊 地図 +041
+			chizuLastFrameMs = android.os.SystemClock.elapsedRealtime();
+			chizuLockFailSince = 0;
 		}
 	}
 

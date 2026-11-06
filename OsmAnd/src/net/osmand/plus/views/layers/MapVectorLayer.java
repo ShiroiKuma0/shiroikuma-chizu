@@ -118,6 +118,8 @@ public class MapVectorLayer extends BaseMapLayer {
 			MapLayerConfiguration mapLayerConfiguration = new MapLayerConfiguration();
 			mapLayerConfiguration.setOpacityFactor(((float) alpha) / 255.0f);
 			mapRenderer.setMapLayerConfiguration(OBF_RASTER_LAYER, mapLayerConfiguration);
+			net.osmand.plus.chizu.ChizuDriveLog.log("map vector layer opacity " + alpha + "/255 on "
+					+ (view != null && view.isCarView() ? "car" : "phone")); // 白い熊 地図 drive log
 
 			boolean keepLabels = getApplication().getSettings().KEEP_MAP_LABELS_VISIBLE.get();
 			SymbolSubsectionConfiguration symbolSubsectionConfiguration = new SymbolSubsectionConfiguration();

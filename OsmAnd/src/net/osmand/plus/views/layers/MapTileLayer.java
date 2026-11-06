@@ -268,6 +268,8 @@ public class MapTileLayer extends BaseMapLayer {
 		if (mapRenderer != null) {
 			MapRendererContext mapRendererContext = mainLayer ? NativeCoreContext.getMapRendererContext() : null;
 			int layerIndex = view.getLayerIndex(this);
+			net.osmand.plus.chizu.ChizuDriveLog.log("map raster layer " + layerIndex + " " + (map == null ? "removed" : "set to " + map.getName())
+					+ " on " + (view.isCarView() ? "car" : "phone") + (mainLayer ? " (main)" : "")); // 白い熊 地図 drive log
 			if (map != null) {
 				TileSourceProxyProvider prov = new TileSourceProxyProvider(getApplication(), map);
 				mapRenderer.setMapLayerProvider(layerIndex, prov.instantiateProxy(true));
@@ -293,6 +295,8 @@ public class MapTileLayer extends BaseMapLayer {
 			MapLayerConfiguration mapLayerConfiguration = new MapLayerConfiguration();
 			mapLayerConfiguration.setOpacityFactor(((float) alpha) / 255.0f);
 			mapRenderer.setMapLayerConfiguration(view.getLayerIndex(this), mapLayerConfiguration);
+			net.osmand.plus.chizu.ChizuDriveLog.log("map raster layer " + view.getLayerIndex(this) + " opacity " + alpha
+					+ "/255 on " + (view.isCarView() ? "car" : "phone")); // 白い熊 地図 +044 drive log
 		}
 	}
 
