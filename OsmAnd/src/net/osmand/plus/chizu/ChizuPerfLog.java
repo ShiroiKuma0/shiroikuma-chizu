@@ -58,6 +58,23 @@ public final class ChizuPerfLog {
 	private static final java.util.concurrent.atomic.AtomicLong carFrames = new java.util.concurrent.atomic.AtomicLong();
 	private static final java.util.concurrent.atomic.AtomicLong carFrameMs = new java.util.concurrent.atomic.AtomicLong();
 
+	/** 白い熊 地図 +061: what the phone charges from — the adapter (AC, Huawei SuperCharge included), USB, a pad. */
+	@NonNull
+	private static String chizuPlugged(int plugged) {
+		switch (plugged) {
+			case 0:
+				return "unplugged";
+			case BatteryManager.BATTERY_PLUGGED_AC:
+				return "charging-AC";
+			case BatteryManager.BATTERY_PLUGGED_USB:
+				return "charging-USB";
+			case BatteryManager.BATTERY_PLUGGED_WIRELESS:
+				return "charging-wireless";
+			default:
+				return "charging-" + plugged;
+		}
+	}
+
 	/** A raster tile handed to the map engine (or not), and how long decoding and copying it took. */
 	public static void tile(boolean served, long ms) {
 		(served ? tilesServed : tilesMissing).incrementAndGet();
@@ -208,7 +225,7 @@ public final class ChizuPerfLog {
 				"perf cpu=%s [%s] native=%dMB (%+dMB) graphics=%sMB java=%dMB battery=%d%% %+dmA %.1f°C %s thermal=%s screen=%s"
 						+ " tiles=%d+%dmiss %dms reused=%d dl=%d car=%dfr %dms/fr underlay=%s overlay=%s vector=%d/255",
 				cpu, threads, nativeMb, growth, graphicsKb == null ? "?" : String.valueOf(Long.parseLong(graphicsKb) / 1024),
-				javaMb, level, currentMa, tempC, plugged == 0 ? "unplugged" : "charging", thermal, screen ? "on" : "off",
+				javaMb, level, currentMa, tempC, chizuPlugged(plugged), thermal, screen ? "on" : "off",
 				served, missing, tileMs, tilesReused.getAndSet(0), tileDownloads.getAndSet(0), frames, frames == 0 ? 0 : frameMs / frames,
 				st.MAP_UNDERLAY.get(), st.MAP_OVERLAY.get(), st.MAP_TRANSPARENCY.get());
 		String stacks = unnamedStacks(unnamedByThread, wallMs);

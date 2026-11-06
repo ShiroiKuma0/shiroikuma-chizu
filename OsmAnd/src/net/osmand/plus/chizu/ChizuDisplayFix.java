@@ -46,6 +46,11 @@ public final class ChizuDisplayFix {
 		long now = System.currentTimeMillis();
 		Location out = new Location(routed);
 		float speed = raw.hasSpeed() ? raw.getSpeed() : 0f;
+		// 白い熊 地図 +061: weak fixes (30 m and worse on 2026-11-06) need a wider reach to find their road and a
+		// longer stretch before their movement counts — noise over 15 m turned the arrow round 12 times
+		float acc = raw.hasAccuracy() ? raw.getAccuracy() : 10f;
+		double snapM = Math.max(ROAD_SNAP_M, Math.min(100, 1.5 * acc));
+		double moveM = Math.max(MOVE_M, Math.min(60, 2 * acc));
 
 		// the car's own course over the last stretch of at least MOVE_M
 		float course = Float.NaN;
@@ -55,7 +60,7 @@ public final class ChizuDisplayFix {
 			double d = MapUtils.getDistance(anchorLat, anchorLon, raw.getLatitude(), raw.getLongitude());
 			if (d > ANCHOR_RESET_M) {
 				anchor(raw); // a gap (a tunnel's end): no course across it
-			} else if (d >= MOVE_M) {
+			} else if (d >= moveM) {
 				course = bearing(anchorLat, anchorLon, raw.getLatitude(), raw.getLongitude());
 				anchor(raw);
 			}
@@ -87,7 +92,7 @@ public final class ChizuDisplayFix {
 					bestDir = bearing(lat1, lon1, lat2, lon2);
 				}
 			}
-			if (bestPoint != null && best <= ROAD_SNAP_M) {
+			if (bestPoint != null && best <= snapM) {
 				float dir = Float.isNaN(ref) ? bestDir : align(bestDir, ref);
 				if (Float.isNaN(ref) || diff(dir, ref) <= ROAD_ALIGN_DEG) {
 					out.setLatitude(bestPoint.getLatitude());

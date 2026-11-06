@@ -192,6 +192,11 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 		this.destinations = destinations;
 		this.steps = steps;
 		this.stepRemainingDistance = stepRemainingDistance;
+		// 白い熊 地図 +059: the last instruction, kept through a recalculation
+		if (!Algorithms.isEmpty(steps) && stepRemainingDistance != null) {
+			chizuLastSteps = steps;
+			chizuLastDistance = stepRemainingDistance;
+		}
 		this.destinationTravelEstimate = destinationTravelEstimate;
 		this.shouldShowNextStep = shouldShowNextStep;
 		this.shouldShowLanes = shouldShowLanes;
@@ -202,6 +207,8 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 	}
 
 	public void stopTrip() {
+		chizuLastSteps = null; // 白い熊 地図 +059
+		chizuLastDistance = null;
 		navigating = false;
 		rerouting = false;
 		arrived = false;
@@ -328,19 +335,30 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 			if (destinationTravelEstimate != null && destinationTravelEstimate.getRemainingTimeSeconds() >= 0) {
 				builder.setDestinationTravelEstimate(destinationTravelEstimate);
 			}
-			if (isRerouting()) {
+			// 白い熊 地図 +059: a recalculation keeps the last instruction, marked ↻ at the end of its text —
+			// Android Auto's loading state replaced the whole box with a spinner, all through weak fixes
+			List<Step> shownSteps = steps;
+			Distance shownDistance = stepRemainingDistance;
+			boolean recalculating = isRerouting() && !arrived;
+			if (recalculating && !Algorithms.isEmpty(chizuLastSteps) && chizuLastDistance != null) {
+				shownSteps = chizuLastSteps;
+				shownDistance = chizuLastDistance;
+			}
+			if (recalculating && (Algorithms.isEmpty(shownSteps) || shownDistance == null)) {
 				builder.setNavigationInfo(new RoutingInfo.Builder().setLoading(true).build());
 			} else if (arrived) {
 				MessageInfo messageInfo = new MessageInfo.Builder(
 						getCarContext().getString(R.string.arrived_at_destination)).build();
 				builder.setNavigationInfo(messageInfo);
-			} else if (!Algorithms.isEmpty(steps)) {
+			} else if (!Algorithms.isEmpty(shownSteps)) {
 				RoutingInfo.Builder info = new RoutingInfo.Builder();
-				Step firstStep = steps.get(0);
+				Step firstStep = shownSteps.get(0);
 				Step.Builder currentStep = new Step.Builder();
 				CarText cue = firstStep.getCue();
 				if (cue != null) {
-					currentStep.setCue(cue.toCharSequence());
+					currentStep.setCue(recalculating ? cue.toCharSequence() + "  ↻" : cue.toCharSequence());
+				} else if (recalculating) {
+					currentStep.setCue("↻");
 				}
 				Maneuver maneuver = firstStep.getManeuver();
 				if (maneuver != null) {
@@ -359,10 +377,10 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 						currentStep.setLanesImage(lanesImage);
 					}
 				}
-				if (stepRemainingDistance != null) {
-					info.setCurrentStep(currentStep.build(), stepRemainingDistance);
-					if (shouldShowNextStep && steps.size() > 1) {
-						info.setNextStep(steps.get(1));
+				if (shownDistance != null) {
+					info.setCurrentStep(currentStep.build(), shownDistance);
+					if (shouldShowNextStep && shownSteps.size() > 1) {
+						info.setNextStep(shownSteps.get(1));
 					}
 				}
 				if (junctionImage != null) {
@@ -393,6 +411,11 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 			use3DButton = false;
 		}
 	}
+
+	@Nullable
+	private List<Step> chizuLastSteps;
+	@Nullable
+	private Distance chizuLastDistance;
 
 	private boolean isRerouting() {
 		return rerouting || destinations == null;

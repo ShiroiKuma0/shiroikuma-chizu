@@ -197,6 +197,9 @@ public class OsmandMap {
 
 	public void fitCurrentRouteToMap(boolean portrait, int leftBottomPaddingPx) {
 		net.osmand.plus.chizu.ChizuDriveLog.log("map fit route by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
+		if (mapView.isCarView()) {
+			return; // 白い熊 地図 +055: the map is on the car screen, which fits its route preview itself
+		}
 		RoutingHelper rh = app.getRoutingHelper();
 		Location lt = rh.getLastProjection();
 		if (lt == null) {

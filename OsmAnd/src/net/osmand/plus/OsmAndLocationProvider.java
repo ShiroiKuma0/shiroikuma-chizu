@@ -119,7 +119,12 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	private net.osmand.Location chizuExitLast; // fixes after a tunnel, before the estimate hands over
 	private long chizuExitLastMs;
 	private int chizuExitGood;
-	private static final float CHIZU_GATE_MAX_ACC = 50f;
+	// 白い熊 地図 +059: 100 m (was 50). On 2026-11-06 GPS weakened and the fused feed gave smooth 51–55 m
+	// fixes for minutes; dropping them left 地図 without a position for up to 111 s. The stray jumps the gate
+	// is for are caught by speed and jump, not by accuracy.
+	private static final float CHIZU_GATE_MAX_ACC = 100f;
+	/** 白い熊 地図 +059: fixes up to this accuracy move the position along the route (OsmAnd: 50 m). */
+	public static final float CHIZU_ROUTING_ACC = 100f;
 	private static final float CHIZU_GATE_MAX_SPEED = 70f; // m/s, 252 km/h
 	private static final long CHIZU_GATE_ANCHOR_MS = 15_000; // an older anchor no longer judges a jump
 	private static final float CHIZU_EXIT_ACC = 30f;
@@ -229,7 +234,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 						if (!locations.isEmpty()) {
 							location = locations.get(locations.size() - 1);
 							if (useOnlyGPS() && location.hasAccuracy() &&
-									location.getAccuracy() > ACCURACY_FOR_GPX_AND_ROUTING) {
+									location.getAccuracy() > CHIZU_ROUTING_ACC) { // 白い熊 地図 +059: 100 m, as the gate
 								// fused provider could return network locations
 								net.osmand.plus.chizu.ChizuGnssLog.onFix(app, location, "dropped"); // 白い熊 地図
 								return;
@@ -415,7 +420,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	}
 
 	public static boolean isPointAccurateForRouting(net.osmand.Location loc) {
-		return loc != null && (!loc.hasAccuracy() || loc.getAccuracy() < ACCURACY_FOR_GPX_AND_ROUTING);
+		return loc != null && (!loc.hasAccuracy() || loc.getAccuracy() < CHIZU_ROUTING_ACC);
 	}
 
 	public static boolean isRunningOnEmulator() {
@@ -795,7 +800,8 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		if (routingHelper.isFollowingMode()) {
 			if (location == null || isPointAccurateForRouting(location)) {
 				// Update routing position and get location for sticking mode
-				updatedLocation = routingHelper.setCurrentLocation(location, app.getSettings().SNAP_TO_ROAD.get());
+				// 白い熊 地図 +061: in the driving profile the position is always the point on the route
+				updatedLocation = routingHelper.setCurrentLocation(location, app.getSettings().SNAP_TO_ROAD.get() || chizuDriving());
 			}
 		} else if (routingHelper.isRoutePlanningMode() && app.getSettings().getPointToStart() == null) {
 			routingHelper.setCurrentLocation(location, false);
@@ -905,9 +911,16 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	 * the nearest road in the direction of travel, and facing only the way the car moves.
 	 */
 	@Nullable
+	/** 白い熊 地図 +061: the driving profile is in use — the position is snapped to the believed road. */
+	private boolean chizuDriving() {
+		return app.getSettings().getApplicationMode().isDerivedRoutingFrom(net.osmand.plus.settings.backend.ApplicationMode.CAR);
+	}
+
 	private net.osmand.Location chizuShown(@Nullable net.osmand.Location raw, @Nullable net.osmand.Location routed) {
-		if (raw == null || routed == null || !app.getRoutingHelper().isFollowingMode()) {
-			if (!app.getRoutingHelper().isFollowingMode()) {
+		// 白い熊 地図 +061: snapped whenever driving, navigating or not (白い熊, 2026-11-06)
+		boolean active = app.getRoutingHelper().isFollowingMode() || chizuDriving();
+		if (raw == null || routed == null || !active) {
+			if (!active) {
 				chizuDisplay.reset(); // the next drive starts from its own movement, not this one's heading
 			}
 			return routed;
