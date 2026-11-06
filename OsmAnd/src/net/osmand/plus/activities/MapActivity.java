@@ -1261,7 +1261,14 @@ public class MapActivity extends OsmandActionBarActivity implements DownloadEven
 		if (mapViewWithLayers != null) {
 			mapViewWithLayers.onPause();
 		}
-		app.getLocationProvider().pauseAllUpdates();
+		// 白い熊 地図 +059: while the car navigates, the phone's own location updates go on — a second feed when
+		// the one through Android Auto weakens, and the satellite log keeps running
+		net.osmand.plus.auto.NavigationSession carSession = app.getCarNavigationSession();
+		if (carSession != null && carSession.hasStarted() && app.getRoutingHelper().isFollowingMode()) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("phone location updates kept: the car is navigating");
+		} else {
+			app.getLocationProvider().pauseAllUpdates();
+		}
 		app.getDaynightHelper().stopSensorIfNeeded();
 		settings.APPLICATION_MODE.removeListener(applicationModeListener);
 

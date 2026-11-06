@@ -216,7 +216,12 @@ public final class RoutePreviewScreen extends BaseAndroidAutoScreen implements I
 	@Override
 	public void onCreate(@NonNull LifecycleOwner owner) {
 		super.onCreate(owner);
+		chizuPreviewFlat(true); // 白い熊 地図 +052
 		OsmandApplication app = getApp();
+		// 白い熊 地図 +057: routes that arrive without changing the selection are measured too
+		if (app.getRoutingHelper().getChizuCandidates() != null) {
+			app.getRoutingHelper().getChizuCandidates().addListener(chizuCandidatesListener);
+		}
 		app.getRoutingHelper().addListener(this);
 		app.getTargetPointsHelper().addListener(stateChangedListener);
 		if (calculateRoute) {
@@ -229,6 +234,8 @@ public final class RoutePreviewScreen extends BaseAndroidAutoScreen implements I
 	@Override
 	public void onDestroy(@NonNull LifecycleOwner owner) {
 		super.onDestroy(owner);
+		chizuPreviewFlat(false); // 白い熊 地図 +052
+		getApp().getUiHandler().removeCallbacks(chizuRefit);
 		cancelCountdown();
 		OsmandApplication app = getApp();
 		RoutingHelper routingHelper = app.getRoutingHelper();
@@ -251,6 +258,26 @@ public final class RoutePreviewScreen extends BaseAndroidAutoScreen implements I
 	@Override
 	public void onStop(@NonNull LifecycleOwner owner) {
 		cancelCountdown();
+	}
+
+	// held here: the candidates keep their listeners only as weak references
+	private final Runnable chizuRefit = () -> {
+		if (getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.CREATED)
+				&& getApp().getRoutingHelper().isRouteCalculated()) {
+			zoomMapToRoute();
+		}
+	};
+	private final net.osmand.plus.routing.ChizuRouteCandidates.Listener chizuCandidatesListener = () -> {
+		getApp().getUiHandler().removeCallbacks(chizuRefit);
+		getApp().getUiHandler().postDelayed(chizuRefit, 500);
+	};
+
+	private void chizuPreviewFlat(boolean flat) {
+		net.osmand.plus.auto.NavigationSession session = getApp().getCarNavigationSession();
+		net.osmand.plus.auto.SurfaceRenderer surface = session == null ? null : session.getNavigationCarSurface();
+		if (surface != null) {
+			surface.chizuSetPreviewFlat(flat);
+		}
 	}
 
 	public boolean hasStartCountdown() {
@@ -389,6 +416,41 @@ public final class RoutePreviewScreen extends BaseAndroidAutoScreen implements I
 	private void zoomMapToRoute() {
 		RoutingHelper rh = getApp().getRoutingHelper();
 		QuadRect mapRect = RoutingHelperUtils.getRouteRect(getApp(), rh.getRoute());
+		// 白い熊 地図 +054: every route offered is in view, as on the phone — not only the selected one
+		if (mapRect != null && rh.getChizuCandidates() != null) {
+			for (net.osmand.plus.routing.ChizuRouteCandidates.Candidate c : rh.getChizuCandidates().getCandidates()) {
+				QuadRect r = RoutingHelperUtils.getRouteRect(getApp(), c.route);
+				if (r != null && !r.hasInitialState()) {
+					mapRect.left = Math.min(mapRect.left, r.left);
+					mapRect.right = Math.max(mapRect.right, r.right);
+					mapRect.top = Math.max(mapRect.top, r.top);
+					mapRect.bottom = Math.min(mapRect.bottom, r.bottom);
+				}
+			}
+		}
+		// 白い熊 地図 +063: the points of every route offered, for the fit to check against the panel card
+		if (mapRect != null) {
+			java.util.List<net.osmand.Location> all = new java.util.ArrayList<>(rh.getRoute().getImmutableAllLocations());
+			if (rh.getChizuCandidates() != null) {
+				for (net.osmand.plus.routing.ChizuRouteCandidates.Candidate c : rh.getChizuCandidates().getCandidates()) {
+					all.addAll(c.route.getImmutableAllLocations());
+				}
+			}
+			int step = Math.max(1, all.size() / 600);
+			java.util.List<net.osmand.data.LatLon> pts = new java.util.ArrayList<>();
+			for (int i = 0; i < all.size(); i += step) {
+				pts.add(new net.osmand.data.LatLon(all.get(i).getLatitude(), all.get(i).getLongitude()));
+			}
+			net.osmand.plus.helpers.TargetPoint dest = getApp().getTargetPointsHelper().getPointToNavigate();
+			if (dest != null) {
+				pts.add(dest.getLatLon());
+			}
+			net.osmand.data.LatLon here = getApp().getMapViewTrackingUtilities().getDefaultLocation();
+			if (here != null) {
+				pts.add(here);
+			}
+			setChizuFitPoints(pts);
+		}
 		// during navigation the map follows the location. Route listeners get the event even if this preview has just been closed
 		if (mapRect != null && !rh.isFollowingMode()) {
 			adjustMapToRect(getApp().getMapViewTrackingUtilities().getDefaultLocation(), mapRect);

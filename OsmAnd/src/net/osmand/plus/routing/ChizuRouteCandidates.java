@@ -227,11 +227,14 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 
 	@Override
 	public void newRouteIsCalculated(boolean newRoute, ValueHolder<Boolean> showToast) {
-		if (selecting) {
+		if (selecting && !newRoute) {
 			// the route we set ourselves, from the chooser or the traffic check
 			selecting = false;
 			return;
 		}
+		// 白い熊 地図 +064: a new route is never our own selection — a selection left over from a preview that was
+		// replaced swallowed the next route, and no alternatives were planned for it
+		selecting = false;
 		RouteCalculationResult route = routingHelper.getRoute();
 		if (!isApplicable(route)) {
 			discard();

@@ -134,6 +134,10 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 		Log.i(TAG, "Visible area changed " + surface + ". stableArea: "
 				+ stableArea + " visibleArea:" + visibleArea);
 		SurfaceRenderer.this.visibleArea = visibleArea;
+		// 白い熊 地図 +062: the area beside the car's panel, as this car reports it in this session
+		if (!visibleArea.isEmpty() && visibleArea.left >= getWidth() / 5) {
+			chizuPanelArea = new Rect(visibleArea);
+		}
 		if (!visibleArea.isEmpty() && mapView != null && surfaceContainer != null) {
 			MapDisplayPositionManager displayPositionManager = getDisplayPositionManager();
 
@@ -759,6 +763,19 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	}
 
 
+	/**
+	 * 白い熊 地図 +063: the map is drawn from an off-screen picture wider than the car screen, shifted left by
+	 * this much; a pixel of the map engine is at screen x = its x + this.
+	 */
+	public float chizuLeftOffset() {
+		return surfaceAdditionalWidth == 0 || maxRatio == minRatio ? 0f
+				: -surfaceAdditionalWidth * ((maxRatio - cachedRatioX) / (maxRatio - minRatio));
+	}
+
+	/** 白い熊 地図 +062: the free area beside the panel, reported by this car in this session; null until seen. */
+	@Nullable
+	public volatile Rect chizuPanelArea;
+
 	@Nullable
 	public Rect getVisibleArea() {
 		return visibleArea;
@@ -797,7 +814,25 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 			net.osmand.plus.chizu.ChizuDriveLog.log("car map " + (flat ? "flat" : "3D") + " angle=" + angle + " byUser=" + flatByUser
 					+ " compass=" + getApp().getSettings().getCompassMode()); // 白い熊 地図 drive log
 		}
-		if (angle >= DEFAULT_ELEVATION_ANGLE && !flatByUser) {
+		if (angle >= DEFAULT_ELEVATION_ANGLE && !flatByUser && !chizuPreviewFlat) {
+			getApp().runInUIThread(keep3D, KEEP_3D_DELAY_MS);
+		}
+	}
+
+	/**
+	 * 白い熊 地図 +052: a route preview is shown flat and north-up, fitted to the free part of the screen; the
+	 * keep-3D rule tilted it back and the route came out small, low and cut on the wide car screen. When the
+	 * preview ends the map goes 3D again.
+	 */
+	private volatile boolean chizuPreviewFlat;
+
+	public void chizuSetPreviewFlat(boolean flat) {
+		if (chizuPreviewFlat == flat) {
+			return;
+		}
+		chizuPreviewFlat = flat;
+		net.osmand.plus.chizu.ChizuDriveLog.log("car route preview " + (flat ? "flat" : "ends, back to 3D"));
+		if (!flat) {
 			getApp().runInUIThread(keep3D, KEEP_3D_DELAY_MS);
 		}
 	}
@@ -805,7 +840,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	private void keep3D() {
 		synchronized (this) {
 			OsmandMapTileView mapView = this.mapView;
-			if (flatByUser || mapView == null || offscreenMapRendererView == null
+			if (flatByUser || chizuPreviewFlat || mapView == null || offscreenMapRendererView == null
 					|| mapView.getMapRenderer() != offscreenMapRendererView
 					|| mapView.getElevationAngle() < DEFAULT_ELEVATION_ANGLE
 					|| mapView.getAnimatedDraggingThread() == null) {

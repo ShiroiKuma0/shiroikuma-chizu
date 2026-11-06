@@ -1891,6 +1891,14 @@ public class OsmandMapTileView implements IMapDownloaderCallback {
 	private void fitRectToMap(RotatedTileBox tb, double left, double right, double top, double bottom,
 			int tileBoxWidthPx, int tileBoxHeightPx, int marginTopPx, int marginLeftPx, boolean rtl, float border,
 			boolean rotate, boolean toMapCenter, @Nullable List<LatLon> points) {
+		// 白い熊 地図 +055: while the map is on the car screen, a phone screen's fit (the route planning card
+		// fits for the phone's tall screen on every route that arrives) must not move it: it threw the car's
+		// route preview off after each new route. The car fits its preview itself.
+		if (isCarView() && !rotate) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("phone map fit skipped: the map is on the car screen, by "
+					+ net.osmand.plus.chizu.ChizuDriveLog.caller());
+			return;
+		}
 		int dx = marginLeftPx;
 		int dy = marginTopPx;
 		int tbw = (tileBoxWidthPx > 0 ? tileBoxWidthPx : tb.getPixWidth());

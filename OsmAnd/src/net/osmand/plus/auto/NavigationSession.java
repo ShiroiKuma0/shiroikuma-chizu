@@ -941,7 +941,7 @@ public class NavigationSession extends Session implements NavigationListener, Os
 						// when GPS is gone, as in a tunnel. The phone path drops them while navigating; the
 						// car path let them through, so the car map jumped off the tunnel and turned round.
 						if (useOnlyGPS() && location.hasAccuracy()
-								&& location.getAccuracy() > OsmAndLocationProvider.ACCURACY_FOR_GPX_AND_ROUTING) {
+								&& location.getAccuracy() > OsmAndLocationProvider.CHIZU_ROUTING_ACC) {
 							net.osmand.plus.chizu.ChizuDriveLog.log("loc aa rough fix dropped acc=" + location.getAccuracy());
 							return;
 						}
