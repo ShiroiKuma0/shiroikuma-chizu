@@ -104,6 +104,7 @@ public final class ChizuVoice {
 		int next; // the part to play next
 		long partWaitSince;
 		boolean dropped;
+		String renderId; // 白い熊 地図 +040: its urgent render request, cancelled when it is dropped
 
 		Item(String text, boolean arrival) {
 			this.text = text;
@@ -255,6 +256,7 @@ public final class ChizuVoice {
 				for (Item q : queue) {
 					q.dropped = true;
 				}
+				cancelDroppedRenders(item);
 				stopPlaying();
 			}
 			for (Item q : queue) {
@@ -265,6 +267,7 @@ public final class ChizuVoice {
 					ChizuDriveLog.log("voice drop, newer prompt: \"" + q.text + "\"");
 				}
 			}
+			cancelDroppedRenders(item);
 			List<String> missing = new ArrayList<>();
 			for (String part : item.parts) {
 				if (!partReady(part) && !inFlight.containsKey(part)) {
@@ -278,7 +281,7 @@ public final class ChizuVoice {
 				for (String part : missing) {
 					urgentSince.put(part, System.currentTimeMillis());
 				}
-				render(missing, true);
+				item.renderId = render(missing, true);
 				ChizuDriveLog.log("voice say render-now " + missing.size() + "/" + item.parts.size() + " \"" + text + "\"");
 				handler.postDelayed(this::pump, TTS_FALLBACK_MS + 100);
 			}
@@ -468,6 +471,40 @@ public final class ChizuVoice {
 		} catch (Exception e) {
 			ChizuDriveLog.log("voice render request failed: " + e);
 			return null;
+		}
+	}
+
+	/**
+	 * 白い熊 地図 +040: a dropped prompt's urgent render is cancelled — 音声 rendered phrases nobody
+	 * would hear, about 640 s of speech synthesis in one hour of driving. Not when a prompt still
+	 * queued (or the new one) waits for a sentence of the same request.
+	 */
+	private void cancelDroppedRenders(@NonNull Item incoming) {
+		for (Item q : queue) {
+			if (!q.dropped || q.renderId == null) {
+				continue;
+			}
+			String id = q.renderId;
+			q.renderId = null;
+			boolean needed = false;
+			for (Map.Entry<String, String> e : inFlight.entrySet()) {
+				if (!id.equals(e.getValue())) {
+					continue;
+				}
+				if (incoming.parts.contains(e.getKey())) {
+					needed = true;
+				}
+				for (Item o : queue) {
+					if (!o.dropped && o.parts.contains(e.getKey())) {
+						needed = true;
+					}
+				}
+			}
+			if (!needed) {
+				cancel(id);
+				inFlight.values().removeIf(v -> v.equals(id));
+				ChizuDriveLog.log("voice render cancelled, dropped: \"" + q.text + "\"");
+			}
 		}
 	}
 

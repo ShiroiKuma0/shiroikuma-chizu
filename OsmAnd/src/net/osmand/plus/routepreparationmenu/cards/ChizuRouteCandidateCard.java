@@ -94,7 +94,13 @@ public class ChizuRouteCandidateCard extends MapBaseCard {
 		title.setText(OsmAndFormatter.getFormattedDuration(seconds, app)
 				+ "  ·  " + OsmAndFormatter.getFormattedDistance(candidate.distance, app));
 		title.setTypeface(selected ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-		subtitle.setText(app.getString(candidate.kind.label) + "  ·  " + trafficText(app, candidate));
+		// 白い熊 地図 +050: named by what the route is or what sets it apart, not by how it was found
+		StringBuilder sub = new StringBuilder(app.getString(candidate.name != 0 ? candidate.name : candidate.kind.label));
+		if (!candidate.via.isEmpty()) {
+			sub.append("  ·  ").append(app.getString(R.string.chizu_traffic_via, candidate.via));
+		}
+		sub.append("  ·  ").append(trafficText(app, candidate));
+		subtitle.setText(sub);
 		eta.setText(OsmAndFormatter.getFormattedTimeShort(seconds, true));
 
 		GradientDrawable bar = new GradientDrawable();

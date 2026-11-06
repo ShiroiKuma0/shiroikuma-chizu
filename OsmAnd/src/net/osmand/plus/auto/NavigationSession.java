@@ -765,13 +765,59 @@ public class NavigationSession extends Session implements NavigationListener, Os
 	@Override
 	public void routeWasCancelled() {
 		clearNavigationScreen();
+		// 白い熊 地図 +047: back to the Free ride map, never the menu — nothing on the car screen may need a
+		// touch to go away (白い熊, 2026-11-06)
+		getApp().runInUIThread(() -> chizuBackToFreeRide("navigation cancelled"));
 	}
 
 	@Override
 	public void routeWasFinished() {
+		// 白い熊 地図 +047: no “You have arrived.” list (and no menu after it): both needed a touch on the car
+		// screen to go away while driving. The voice says the arrival; the navigation ends by itself and the
+		// car screen goes straight back to the Free ride map, following the car again.
+		net.osmand.plus.chizu.ChizuDriveLog.log("car arrived: navigation finished, back to Free ride");
+		getApp().runInUIThread(() -> {
+			OsmandApplication app = getApp();
+			app.stopNavigation();
+			clearNavigationScreen();
+			chizuBackToFreeRide("arrived");
+		});
+	}
+
+	private final Runnable chizuFreeRide = this::chizuShowFreeRide;
+	private String chizuFreeRideWhy = "";
+
+	/**
+	 * Arrival sets off a burst — the finish, then cancels — and each one closes or opens screens; the
+	 * return to Free ride waits until the burst is over, so nothing after it can close the map again.
+	 */
+	private void chizuBackToFreeRide(@NonNull String why) {
+		chizuFreeRideWhy = chizuFreeRideWhy.isEmpty() ? why : chizuFreeRideWhy + ", " + why;
+		android.os.Handler h = getApp().getUiHandler();
+		h.removeCallbacks(chizuFreeRide);
+		h.postDelayed(chizuFreeRide, 500);
+	}
+
+	private void chizuShowFreeRide() {
+		String why = chizuFreeRideWhy;
+		chizuFreeRideWhy = "";
+		if (!isStateAtLeast(State.CREATED)) {
+			return;
+		}
+		// a cleared route is also the first step of a new one: a destination set again means a new route is
+		// on its way — its preview must stay
+		if (routingHelper.getFinalLocation() != null || routingHelper.isFollowingMode()) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("car stays (" + why + "): a new route is on its way");
+			return;
+		}
 		ScreenManager screenManager = getScreenManager();
 		screenManager.popToRoot();
-		screenManager.push(new DestinationReachedScreen(carContext));
+		startNavigationScreen();
+		SurfaceRenderer surface = navigationCarSurface;
+		if (surface != null) {
+			surface.handleRecenter(); // linked to the car again — an unlinked map kept the engine drawing ~40 fps
+		}
+		net.osmand.plus.chizu.ChizuDriveLog.log("car back to Free ride (" + why + ")");
 	}
 
 	private void updateSuggestions() {

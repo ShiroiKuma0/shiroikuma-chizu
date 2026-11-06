@@ -95,51 +95,51 @@ public final class ChizuSpeeds {
 			new Row(8, "Trunk", TRUNK, false, new int[] {100}, 100, 130),
 			new Row(9, "Trunk", TRUNK, false, new int[] {90}, 90, 110),
 			new Row(10, "Trunk", TRUNK, false, new int[] {80}, 80, 110),
-			new Row(11, "Trunk", TRUNK, false, new int[] {70}, 70, 110),
-			new Row(12, "Trunk", TRUNK, true, new int[] {70}, 70, 90),
-			new Row(13, "Trunk", TRUNK, false, new int[] {60}, 60, 80),
-			new Row(14, "Trunk", TRUNK, false, new int[] {50}, 50, 70),
+			new Row(11, "Trunk", TRUNK, false, new int[] {70}, 70, 75),
+			new Row(12, "Trunk", TRUNK, true, new int[] {70}, 70, 75),
+			new Row(13, "Trunk", TRUNK, false, new int[] {60}, 60, 70),
+			new Row(14, "Trunk", TRUNK, false, new int[] {50}, 50, 65),
 			new Row(15, "Primary", PRIMARY, false, new int[] {90}, 90, 110),
-			new Row(16, "Primary", PRIMARY, false, new int[] {80}, 80, 100),
-			new Row(17, "Primary", PRIMARY, false, new int[] {70}, 70, 100),
-			new Row(18, "Primary", PRIMARY, false, new int[] {50}, 50, 90),
+			new Row(16, "Primary", PRIMARY, false, new int[] {80}, 80, 95),
+			new Row(17, "Primary", PRIMARY, false, new int[] {70}, 70, 75),
+			new Row(18, "Primary", PRIMARY, false, new int[] {50}, 50, 70),
 			new Row(19, "Primary", PRIMARY, false, NONE, 65, 90),
-			new Row(20, "Secondary", SECONDARY, false, new int[] {90}, 90, 0),
-			new Row(21, "Secondary", SECONDARY, false, new int[] {70}, 70, 0),
+			new Row(20, "Secondary", SECONDARY, false, new int[] {90}, 90, 80),
+			new Row(21, "Secondary", SECONDARY, false, new int[] {70}, 70, 60),
 			new Row(22, "Secondary", SECONDARY, false, new int[] {50}, 50, 0),
 			new Row(23, "Secondary", SECONDARY, false, new int[] {40}, 40, 0),
-			new Row(24, "Secondary", SECONDARY, false, new int[] {30}, 30, 50),
+			new Row(24, "Secondary", SECONDARY, false, new int[] {30}, 30, 40),
 			new Row(25, "Secondary", SECONDARY, false, NONE, 60, 0),
 			new Row(26, "Tertiary", TERTIARY, false, new int[] {90}, 90, 0),
 			new Row(27, "Tertiary", TERTIARY, false, new int[] {70}, 70, 0),
-			new Row(28, "Tertiary", TERTIARY, false, new int[] {50}, 50, 0),
+			new Row(28, "Tertiary", TERTIARY, false, new int[] {50}, 50, 40),
 			new Row(29, "Tertiary", TERTIARY, false, new int[] {40}, 40, 0),
-			new Row(30, "Tertiary", TERTIARY, false, new int[] {30}, 30, 50),
-			new Row(31, "Tertiary", TERTIARY, false, NONE, 45, 0),
+			new Row(30, "Tertiary", TERTIARY, false, new int[] {30}, 30, 40),
+			new Row(31, "Tertiary", TERTIARY, false, NONE, 45, 35),
 			new Row(32, "Unclassified", UNCLASSIFIED, false, new int[] {90}, 90, 0),
 			new Row(33, "Unclassified", UNCLASSIFIED, false, new int[] {70}, 70, 0),
 			new Row(34, "Unclassified", UNCLASSIFIED, false, new int[] {50}, 50, 0),
 			new Row(35, "Unclassified", UNCLASSIFIED, false, new int[] {30}, 30, 0),
 			new Row(36, "Unclassified", UNCLASSIFIED, false, NONE, 35, 0),
-			new Row(37, "Residential", RESIDENTIAL, false, new int[] {50}, 50, 90),
-			new Row(38, "Residential", RESIDENTIAL, false, new int[] {40}, 40, 70),
-			new Row(39, "Residential", RESIDENTIAL, false, new int[] {30}, 30, 60),
+			new Row(37, "Residential", RESIDENTIAL, false, new int[] {50}, 50, 40),
+			new Row(38, "Residential", RESIDENTIAL, false, new int[] {40}, 40, 45),
+			new Row(39, "Residential", RESIDENTIAL, false, new int[] {30}, 30, 45),
 			new Row(40, "Residential", RESIDENTIAL, false, new int[] {20}, 20, 0),
-			new Row(41, "Residential", RESIDENTIAL, false, NONE, 35, 0),
+			new Row(41, "Residential", RESIDENTIAL, false, NONE, 35, 30),
 			new Row(42, "Living street and service road", LIVING, false, new int[] {20}, 20, 0),
 			new Row(43, "Living street and service road", LIVING, false, NONE, 25, 0),
 			new Row(44, "Living street and service road", SERVICE, false, new int[] {50}, 50, 0),
 			new Row(45, "Living street and service road", SERVICE, false, new int[] {30}, 30, 0),
 			new Row(46, "Living street and service road", SERVICE, false, new int[] {20}, 20, 0),
-			new Row(47, "Living street and service road", SERVICE, false, NONE, 30, 0),
+			new Row(47, "Living street and service road", SERVICE, false, NONE, 30, 20),
 			new Row(48, "Ramps", MOTORWAY_LINK, false, new int[] {130}, 100, 0),
 			new Row(49, "Ramps", MOTORWAY_LINK, false, new int[] {80, 90}, 100, 0),
 			new Row(50, "Ramps", MOTORWAY_LINK, false, NONE, 100, 0),
 			new Row(51, "Ramps", TRUNK_LINK, false, new int[] {80}, 90, 0),
-			new Row(52, "Ramps", TRUNK_LINK, false, new int[] {50}, 90, 0),
+			new Row(52, "Ramps", TRUNK_LINK, false, new int[] {50}, 90, 60),
 			new Row(53, "Ramps", TRUNK_LINK, false, NONE, 90, 0),
 			new Row(54, "Ramps", OTHER_LINKS, false, new int[] {50}, 50, 0),
-			new Row(55, "Ramps", OTHER_LINKS, false, NONE, 0, 0)
+			new Row(55, "Ramps", OTHER_LINKS, false, NONE, 0, 50)
 	));
 
 	// OsmAnd's own speed per type when no limit is posted (routing.xml), and for ramps whatever the limit
@@ -230,6 +230,64 @@ public final class ChizuSpeeds {
 
 	public static void setTrafficLightSeconds(@NonNull Context context, int seconds) {
 		prefs(context).edit().putInt("traffic_light_s", seconds).apply();
+	}
+
+	/**
+	 * 白い熊 地図 +050: the time an ordinary turn (over 60°) costs, seconds; a slight one costs half. The car
+	 * profile charges 15 s as route cost only; this goes into the route choice and the route times alike.
+	 * Measured on 白い熊's drives (2026-11-06): about 10 s at turns without a light.
+	 */
+	public static int getTurnSeconds(@NonNull Context context) {
+		return prefs(context).getInt("turn_s", 10);
+	}
+
+	public static void setTurnSeconds(@NonNull Context context, int seconds) {
+		prefs(context).edit().putInt("turn_s", seconds).apply();
+		turnSeconds = seconds;
+	}
+
+	/** The last turn cost put into a calculation, for the route times of the candidates. */
+	public static volatile int turnSeconds = 10;
+
+	/** Turns over 60° in a route: what {@link #getTurnSeconds} is charged for. */
+	public static int countTurns(@NonNull List<net.osmand.router.RouteSegmentResult> segments) {
+		int n = 0;
+		for (net.osmand.router.RouteSegmentResult s : segments) {
+			net.osmand.router.TurnType t = s.getTurnType();
+			if (t == null) {
+				continue;
+			}
+			int v = t.getValue();
+			if (v == net.osmand.router.TurnType.TL || v == net.osmand.router.TurnType.TR
+					|| v == net.osmand.router.TurnType.TSHL || v == net.osmand.router.TurnType.TSHR) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/**
+	 * 白い熊 地図 +050: the table fitted to 白い熊's drives of 2026-10-30 – 11-05 (110 km of free-flowing road,
+	 * OK'd 2026-11-06), written once over the stored rows so it takes effect; any row can still be changed.
+	 */
+	private static final int TABLE_VERSION = 2;
+	private static final int[][] FITTED = {
+			{11, 75}, {12, 75}, {14, 65}, {16, 95}, {17, 75}, {18, 70}, {20, 80}, {21, 60}, {28, 40}, {30, 40},
+			{31, 35}, {37, 40}, {39, 45}, {41, 30}, {47, 20}, {52, 60}, {55, 50},
+			// no data, kept below the faster limit next to them
+			{13, 70}, {38, 45}, {24, 40}};
+
+	public static void migrate(@NonNull Context context) {
+		SharedPreferences p = prefs(context);
+		if (p.getInt("table_version", 1) >= TABLE_VERSION) {
+			return;
+		}
+		SharedPreferences.Editor e = p.edit();
+		for (int[] r : FITTED) {
+			e.putInt("row_" + r[0], r[1]);
+		}
+		e.putInt("table_version", TABLE_VERSION).apply();
+		ChizuDriveLog.log("my speeds: fitted table v" + TABLE_VERSION + " written (" + FITTED.length + " rows)");
 	}
 
 	/** The speed set for a row; 0 means OsmAnd's own. */
@@ -377,6 +435,10 @@ public final class ChizuSpeeds {
 				rule.registerAndTagValueCondition("highway", h, false);
 			}
 		}
+		// 白い熊 地図 +050: turns cost what 白い熊's turns take
+		int turn = getTurnSeconds(context);
+		turnSeconds = turn;
+		router.addAttribute("slightTurn", String.valueOf(turn));
 		int light = getTrafficLightSeconds(context);
 		RouteAttributeEvalRule lightTime = router.getObjContext(RouteDataObjectAttribute.OBSTACLES)
 				.chizuInsertRule(0, String.valueOf(light), null);

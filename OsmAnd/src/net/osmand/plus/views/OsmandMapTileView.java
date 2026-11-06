@@ -1212,7 +1212,7 @@ public class OsmandMapTileView implements IMapDownloaderCallback {
 					RotatedTileBox viewportToDraw = currentViewport.copy();
 					renderer.renderFrame(viewportToDraw, drawSettings);
 				} catch (Exception e) {
-					// ignore
+					net.osmand.plus.chizu.ChizuDriveLog.log("car frame failed (map refresh): " + e); // 白い熊 地図 +046
 				}
 				if (MEASURE_FPS) {
 					main.calculateFPS(ms, SystemClock.elapsedRealtime());
@@ -1417,6 +1417,9 @@ public class OsmandMapTileView implements IMapDownloaderCallback {
 
 	// this method could be called in non UI thread
 	public void refreshMap(boolean updateVectorRendering) {
+		if (view != null && isCarView() && net.osmand.plus.chizu.ChizuDiag.isOn(net.osmand.plus.chizu.ChizuDiag.Group.PERF)) {
+			net.osmand.plus.chizu.ChizuPerfLog.carAsk("refresh by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 +046
+		}
 		if (view != null && view.isShown()) {
 			boolean nightMode = app.getDaynightHelper().isNightMode(settings.getApplicationMode(), ThemeUsageContext.MAP, true);
 			Boolean currentNightMode = this.nightMode;
@@ -1433,7 +1436,19 @@ public class OsmandMapTileView implements IMapDownloaderCallback {
 
 	public void refreshMapComplete() {
 		app.getResourceManager().getRenderer().clearCache();
-		updateMapSettings(true, null);
+		net.osmand.plus.chizu.ChizuDriveLog.log("map refresh complete on " + (isCarView() ? "car" : "phone")
+				+ " by " + net.osmand.plus.chizu.ChizuDriveLog.caller()); // 白い熊 地図 drive log
+		// 白い熊 地図 +041: the rebuilt renderer settings replace the vector map's layer, and its
+		// transparency (what lets the satellite underlay through) was put back only when something else
+		// changed too — so after Go the car map came back opaque. Every layer attaches itself again.
+		updateMapSettings(true, changed -> {
+			for (OsmandMapLayer layer : getLayers()) {
+				layer.setMapRendererChanged(true);
+			}
+			net.osmand.plus.chizu.ChizuDriveLog.log("map layers re-attached after the refresh"); // 白い熊 地図 drive log
+			refreshMap(true);
+			return true;
+		});
 		refreshMap(true);
 	}
 

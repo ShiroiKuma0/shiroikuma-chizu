@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
  * 白い熊 地図: a drive log of its own. EMUI drops info lines from logcat and rolls the buffer within
  * the hour, so what happens on a drive — every fix, every off-route check that fires, every route
  * recalculation and how it was announced, every audio focus taken and given back, and every change
- * of the map's link, tilt and orientation — is appended to “chizu-drive_<day>.log” in the diag
+ * of the map's link, tilt and orientation — is appended to “chizu-drive_<day>.txt” in the diag
  * directory ({@link ChizuDiag}). Each line belongs to a Diagnostics group by its first word and is
  * written only while that group's switch is on. One line per event, flushed at once, so a killed
  * process loses nothing that was written.
@@ -120,7 +120,8 @@ public final class ChizuDriveLog {
 		try {
 			Date date = new Date(now);
 			String day = DAY.format(date);
-			if (out == null || !day.equals(outDay) || outGeneration != ChizuDiag.generation()) {
+			// reopened also when the file was deleted under us (a system clean-up), or the lines go nowhere
+			if (out == null || !day.equals(outDay) || outGeneration != ChizuDiag.generation() || !outFile.exists()) {
 				open(day);
 			}
 			if (out == null || outFile.length() > MAX_BYTES_PER_DAY) {
@@ -140,7 +141,7 @@ public final class ChizuDriveLog {
 		if (dir == null) {
 			return;
 		}
-		outFile = new File(dir, PREFIX + day + ".log");
+		outFile = new File(dir, PREFIX + day + ChizuDiag.DRIVE_EXT);
 		out = new OutputStreamWriter(new FileOutputStream(outFile, true), StandardCharsets.UTF_8);
 		outDay = day;
 	}

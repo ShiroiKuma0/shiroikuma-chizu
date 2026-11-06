@@ -730,7 +730,8 @@ public class PointLocationLayer extends OsmandMapLayer
 			}
 		}
 		boolean nightMode = settings != null && settings.isNightMode();
-		updateParams(view.getSettings().getApplicationMode(), nightMode, locationProvider.getLastKnownLocation() == null);
+		updateParams(view.getSettings().getApplicationMode(), nightMode, locationProvider.getLastKnownLocation() == null
+				|| locationProvider.isChizuEstimating()); // 白い熊 地図: an estimate (a tunnel) is drawn dimmed
 	}
 
 	@Override

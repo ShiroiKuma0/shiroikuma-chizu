@@ -64,6 +64,7 @@ public class MapTransparencyHelper {
 		} else {
 			transparencyBarLayout.setVisibility(View.GONE);
 		}
+		net.osmand.plus.chizu.ChizuOverlayGuard.lock(transparencySlider); // 白い熊 地図 +045: long-press to unlock
 		transparencySlider.addOnChangeListener((slider, value, fromUser) -> {
 			if (transparencySetting != null) {
 				transparencySetting.set((int) value);

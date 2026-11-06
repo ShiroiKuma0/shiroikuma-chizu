@@ -381,7 +381,8 @@ public final class ChizuRoadLog {
 
 	private static void write(@NonNull String day, @NonNull String line) {
 		try {
-			if (out == null || !day.equals(outDay) || outGeneration != ChizuDiag.generation()) {
+			if (out == null || !day.equals(outDay) || outGeneration != ChizuDiag.generation()
+					|| outFile == null || !outFile.exists()) {
 				open(day);
 			}
 			if (out != null) {
@@ -392,6 +393,8 @@ public final class ChizuRoadLog {
 			out = null;
 		}
 	}
+
+	private static File outFile;
 
 	private static void open(@NonNull String day) throws Exception {
 		if (out != null) {
@@ -407,6 +410,7 @@ public final class ChizuRoadLog {
 			return;
 		}
 		File f = new File(dir, PREFIX + day + ".tsv");
+		outFile = f;
 		boolean fresh = !f.exists() || f.length() == 0;
 		out = new OutputStreamWriter(new FileOutputStream(f, true), StandardCharsets.UTF_8);
 		outDay = day;

@@ -137,6 +137,12 @@
 		<receiver
 			android:name="net.osmand.plus.chizu.ChizuDiagReceiver"
 			android:exported="false" />
+		<!-- 白い熊 地図 +043: test switches sent over adb (am broadcast); DUMP is held by the adb shell and
+		     by no ordinary app, so nothing else on the phone can reach it. -->
+		<receiver
+			android:name="net.osmand.plus.chizu.ChizuTestReceiver"
+			android:exported="true"
+			android:permission="android.permission.DUMP" />
 		<receiver
 			android:name="net.osmand.plus.chizu.ChizuStateExportReceiver"
 			android:exported="true">

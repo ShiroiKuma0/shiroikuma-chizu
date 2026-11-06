@@ -33,10 +33,18 @@ class NativeRoutingMemoryGuard {
 	private Thread thread;
 	private volatile boolean exceeded;
 	private volatile long peakAllocated;
+	// 白い熊 地図: the native heap when the calculation began. The budget is for what the search itself
+	// grows, not for the whole process: the OpenGL map, the voice and every cache share this heap, and
+	// after a morning's navigation they alone held 3.4 GB, so every route — even 2 km — was stopped
+	// at once and a reroute never came (2026-11-05)
+	private final long baseline;
 
 	private NativeRoutingMemoryGuard(@NonNull RouteCalculationProgress progress, long budget) {
 		this.progress = progress;
 		this.budget = budget;
+		this.baseline = Debug.getNativeHeapAllocatedSize();
+		this.peakAllocated = baseline;
+		progress.chizuHeapStartMb = (int) (baseline / MB);
 	}
 
 	@NonNull
@@ -73,12 +81,13 @@ class NativeRoutingMemoryGuard {
 		while (!progress.isCancelled) {
 			long allocated = Debug.getNativeHeapAllocatedSize();
 			peakAllocated = Math.max(peakAllocated, allocated);
-			if (allocated > budget) {
+			progress.chizuHeapPeakMb = (int) (peakAllocated / MB);
+			if (allocated - baseline > budget) {
 				exceeded = true;
 				progress.memoryLimitExceeded = true;
 				progress.isCancelled = true;
 				log.error("Route calculation stopped: native heap " + allocated / MB
-						+ " MB, budget " + budget / MB + " MB");
+						+ " MB, grown " + (allocated - baseline) / MB + " MB, budget " + budget / MB + " MB");
 				break;
 			}
 			try {
@@ -87,7 +96,9 @@ class NativeRoutingMemoryGuard {
 				break;
 			}
 		}
-		log.info("Route calculation native heap peak " + peakAllocated / MB + " MB, budget " + budget / MB + " MB");
+		progress.chizuHeapPeakMb = (int) (peakAllocated / MB);
+		log.info("Route calculation native heap peak " + peakAllocated / MB + " MB, start " + baseline / MB
+				+ " MB, budget " + budget / MB + " MB");
 	}
 
 	boolean isExceeded() {

@@ -90,6 +90,7 @@ public class AsyncLoadingThread extends Thread {
 	}
 
 	public void requestToDownload(TileLoadDownloadRequest req) {
+		net.osmand.plus.chizu.ChizuPerfLog.tileDownload(); // 白い熊 地図 +041
 		resourceManger.getMapTileDownloader().requestToDownload(req);
 	}
 

@@ -279,8 +279,11 @@ public class OsmandApplication extends MultiDexApplication {
 		net.osmand.plus.chizu.ChizuTheme.init(this);
 		net.osmand.plus.chizu.ChizuFonts.init(this);
 		net.osmand.plus.chizu.ChizuDiag.init(this); // the switches first: off-by-default diagnostics
+		net.osmand.plus.chizu.ChizuPerfLog.init(this); // 白い熊 地図: the minute CPU, memory and battery line
 		net.osmand.plus.chizu.ChizuDriveLog.init(this);
 		net.osmand.plus.chizu.ChizuRoadLog.init(this);
+		net.osmand.plus.chizu.ChizuSpeeds.migrate(this); // 白い熊 地図 +050: the table fitted to the drives
+		net.osmand.plus.chizu.ChizuOverlayGuard.init(this); // 白い熊 地図 +045: the overlay never vanishes unnoticed
 		appInitializer.initVariables();
 		if (appInitializer.isAppVersionChanged() && appInitializer.getPrevAppVersion() < AppVersionUpgradeOnInit.VERSION_2_3) {
 			settings.freezeExternalStorageDirectory();
