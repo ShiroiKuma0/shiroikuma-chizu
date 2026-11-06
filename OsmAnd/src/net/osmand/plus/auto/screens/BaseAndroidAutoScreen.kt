@@ -243,8 +243,9 @@ abstract class BaseAndroidAutoScreen(carContext: CarContext) : Screen(carContext
 			}
 		}
 		val dz = Math.log(k.toDouble()) / Math.log(2.0)
-		// 3. a view that already fits that way and is well filled stays
-		if (keepIfFits && Math.abs(dz) < 0.3 && l >= al && r <= ar && t >= at && b <= ab && underPanel(xs, ys) == 0f) {
+		// 3. a view that already fits that way and is well filled stays; a route a few pixels inside the
+		// card's margin counts as clear (+066), the same 10 px a move would ignore anyway
+		if (keepIfFits && Math.abs(dz) < 0.3 && l >= al && r <= ar && t >= at && b <= ab && underPanel(xs, ys) < 10f) {
 			net.osmand.plus.chizu.ChizuDriveLog.log(String.format(java.util.Locale.US,
 				"car route preview kept: routes %.0fx%.0f fit, zoom %+.2f would be all", w, h, dz))
 			return
