@@ -190,6 +190,10 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addSliderRow(getString(R.string.chizu_traffic_long_yellow), 1, 100, 1000,
 				ChizuTrafficPrefs.getLongYellowMeters(requireContext()), " m",
 				(value, preview) -> ChizuTrafficPrefs.setLongYellowMeters(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_traffic_chosen_delay), 1, 1, 30,
+				ChizuTrafficPrefs.getChosenDelayMinutes(requireContext()), " min",
+				(value, preview) -> ChizuTrafficPrefs.setChosenDelayMinutes(requireContext(), value), null);
+		addNoteRow(getString(R.string.chizu_traffic_chosen_delay_descr), 1);
 		addSubgroup(R.string.chizu_subgroup_shimmer, accent, 1);
 		ChizuTrafficPrefs.Shimmer shimmer = ChizuTrafficPrefs.getShimmer(requireContext());
 		addSwitchRow(R.string.chizu_shimmer, R.string.chizu_shimmer_descr, 2, shimmer.on,
@@ -222,6 +226,9 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addSliderRow(getString(R.string.chizu_speeds_traffic_light), 1, 0, 90,
 				ChizuSpeeds.getTrafficLightSeconds(requireContext()), " s",
 				(value, preview) -> ChizuSpeeds.setTrafficLightSeconds(requireContext(), value), null);
+		addSliderRow(getString(R.string.chizu_speeds_turn), 1, 0, 60,
+				ChizuSpeeds.getTurnSeconds(requireContext()), " s",
+				(value, preview) -> ChizuSpeeds.setTurnSeconds(requireContext(), value), null);
 		addSwitchRow(R.string.chizu_speeds_eta_follows, R.string.chizu_speeds_eta_follows_descr, 1,
 				ChizuSpeeds.isEtaFollowsSpeed(requireContext()),
 				checked -> ChizuSpeeds.setEtaFollowsSpeed(requireContext(), checked));
@@ -850,11 +857,12 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addNoteRow(getString(R.string.chizu_diag_note, dir == null ? "?" : dir.getAbsolutePath()), 1);
 		addNoteRow(R.string.chizu_diag_notification_note, 1);
 		addDiagSubgroup(R.string.chizu_diag_sub_position, accent,
-				ChizuDiag.Group.LOCATION, ChizuDiag.Group.OFF_ROUTE, ChizuDiag.Group.ROADS);
+				ChizuDiag.Group.LOCATION, ChizuDiag.Group.GNSS,
+				ChizuDiag.Group.OFF_ROUTE, ChizuDiag.Group.ROADS);
 		addDiagSubgroup(R.string.chizu_diag_sub_routing, accent, ChizuDiag.Group.ROUTING, ChizuDiag.Group.TRAFFIC);
 		addDiagSubgroup(R.string.chizu_diag_sub_voice, accent, ChizuDiag.Group.VOICE);
 		addDiagSubgroup(R.string.chizu_diag_sub_display, accent, ChizuDiag.Group.MAP, ChizuDiag.Group.CAR);
-		addDiagSubgroup(R.string.chizu_diag_sub_app, accent, ChizuDiag.Group.UI);
+		addDiagSubgroup(R.string.chizu_diag_sub_app, accent, ChizuDiag.Group.UI, ChizuDiag.Group.PERF);
 
 		addSubgroup(R.string.chizu_diag_sub_data, accent, 1);
 		// counted off the main thread: reading every file's first line must not slow the page down

@@ -69,8 +69,13 @@ public class NextTurnWidget extends NextTurnBaseWidget {
 		boolean deviatedFromRoute = false;
 		int turnImminent = 0;
 		int nextTurnDistance = 0;
+		boolean chizuRecalc = false;
 		if (routingHelper.isRouteCalculated() && followingMode) {
 			deviatedFromRoute = routingHelper.isDeviatedFromRoute();
+			// 白い熊 地図: while off the route or recalculating, the next turn of the route stays in the
+			// box, with a small spinner in its corner — never the grey off-route sign in its place
+			chizuRecalc = deviatedFromRoute || routingHelper.isRouteBeingCalculated();
+			deviatedFromRoute = false;
 
 			if (deviatedFromRoute) {
 				turnType = TurnType.valueOf(TurnType.OFFR, settings.DRIVING_REGION.get().leftHandDriving);
@@ -88,6 +93,8 @@ public class NextTurnWidget extends NextTurnBaseWidget {
 				}
 			}
 		}
+		net.osmand.plus.chizu.ChizuRecalcSpinner.of(getView()).show(chizuRecalc
+				|| (followingMode && routingHelper.isRouteBeingCalculated()));
 		setStreetName(streetName);
 		setTurnType(turnType);
 		setTurnImminent(turnImminent, deviatedFromRoute);

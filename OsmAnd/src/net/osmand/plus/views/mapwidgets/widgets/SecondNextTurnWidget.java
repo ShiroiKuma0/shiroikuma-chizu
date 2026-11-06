@@ -64,7 +64,7 @@ public class SecondNextTurnWidget extends NextTurnBaseWidget {
 		int turnImminent = 0;
 		int nextTurnDistance = 0;
 		if (routingHelper.isRouteCalculated() && followingMode) {
-			deviatedFromRoute = routingHelper.isDeviatedFromRoute();
+			deviatedFromRoute = false; // 白い熊 地図: the turn after next stays shown while off the route
 			NextDirectionInfo info = routingHelper.getNextRouteDirectionInfo(nextDirectionInfo, true);
 			if (!deviatedFromRoute) {
 				if (info != null) {

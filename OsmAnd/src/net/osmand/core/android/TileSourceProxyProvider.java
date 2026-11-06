@@ -74,6 +74,47 @@ public class TileSourceProxyProvider extends interface_ImageMapLayerProvider {
 
 	@Override
 	public long obtainImageData(IMapTiledDataProvider.Request request, SWIGTYPE_p_QByteArray byteArray) {
+		// 白い熊 地図 +041: counted for the minute “perf” line — what the raster layers cost
+		long chizuT0 = System.currentTimeMillis();
+		long res = chizuObtainImageData(request, byteArray);
+		net.osmand.plus.chizu.ChizuPerfLog.tile(res != 0, System.currentTimeMillis() - chizuT0);
+		return res;
+	}
+
+	/** 白い熊 地図 +048: decoded tiles, newest use last, up to {@value #CHIZU_DECODED_MAX_BYTES} bytes in all. */
+	private static final long CHIZU_DECODED_MAX_BYTES = 48L << 20;
+	private static long chizuDecodedBytes;
+	private static final java.util.LinkedHashMap<String, ChizuDecoded> CHIZU_DECODED =
+			new java.util.LinkedHashMap<>(256, 0.75f, true);
+
+	private static final class ChizuDecoded {
+		final long crc;
+		final byte[] pixels;
+		final long size;
+
+		ChizuDecoded(long crc, byte[] pixels, long size) {
+			this.crc = crc;
+			this.pixels = pixels;
+			this.size = size;
+		}
+	}
+
+	private static void chizuRemember(String key, ChizuDecoded d) {
+		if (key == null) {
+			return;
+		}
+		synchronized (CHIZU_DECODED) {
+			ChizuDecoded old = CHIZU_DECODED.put(key, d);
+			chizuDecodedBytes += d.pixels.length - (old == null ? 0 : old.pixels.length);
+			java.util.Iterator<ChizuDecoded> it = CHIZU_DECODED.values().iterator();
+			while (chizuDecodedBytes > CHIZU_DECODED_MAX_BYTES && it.hasNext()) {
+				chizuDecodedBytes -= it.next().pixels.length;
+				it.remove();
+			}
+		}
+	}
+
+	private long chizuObtainImageData(IMapTiledDataProvider.Request request, SWIGTYPE_p_QByteArray byteArray) {
 		long requestTimestamp = System.currentTimeMillis();
 		IQueryController queryController = request.getQueryController();
 		boolean cacheOnly = request.getCacheOnly();
@@ -96,6 +137,25 @@ public class TileSourceProxyProvider extends interface_ImageMapLayerProvider {
 			return 0;
 		}
 
+		// 白い熊 地図 +048: a tile asked for again with the same content is handed over as decoded before
+		String chizuKey = null;
+		long chizuCrc = 0;
+		if (!shiftedTile) {
+			chizuKey = tileSource.getName() + '@' + zoom + '/' + tileX + '/' + tileY;
+			java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+			crc.update(firstTileData, 0, firstTileData.length);
+			chizuCrc = crc.getValue() ^ ((long) firstTileData.length << 32);
+			ChizuDecoded hit;
+			synchronized (CHIZU_DECODED) {
+				hit = CHIZU_DECODED.get(chizuKey);
+			}
+			if (hit != null && hit.crc == chizuCrc) {
+				SwigUtilities.appendToQByteArray(byteArray, hit.pixels);
+				net.osmand.plus.chizu.ChizuPerfLog.tileReused();
+				return hit.size;
+			}
+		}
+
 		Bitmap firstTileBitmap = BitmapFactory.decodeByteArray(firstTileData, 0, firstTileData.length);
 		if (firstTileBitmap == null) {
 			return 0;
@@ -114,14 +174,22 @@ public class TileSourceProxyProvider extends interface_ImageMapLayerProvider {
 				}
 				canvas.translate(0, tileSize);
 				canvas.drawBitmap(secondTileBitmap, 0, 0, paint);
+				secondTileBitmap.recycle(); // 白い熊 地図 +041
 			}
 			byte[] bytes = AndroidUtils.getByteArrayFromBitmap(resultTileBitmap);
 			SwigUtilities.appendToQByteArray(byteArray, bytes);
-			return (long) resultTileBitmap.getHeight() << 32 | resultTileBitmap.getWidth();
+			long size = (long) resultTileBitmap.getHeight() << 32 | resultTileBitmap.getWidth();
+			// 白い熊 地図 +041: the pixels are copied out — free them now, not at some later GC
+			resultTileBitmap.recycle();
+			firstTileBitmap.recycle();
+			return size;
 		} else {
 			byte[] bytes = AndroidUtils.getByteArrayFromBitmap(firstTileBitmap);
 			SwigUtilities.appendToQByteArray(byteArray, bytes);
-			return (long) firstTileBitmap.getHeight() << 32 | firstTileBitmap.getWidth();
+			long size = (long) firstTileBitmap.getHeight() << 32 | firstTileBitmap.getWidth();
+			firstTileBitmap.recycle(); // 白い熊 地図 +041
+			chizuRemember(chizuKey, new ChizuDecoded(chizuCrc, bytes, size));
+			return size;
 		}
 
 	}

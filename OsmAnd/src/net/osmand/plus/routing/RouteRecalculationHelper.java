@@ -57,6 +57,10 @@ class RouteRecalculationHelper {
 	private long recalculateCountInInterval;
 	private int evalWaitInterval;
 	private boolean memoryLimitExceeded; // the last navigation calculation was stopped by NativeRoutingMemoryGuard
+	// 白い熊 地図: …and when. The stop holds back the same calculation only for a while: kept for good,
+	// it left 白い熊 off the route for 15 minutes with no reroute and not a word (2026-11-05)
+	private long memoryLimitExceededAt;
+	private static final long CHIZU_MEMORY_STOP_RETRY_MS = 60_000;
 
 	private Set<RouteCalculationProgressListener> calculationProgressListeners = new HashSet<>();
 
@@ -277,8 +281,9 @@ class RouteRecalculationHelper {
 		if (start == null || end == null) {
 			return;
 		}
-		if (memoryLimitExceeded && onlyStartPointChanged) {
-			return; // the same route would be stopped again: wait for the target points or the settings to change
+		if (memoryLimitExceeded && onlyStartPointChanged
+				&& System.currentTimeMillis() - memoryLimitExceededAt < CHIZU_MEMORY_STOP_RETRY_MS) {
+			return; // the same route would be stopped again: wait a minute, or for the target points or the settings to change
 		}
 		try {
 			if (PlatformUtil.getOsmandRegions() == null || !app.getAppInitializer().isRoutingConfigInitialized()) {
@@ -314,7 +319,9 @@ class RouteRecalculationHelper {
 			// 白い熊 地図: a car reroute is planned afresh, never steered back onto the old route — that
 			// route only aims at a point 10 km down the old one and keeps the rest, so a faster way
 			// (a tunnel 白い熊 took instead) was never found while it stayed the fastest
-			boolean chizuFresh = gpxRoute == null && mode.isDerivedRoutingFrom(ApplicationMode.CAR);
+			// …except on a slower route 白い熊 picked on purpose: that one is steered back onto, as stock does
+			boolean chizuFresh = gpxRoute == null && mode.isDerivedRoutingFrom(ApplicationMode.CAR)
+					&& !routingHelper.getChizuCandidates().isChosenRouteProtected();
 			if (chizuFresh) {
 				recalculateCountInInterval = 0;
 			} else if (recalculateCountInInterval < RECALCULATE_THRESHOLD_COUNT_CAUSING_FULL_RECALCULATE
@@ -474,12 +481,22 @@ class RouteRecalculationHelper {
 			RouteProvider provider = routingHelper.getProvider();
 			OsmandSettings settings = getSettings();
 			long chizuT0 = System.currentTimeMillis();
+			// 白い熊 地図 +040: a traffic check's search runs at background priority (a reroute keeps the
+			// normal one), and each thread says what it is, so the CPU lines of the drive log can tell them apart
+			Thread.currentThread().setName(params.chizuCandidate ? "route-check" : "route-reroute");
+			android.os.Process.setThreadPriority(params.chizuCandidate
+					? android.os.Process.THREAD_PRIORITY_BACKGROUND : android.os.Process.THREAD_PRIORITY_DEFAULT);
+			long chizuCpu0 = android.os.SystemClock.currentThreadTimeMillis();
 			RouteCalculationResult res = provider.calculateRouteImpl(params);
+			long chizuCpuMs = android.os.SystemClock.currentThreadTimeMillis() - chizuCpu0;
 			net.osmand.plus.chizu.ChizuDriveLog.log("calc " + (params.chizuCandidate ? "candidate" : "route")
 					+ " engine=" + params.calculationProgress.chizuEngine
-					+ " " + (System.currentTimeMillis() - chizuT0) + " ms dist=" + res.getWholeDistance()
+					+ " " + (System.currentTimeMillis() - chizuT0) + " ms cpu=" + chizuCpuMs + " ms dist=" + res.getWholeDistance()
 					+ " cost=" + Math.round(res.getRoutingTime())
 					+ (params.calculationProgress.isCancelled ? " cancelled" : "")
+					+ (params.calculationProgress.memoryLimitExceeded ? " by-memory-guard" : "")
+					+ " heap=" + params.calculationProgress.chizuHeapStartMb + ">" + params.calculationProgress.chizuHeapPeakMb
+					+ ">" + (android.os.Debug.getNativeHeapAllocatedSize() >> 20) + "MB"
 					+ (params.start == null ? "" : String.format(java.util.Locale.US,
 					" start=%.6f,%.6f acc=%.0f spd=%s brg=%s heading=%s", params.start.getLatitude(), params.start.getLongitude(),
 					params.start.hasAccuracy() ? params.start.getAccuracy() : -1f,
@@ -513,6 +530,7 @@ class RouteRecalculationHelper {
 			} else {
 				if (params.alternateResultListener == null) { // only the navigation route is recalculated on location updates
 					routingThreadHelper.memoryLimitExceeded = params.calculationProgress.memoryLimitExceeded;
+					routingThreadHelper.memoryLimitExceededAt = System.currentTimeMillis();
 				}
 				evalWaitInterval = Math.max(3000, routingThreadHelper.evalWaitInterval * 3 / 2); // for Issue #3899
 				evalWaitInterval = Math.min(evalWaitInterval, 120000);

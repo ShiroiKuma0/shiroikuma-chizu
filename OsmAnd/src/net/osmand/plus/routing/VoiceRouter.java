@@ -583,7 +583,9 @@ public class VoiceRouter {
 				play(p);
 			}
 			NextDirectionInfo info = router.getNextRouteDirectionInfo(new NextDirectionInfo(), true);
-			for (int k = 0; k < 3 && info != null && info.directionInfo != null; k++) {
+			// 白い熊 地図 +040: only the next turn ahead (it was the next three, each in two forms): the rest
+			// is rendered after each turn anyway, and most of it was re-rendered by every reroute
+			for (int k = 0; k < 1 && info != null && info.directionInfo != null; k++) {
 				RouteDirectionInfo next = info.directionInfo;
 				NextDirectionInfo nextNext = router.getNextRouteDirectionInfoAfter(info, new NextDirectionInfo(), true);
 				int before = next.routePointOffset - 1;

@@ -48,6 +48,8 @@ public class RouteCalculationProgress implements Serializable {
 	public boolean isCancelled;
 	// 白い熊 地図: which router produced the route, for the drive log
 	public String chizuEngine = "-";
+	public volatile int chizuHeapStartMb = -1; // 白い熊 地図 drive log: native heap at the start, MB
+	public volatile int chizuHeapPeakMb = -1; // and its peak during the calculation
 	public boolean memoryLimitExceeded; // set with isCancelled when the memory guard stops the calculation
 	public boolean requestPrivateAccessRouting;
 

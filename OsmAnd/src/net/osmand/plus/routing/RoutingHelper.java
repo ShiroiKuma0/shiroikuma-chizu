@@ -214,6 +214,7 @@ public class RoutingHelper {
 		isPausedOnAADisconnect = false;
 		if (follow && !isFollowingMode) {
 			etaSpeedStartTime = System.currentTimeMillis();
+			app.runInUIThread(net.osmand.plus.chizu.ChizuOverlayGuard::onNavigationStart); // 白い熊 地図 +045
 		}
 		isFollowingMode = follow;
 		isPauseNavigation = false;
@@ -922,6 +923,12 @@ public class RoutingHelper {
 
 	public List<RouteSegmentResult> getUpcomingTunnel(float distToStart) {
 		return route.getUpcomingTunnel(distToStart);
+	}
+
+	/** 白い熊 地図: the tunnels ahead with the short open stretches between them, see RouteCalculationResult. */
+	@Nullable
+	public List<RouteSegmentResult> getChizuTunnelChain(float distToStart, float maxGap, float maxLength) {
+		return route.getChizuTunnelChain(distToStart, maxGap, maxLength);
 	}
 
 	public synchronized NextDirectionInfo getNextRouteDirectionInfoAfter(NextDirectionInfo previous, NextDirectionInfo to, boolean toSpeak) {

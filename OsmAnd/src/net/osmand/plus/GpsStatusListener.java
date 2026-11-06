@@ -16,15 +16,18 @@ public class GpsStatusListener extends GnssStatus.Callback {
 
 	@Override
 	public void onStarted() {
+		net.osmand.plus.chizu.ChizuGnssLog.onStarted(); // 白い熊 地図 raw satellite log
 	}
 
 	@Override
 	public void onStopped() {
+		net.osmand.plus.chizu.ChizuGnssLog.onStopped(); // 白い熊 地図 raw satellite log
 		gpsInfo.reset();
 	}
 
 	@Override
 	public void onFirstFix(int ttffMillis) {
+		net.osmand.plus.chizu.ChizuGnssLog.onFirstFix(ttffMillis); // 白い熊 地図 raw satellite log
 	}
 
 	@Override
@@ -41,5 +44,6 @@ public class GpsStatusListener extends GnssStatus.Callback {
 		gpsInfo.fixed = fixed;
 		gpsInfo.foundSatellites = satCount;
 		gpsInfo.usedSatellites = u;
+		net.osmand.plus.chizu.ChizuGnssLog.onStatus(status); // 白い熊 地図 raw satellite log
 	}
 }
