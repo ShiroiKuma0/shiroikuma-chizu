@@ -366,7 +366,8 @@ public class ChizuGoogleTrafficSource implements ChizuTraffic.Source {
 				main++;
 			}
 		}
-		ChizuDriveLog.log("traffic tiles: " + wanted.size() + " needed (" + main + " at z" + MAIN_ZOOM + ", "
+		// 白い熊 地図 +067: only when something was fetched or failed — every-second “all cached” lines were noise
+		if (!pending.isEmpty() || failed > 0) ChizuDriveLog.log("traffic tiles: " + wanted.size() + " needed (" + main + " at z" + MAIN_ZOOM + ", "
 				+ (wanted.size() - main) + " at z" + ZOOM + "), " + pending.size() + " fetched, " + failed + " failed"); // 白い熊 地図 +048
 		return result;
 	}

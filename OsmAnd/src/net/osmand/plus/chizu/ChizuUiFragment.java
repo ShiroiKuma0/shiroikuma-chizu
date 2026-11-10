@@ -129,6 +129,11 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 
 		holder.removeAllViews();
 
+		// 白い熊 地図 +067: the page's link to the app's own settings, first and thick (black-yellow skill)
+		addPillRow(getString(R.string.chizu_app_settings), getString(R.string.chizu_app_settings_descr), 0,
+				true, true, v -> net.osmand.plus.settings.fragments.BaseSettingsFragment.showInstance(requireActivity(),
+						net.osmand.plus.settings.fragments.SettingsScreenType.MAIN_SETTINGS));
+
 		// ===== Export / Import =====
 		addSection(R.string.chizu_section_exim, accent);
 		addEximDirRow(1);
@@ -172,6 +177,12 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addColorRow(ChizuTheme.Slot.MAP_BUTTON_ICON, 2);
 		addSubgroup(R.string.chizu_subgroup_shape, accent, 1);
 		addMapButtonSliders(2);
+
+		// ===== Car screen (+068) =====
+		addSection(R.string.chizu_section_car_screen, accent);
+		addSliderRow(getString(R.string.chizu_car_tilt), 1, 10, 89, ChizuCarView.getTilt(requireContext()), "°",
+				(value, preview) -> ChizuCarView.setTilt(requireContext(), value), null);
+		addNoteRow(R.string.chizu_car_tilt_note, 1);
 
 		// ===== Traffic (渋滞回避) =====
 		addSection(R.string.chizu_section_traffic, accent);
@@ -329,7 +340,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	private void addEximDirRow(int level) {
 		LinearLayout box = new LinearLayout(requireContext());
 		box.setOrientation(LinearLayout.VERTICAL);
-		box.setPadding(indent(level), dp(6), dp(BASE_INSET_DP), dp(6));
+		box.setPadding(indent(level), dp(2), dp(BASE_INSET_DP), dp(2));
 
 		TextView caption = new TextView(requireContext());
 		caption.setText(R.string.chizu_exim_dir_label);
@@ -362,29 +373,9 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	}
 
 	private void addEximOpenRow(int level) {
-		LinearLayout box = new LinearLayout(requireContext());
-		box.setOrientation(LinearLayout.VERTICAL);
-		box.setPadding(indent(level), dp(5), dp(BASE_INSET_DP), dp(5));
-		TypedValue out = new TypedValue();
-		requireContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, out, true);
-		box.setBackgroundResource(out.resourceId);
-
-		TextView title = new TextView(requireContext());
-		title.setText(R.string.chizu_exim_open);
-		title.setTextSize(16);
-		title.setTextColor(color(ChizuTheme.Slot.TEXT));
-		applyGlobalFont(title);
-		box.addView(title);
-
-		TextView descr = new TextView(requireContext());
-		descr.setText(R.string.chizu_exim_open_descr);
-		descr.setTextSize(13);
-		descr.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
-		applyGlobalFont(descr);
-		box.addView(descr);
-
-		box.setOnClickListener(v -> exim.showPanel());
-		holder.addView(box);
+		// the section's one panel: its main pill (+067)
+		addPillRow(getString(R.string.chizu_exim_open), getString(R.string.chizu_exim_open_descr), level,
+				true, true, v -> exim.showPanel());
 	}
 
 	private interface SwitchListener {
@@ -394,8 +385,9 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	private void addSwitchRow(int titleRes, int descrRes, int level, boolean checked, SwitchListener listener) {
 		LinearLayout row = tightRow(level);
 		row.addView(stackedLabels(getString(titleRes), getString(descrRes)));
+		ruled(row);
 
-		SwitchCompat toggle = new SwitchCompat(requireContext());
+		SwitchCompat toggle = flatSwitch();
 		toggle.setThumbTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.ACCENT)));
 		toggle.setTrackTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.DIVIDER)));
 		toggle.setChecked(checked);
@@ -411,8 +403,9 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		LinearLayout row = tightRow(level);
 		row.addView(stackedLabels(getString(R.string.chizu_automation),
 				getString(R.string.chizu_automation_descr)));
+		ruled(row);
 
-		SwitchCompat toggle = new SwitchCompat(requireContext());
+		SwitchCompat toggle = flatSwitch();
 		int accent = color(ChizuTheme.Slot.ACCENT);
 		toggle.setThumbTintList(ColorStateList.valueOf(accent));
 		toggle.setTrackTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.DIVIDER)));
@@ -434,8 +427,9 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		LinearLayout row = tightRow(level);
 		row.addView(stackedLabels(getString(R.string.chizu_automation_require_token),
 				getString(R.string.chizu_automation_require_token_descr)));
+		ruled(row);
 
-		SwitchCompat toggle = new SwitchCompat(requireContext());
+		SwitchCompat toggle = flatSwitch();
 		toggle.setThumbTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.ACCENT)));
 		toggle.setTrackTintList(ColorStateList.valueOf(color(ChizuTheme.Slot.DIVIDER)));
 		toggle.setChecked(ChizuAutomation.isTokenRequired(requireContext()));
@@ -460,13 +454,12 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		((TextView) labels.getChildAt(1)).setTextColor(color(ChizuTheme.Slot.ACCENT));
 		((TextView) labels.getChildAt(1)).setTypeface(Typeface.MONOSPACE);
 		row.addView(labels);
+		ruled(row);
 
-		TextView regenerate = new TextView(requireContext());
-		regenerate.setText(R.string.chizu_automation_regenerate);
+		// an action in place after a confirmation: a regular pill, no ›
+		TextView regenerate = pill(getString(R.string.chizu_automation_regenerate), false, false);
 		regenerate.setTextSize(14);
-		regenerate.setTextColor(color(ChizuTheme.Slot.ACCENT));
-		regenerate.setPadding(dp(12), dp(6), 0, dp(6));
-		regenerate.setOnClickListener(v -> new AlertDialog.Builder(requireActivity())
+		regenerate.setOnClickListener(v -> pillDialog(new AlertDialog.Builder(requireActivity())
 				.setMessage(R.string.chizu_automation_regenerate_confirm)
 				.setPositiveButton(android.R.string.ok, (dialog, which) -> {
 					ChizuAutomation.regenerate(requireContext());
@@ -475,7 +468,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 							Toast.LENGTH_LONG).show();
 				})
 				.setNegativeButton(android.R.string.cancel, null)
-				.show());
+				.show()));
 		row.addView(regenerate);
 
 		row.setOnClickListener(v -> copyToken(token));
@@ -502,7 +495,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		titleView.setText(title);
 		titleView.setTextSize(16);
 		titleView.setTextColor(color(ChizuTheme.Slot.TEXT));
-		applyGlobalFont(titleView);
+		titleView.setTypeface(currentGlobalOrDefault(), Typeface.BOLD); // +067: bold label over its explanation
 		labels.addView(titleView);
 
 		TextView descrView = new TextView(requireContext());
@@ -606,14 +599,14 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 					checked = i;
 				}
 			}
-			new AlertDialog.Builder(requireActivity())
+			pillDialog(new AlertDialog.Builder(requireActivity())
 					.setSingleChoiceItems(labels, checked, (dialog, which) -> {
 						ChizuFonts.setGlobalWeight(weights[which]);
 						dialog.dismiss();
 						buildRows();
 					})
 					.setNegativeButton(android.R.string.cancel, null)
-					.show();
+					.show());
 		});
 		holder.addView(row);
 	}
@@ -888,8 +881,9 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		addNoteRow(R.string.chizu_diag_keep_note, 2);
 
 		Uri last = ChizuDiag.getExportTree(c);
-		addActionRow(getString(R.string.chizu_diag_export),
-				getString(R.string.chizu_diag_export_descr, last == null ? "/sdcard/tmp" : treeLabel(last)), 2, v -> {
+		addPillRow(getString(R.string.chizu_diag_export),
+				getString(R.string.chizu_diag_export_descr, last == null ? "/sdcard/tmp" : treeLabel(last)), 2,
+				false, true, v -> {
 					if (ChizuDiag.files(requireContext()).isEmpty()) {
 						Toast.makeText(requireContext(), R.string.chizu_diag_export_nothing, Toast.LENGTH_SHORT).show();
 						return;
@@ -902,7 +896,8 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 									"com.android.externalstorage.documents", "primary:tmp");
 					diagExportLauncher.launch(initial);
 				});
-		addActionRow(getString(R.string.chizu_diag_share), getString(R.string.chizu_diag_share_descr), 2, v -> {
+		addPillRow(getString(R.string.chizu_diag_share), getString(R.string.chizu_diag_share_descr), 2,
+				false, true, v -> {
 			android.content.Intent share = ChizuDiag.shareIntent(requireContext());
 			if (share == null) {
 				Toast.makeText(requireContext(), R.string.chizu_diag_export_nothing, Toast.LENGTH_SHORT).show();
@@ -910,8 +905,8 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 				startActivity(share);
 			}
 		});
-		addActionRow(getString(R.string.chizu_diag_purge), getString(R.string.chizu_diag_purge_descr), 2,
-				v -> confirmDiagPurge());
+		addPillRow(getString(R.string.chizu_diag_purge), getString(R.string.chizu_diag_purge_descr), 2,
+				false, false, v -> confirmDiagPurge());
 	}
 
 	private void addDiagSubgroup(int labelRes, @ColorInt int accent, ChizuDiag.Group... groups) {
@@ -922,11 +917,78 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		}
 	}
 
-	private void addActionRow(String title, String descr, int level, View.OnClickListener listener) {
-		LinearLayout row = tightRow(level);
-		row.addView(stackedLabels(title, descr));
-		row.setOnClickListener(listener);
+	/**
+	 * 白い熊 地図 +067: a row that does something when tapped — an outlined pill as wide as its label (› when it
+	 * opens something), its explanation beneath in dim gold, aligned with the label; a left rule spans both.
+	 * Level 0: the page-wide row right under the title.
+	 */
+	private void addPillRow(@NonNull String title, @Nullable String descr, int level, boolean main, boolean opens,
+			@NonNull View.OnClickListener listener) {
+		LinearLayout row = new LinearLayout(requireContext());
+		row.setOrientation(LinearLayout.HORIZONTAL);
+		row.setPadding(level == 0 ? dp(SECTION_INSET_DP) : indent(level), dp(3), dp(BASE_INSET_DP), dp(3));
+
+		LinearLayout box = new LinearLayout(requireContext());
+		box.setOrientation(LinearLayout.VERTICAL);
+		box.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+		TextView pill = pill(title, main, opens);
+		pill.setOnClickListener(listener);
+		box.addView(pill, new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+		if (descr != null) {
+			TextView d = new TextView(requireContext());
+			d.setText(descr);
+			d.setTextSize(13);
+			d.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
+			applyGlobalFont(d);
+			d.setPadding(pill.getPaddingLeft(), dp(2), 0, 0); // under the label, not the pill's edge
+			box.addView(d);
+		}
+		row.addView(box);
+		if (descr != null && level > 0) {
+			ruled(row);
+		}
 		holder.addView(row);
+	}
+
+	/** The pill itself: 3 dp + bold for the main action, 1.25 dp + normal otherwise; never filled. */
+	@NonNull
+	private TextView pill(@NonNull String title, boolean main, boolean opens) {
+		TextView pill = new TextView(requireContext());
+		pill.setText(opens ? title + "  ›" : title);
+		pill.setTextSize(16);
+		pill.setTextColor(color(ChizuTheme.Slot.ACCENT));
+		pill.setTypeface(currentGlobalOrDefault(), main ? Typeface.BOLD : Typeface.NORMAL);
+		pill.setPadding(dp(16), dp(9), dp(16), dp(9));
+		pill.setBackground(ChizuPills.drawable(requireContext(), color(ChizuTheme.Slot.ACCENT),
+				color(ChizuTheme.Slot.BACKGROUND), main));
+		pill.setClickable(true);
+		pill.setFocusable(true);
+		return pill;
+	}
+
+	/** A thin dim-gold rule down the item's left edge, ~10 dp before its text (rows that carry an explanation). */
+	private void ruled(@NonNull LinearLayout row) {
+		View rule = new View(requireContext());
+		rule.setBackgroundColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
+		LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(2), ViewGroup.LayoutParams.MATCH_PARENT);
+		params.setMarginEnd(dp(10));
+		row.addView(rule, 0, params);
+		row.setPadding(Math.max(0, row.getPaddingLeft() - dp(12)), row.getPaddingTop(),
+				row.getPaddingRight(), row.getPaddingBottom());
+	}
+
+	@NonNull
+	private SwitchCompat flatSwitch() {
+		SwitchCompat toggle = new SwitchCompat(requireContext());
+		toggle.setMinHeight(0);
+		toggle.setMinimumHeight(0);
+		return toggle;
+	}
+
+	/** Shown dialogs get the pill buttons: the positive one the main pill. */
+	private void pillDialog(@NonNull AlertDialog dialog) {
+		ChizuPills.styleDialog(dialog);
 	}
 
 	private void onDiagExportDirChosen(@Nullable Uri tree) {
@@ -978,7 +1040,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 					.append(time.format(new java.util.Date(d[1]))).append("\n");
 		}
 		msg.append("\n").append(files(s.files, s.bytes)).append(", ").append(span(s.first, s.last)).append(".");
-		new AlertDialog.Builder(requireActivity())
+		pillDialog(new AlertDialog.Builder(requireActivity())
 				.setTitle(R.string.chizu_diag_purge_title)
 				.setMessage(msg.toString())
 				.setPositiveButton(R.string.chizu_diag_purge_button, (dialog, which) -> {
@@ -987,7 +1049,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 					buildRows();
 				})
 				.setNegativeButton(android.R.string.cancel, null)
-				.show();
+				.show());
 	}
 
 	@NonNull
@@ -1016,21 +1078,18 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	}
 
 	private void addResetRow(int level) {
-		LinearLayout row = tightRow(level);
-		TextView label = itemLabel(getString(R.string.chizu_reset_all));
-		label.setTextColor(color(ChizuTheme.Slot.ACCENT));
-		row.addView(label);
-		row.setOnClickListener(v -> new AlertDialog.Builder(requireActivity())
-				.setMessage(R.string.chizu_reset_all_confirm)
-				.setPositiveButton(android.R.string.ok, (dialog, which) -> {
-					ChizuTheme.clearAll(requireContext());
-					ChizuFonts.setGlobalFamily("");
-					ChizuFonts.setGlobalWeight(0);
-					buildRows();
-				})
-				.setNegativeButton(android.R.string.cancel, null)
-				.show());
-		holder.addView(row);
+		// acts in place after a confirmation: a regular pill, no ›
+		addPillRow(getString(R.string.chizu_reset_all), null, level, false, false,
+				v -> pillDialog(new AlertDialog.Builder(requireActivity())
+						.setMessage(R.string.chizu_reset_all_confirm)
+						.setPositiveButton(android.R.string.ok, (dialog, which) -> {
+							ChizuTheme.clearAll(requireContext());
+							ChizuFonts.setGlobalFamily("");
+							ChizuFonts.setGlobalWeight(0);
+							buildRows();
+						})
+						.setNegativeButton(android.R.string.cancel, null)
+						.show()));
 	}
 
 	private void addNoteRow(int labelRes, int level) {
@@ -1052,8 +1111,8 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		LinearLayout row = new LinearLayout(requireContext());
 		row.setOrientation(LinearLayout.HORIZONTAL);
 		row.setGravity(Gravity.CENTER_VERTICAL);
-		// tight: minimal vertical padding, deep start indent per level
-		row.setPadding(indent(level), dp(5), dp(BASE_INSET_DP), dp(5));
+		// tight: minimal vertical padding (2 dp, black-yellow skill), deep start indent per level
+		row.setPadding(indent(level), dp(2), dp(BASE_INSET_DP), dp(2));
 		TypedValue out = new TypedValue();
 		requireContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, out, true);
 		row.setBackgroundResource(out.resourceId);

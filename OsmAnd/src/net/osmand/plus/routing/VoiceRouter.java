@@ -175,8 +175,11 @@ public class VoiceRouter {
 		settings.VOICE_MUTE.setModeValue(mode, mute);
 	}
 
+	/** 白い熊 地図 +069: silenced for a test run on the head unit — never stored, gone on restart. */
+	public static volatile boolean chizuTestMute;
+
 	public boolean isMute() {
-		return settings.VOICE_MUTE.get();
+		return chizuTestMute || settings.VOICE_MUTE.get();
 	}
 
 	public boolean isMuteForMode(ApplicationMode mode) {

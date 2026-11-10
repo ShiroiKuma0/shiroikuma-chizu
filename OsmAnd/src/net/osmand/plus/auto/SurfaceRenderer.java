@@ -182,6 +182,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 			synchronized (SurfaceRenderer.this) {
 				Log.i(TAG, "Surface available " + surfaceContainer);
 				net.osmand.plus.chizu.ChizuDriveLog.log("car surface available " + surfaceContainer.getWidth() + "x" + surfaceContainer.getHeight()
+						+ " dpi=" + surfaceContainer.getDpi() // +068: to set the head unit up like the car
 						+ " mapView=" + (mapView != null)); // 白い熊 地図 +045
 				if (surface != null) {
 					surface.release();
@@ -495,6 +496,24 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 		return true;
 	}
 
+	/** 白い熊 地図 +068: a new car tilt, applied now when the car map is in 3D. */
+	public boolean chizuSetTilt(int degrees) {
+		synchronized (this) {
+			OsmandMapTileView mv = mapView;
+			if (mv == null || offscreenMapRendererView == null || mv.getAnimatedDraggingThread() == null) {
+				return false;
+			}
+			mv.setMinAllowedElevationAngle(degrees);
+			if (mv.getElevationAngle() < DEFAULT_ELEVATION_ANGLE) {
+				float angle = mv.getAdjustedTiltAngle(mv.getZoom(), true);
+				getApp().getSettings().setLastKnownMapElevation(angle);
+				mv.getAnimatedDraggingThread().startTilting(angle, 0.0f);
+				net.osmand.plus.chizu.ChizuDriveLog.log("car map tilt " + degrees + "° floor, now " + angle + "°");
+			}
+			return true;
+		}
+	}
+
 	/**
 	 * Handles the map 2D/3D button press events.
 	 */
@@ -625,7 +644,8 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 							offscreenMapRendererView.setSymbolsFade(getApp().getSettings().BATTERY_SAVING_MODE.get() ? 0 : 300, -1);
 							offscreenMapRendererView.setMaximumFrameRate(chizuFrameRate);
 							mapRendererContext.setMapRendererView(offscreenMapRendererView);
-							mapView.setMinAllowedElevationAngle(MIN_ALLOWED_ELEVATION_ANGLE_AA);
+							// 白い熊 地図 +068: the floor is the car-tilt setting (20 = Android Auto's own)
+							mapView.setMinAllowedElevationAngle(net.osmand.plus.chizu.ChizuCarView.getTilt(getApp()));
 							float elevationAngle = mapView.normalizeElevationAngle(getApp().getSettings().getLastKnownMapElevation());
 							mapView.setMapRenderer(offscreenMapRendererView, false);
 							mapView.setElevationAngle(elevationAngle);

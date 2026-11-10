@@ -395,6 +395,9 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 		int elevationAngle = 0;
 		if (zoomParams != null && mapView.getElevationAngle() != DEFAULT_ELEVATION_ANGLE) {
 			elevationAngle = settings.AUTO_ZOOM_3D_ANGLE.get();
+			// 白い熊 地図 +070: never below the map's floor — on the car screen that is the car-tilt setting, which
+			// this animation (going straight to the renderer) otherwise overrode while navigating
+			elevationAngle = Math.max(elevationAngle, (int) Math.ceil(mapView.getMinAllowedElevationAngle()));
 		}
 		if (mapRenderer.hitSurface())
 			hitTime = System.currentTimeMillis();
