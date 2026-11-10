@@ -930,6 +930,9 @@ public class NavigationSession extends Session implements NavigationListener, Os
 		settings.LOCATION_SOURCE.removeListener(locationSourceListener);
 	}
 
+	private final net.osmand.plus.chizu.ChizuLateFix chizuLateFix =
+			new net.osmand.plus.chizu.ChizuLateFix(l -> locationProvider.setLocationFromService(l));
+
 	private void requestLocationUpdates() {
 		try {
 			locationServiceHelper.requestLocationUpdates(new LocationCallback() {
@@ -947,7 +950,7 @@ public class NavigationSession extends Session implements NavigationListener, Os
 						}
 						lastTimeGPSLocationFixed = System.currentTimeMillis();
 						if (!settings.MAP_ACTIVITY_ENABLED) {
-							locationProvider.setLocationFromService(location);
+							chizuLateFix.offer(location); // 白い熊 地図 +067: late backlogs, moved ahead
 						}
 					}
 				}

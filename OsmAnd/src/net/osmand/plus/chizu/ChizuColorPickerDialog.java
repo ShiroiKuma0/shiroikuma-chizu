@@ -154,12 +154,7 @@ public class ChizuColorPickerDialog {
 		if (dialog.getWindow() != null) {
 			dialog.getWindow().setBackgroundDrawable(swatchDrawable(background, divider, 8));
 		}
-		int accent = ChizuTheme.getColor(activity, ChizuTheme.Slot.ACCENT);
-		for (int which : new int[] {AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL}) {
-			if (dialog.getButton(which) != null) {
-				dialog.getButton(which).setTextColor(accent);
-			}
-		}
+		ChizuPills.styleDialog(dialog); // 白い熊 地図 +067: OK the main pill, Cancel / Default regular
 	}
 
 	@ColorInt

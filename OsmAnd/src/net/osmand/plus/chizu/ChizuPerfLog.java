@@ -88,6 +88,20 @@ public final class ChizuPerfLog {
 		tilesReused.incrementAndGet();
 	}
 
+	/** 白い熊 地図 +069: the car map's camera as the renderer has it — tilt, its floor, and zoom. */
+	private static String chizuCarCamera(OsmandApplication app) {
+		net.osmand.plus.auto.NavigationSession session = app.getCarNavigationSession();
+		net.osmand.plus.auto.SurfaceRenderer surface = session == null ? null : session.getNavigationCarSurface();
+		net.osmand.plus.views.OsmandMapTileView mv = surface == null ? null : surface.getMapView();
+		if (mv == null) {
+			return "";
+		}
+		net.osmand.core.android.MapRendererView r = mv.getMapRenderer();
+		float renderer = r == null ? Float.NaN : r.getElevationAngle();
+		return String.format(Locale.US, " cam=%.0f°(view %.0f°, floor %.0f°) z%.1f", renderer, mv.getElevationAngle(),
+				mv.getMinAllowedElevationAngle(), mv.getZoom() + mv.getZoomFloatPart());
+	}
+
 	public static void tileDownload() {
 		tileDownloads.incrementAndGet();
 	}
@@ -235,7 +249,7 @@ public final class ChizuPerfLog {
 			boolean phoneMap = activity != null && activity.getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.RESUMED);
 			boolean carMap = app.getCarNavigationSession() != null;
 			ChizuDriveLog.log(line + " map=" + (phoneMap ? "phone" : "-") + (carMap ? "+car" : "")
-					+ " following=" + app.getRoutingHelper().isFollowingMode());
+					+ " following=" + app.getRoutingHelper().isFollowingMode() + chizuCarCamera(app));
 			if (!stacks.isEmpty()) {
 				ChizuDriveLog.log("perf unnamed threads: " + stacks);
 			}

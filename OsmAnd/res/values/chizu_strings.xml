@@ -12,6 +12,8 @@
 	<string name="chizu_exim_warn_nodir">No backup directory set yet — pick one to enable export.</string>
 	<string name="chizu_exim_warn_none">No export in this directory yet.</string>
 	<string name="chizu_exim_last">Last export: %1$s</string>
+	<string name="chizu_app_settings">OsmAnd settings</string>
+	<string name="chizu_app_settings_descr">Profiles, navigation, map and every other setting of the app itself.</string>
 	<string name="chizu_exim_open">Export / Import…</string>
 	<string name="chizu_exim_open_descr">Choose categories, then export to or import from the backup directory.</string>
 	<string name="chizu_exim_maps">Maps</string>
@@ -210,4 +212,7 @@
 	<string name="chizu_route_fewer_turns">Fewer turns</string>
 	<string name="chizu_route_shorter">Shorter, slower</string>
 	<string name="chizu_route_longer">Longer way</string>
+	<string name="chizu_section_car_screen">Car screen</string>
+	<string name="chizu_car_tilt">3D tilt</string>
+	<string name="chizu_car_tilt_note">How far the car map looks from above in 3D: 20° is Android Auto’s own, nearly at the horizon; higher looks more from above and draws far less map (90° is flat). Takes effect at the next car start.</string>
 </resources>

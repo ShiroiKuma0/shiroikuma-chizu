@@ -718,33 +718,13 @@ public class ChizuExim {
 		return card;
 	}
 
+	// 白い熊 地図 +067: the skill's weights — the positive button is the main pill (3 dp, bold), the rest 1.25 dp
 	private void stylePillButtons(@NonNull AlertDialog dialog) {
-		for (int which : new int[] {AlertDialog.BUTTON_POSITIVE,
-				AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL}) {
-			stylePillButton(dialog.getButton(which));
-		}
+		ChizuPills.styleDialog(dialog);
 	}
 
 	private void stylePillButton(@Nullable Button button) {
-		if (button == null) {
-			return;
-		}
-		int accent = color(ChizuTheme.Slot.ACCENT);
-		int fill = color(ChizuTheme.Slot.CARD_BACKGROUND);
-		GradientDrawable pill = new GradientDrawable();
-		pill.setColor(fill);
-		pill.setCornerRadius(dp(50));
-		pill.setStroke(Math.max(1, dp(1.5f)), accent);
-		RippleDrawable ripple = new RippleDrawable(
-				ColorStateList.valueOf((accent & 0x00FFFFFF) | 0x33000000), pill, null);
-		button.setBackground(ripple);
-		button.setTextColor(accent);
-		button.setPadding(dp(20), dp(6), dp(20), dp(6));
-		ViewGroup.LayoutParams params = button.getLayoutParams();
-		if (params instanceof ViewGroup.MarginLayoutParams) {
-			((ViewGroup.MarginLayoutParams) params).setMarginStart(dp(8));
-			button.setLayoutParams(params);
-		}
+		ChizuPills.styleButton(button, false); // a progress dialog's only button, Cancel: regular
 	}
 
 	// ---------- small helpers ----------

@@ -21,7 +21,9 @@ import net.osmand.util.Algorithms;
  * adb shell am broadcast -n shiroikuma.chizu/net.osmand.plus.chizu.ChizuTestReceiver --es cmd overlay --es arg off
  * </pre>
  * Commands: {@code mark <text>}, {@code overlay on|off}, {@code car flat|3d}, {@code fps <n>},
- * {@code sim on|off} (simulate driving the current route), {@code dump} (every profile's layer settings). Each one is written to the drive log.
+ * {@code sim on|off} (simulate driving the current route), {@code dump} (every profile's layer settings),
+ * {@code tilt <deg>} (+068), {@code mute on|off} (+069), {@code route <lat>,<lon>|stop} (+067: start navigation in the car profile from here, on the phone map, or
+ * end it). Each one is written to the drive log.
  */
 public class ChizuTestReceiver extends BroadcastReceiver {
 
@@ -59,6 +61,16 @@ public class ChizuTestReceiver extends BroadcastReceiver {
 				break;
 			case "sim":
 				result = sim(app, "on".equals(arg));
+				break;
+			case "route":
+				result = route(app, arg);
+				break;
+			case "tilt":
+				result = tilt(app, arg);
+				break;
+			case "mute":
+				net.osmand.plus.routing.VoiceRouter.chizuTestMute = "on".equals(arg);
+				result = "voice " + ("on".equals(arg) ? "silenced" : "back");
 				break;
 			default:
 				result = "unknown command";
@@ -148,5 +160,50 @@ public class ChizuTestReceiver extends BroadcastReceiver {
 		}
 		sim.startStopRouteAnimation(null, false, null);
 		return on ? "simulating the route" : "stopped";
+	}
+
+	private static String tilt(OsmandApplication app, String arg) {
+		int deg;
+		try {
+			deg = Integer.parseInt(arg.trim());
+		} catch (NumberFormatException e) {
+			return "not a number";
+		}
+		ChizuCarView.setTilt(app, deg);
+		SurfaceRenderer s = surface(app);
+		return s != null && s.chizuSetTilt(ChizuCarView.getTilt(app)) ? "tilt " + ChizuCarView.getTilt(app) + "°"
+				: "tilt " + ChizuCarView.getTilt(app) + "° from the next car session";
+	}
+
+	private static String route(OsmandApplication app, String arg) {
+		if ("stop".equals(arg)) {
+			app.stopNavigation();
+			net.osmand.plus.activities.MapActivity a = app.getOsmandMap().getMapView().getMapActivity();
+			if (a != null) {
+				a.updateApplicationModeSettings();
+				a.getMapViewTrackingUtilities().switchRoutePlanningMode();
+				a.refreshMap();
+			}
+			return "navigation ended";
+		}
+		String[] ll = arg.split(",");
+		if (ll.length != 2) {
+			return "want <lat>,<lon> or stop";
+		}
+		net.osmand.data.LatLon to;
+		try {
+			to = new net.osmand.data.LatLon(Double.parseDouble(ll[0].trim()), Double.parseDouble(ll[1].trim()));
+		} catch (NumberFormatException e) {
+			return "not a position";
+		}
+		net.osmand.plus.activities.MapActivity a = app.getOsmandMap().getMapView().getMapActivity();
+		if (a == null) {
+			return "open the map on the phone first";
+		}
+		net.osmand.plus.settings.backend.ApplicationMode car =
+				net.osmand.plus.settings.backend.ApplicationMode.getFirstCarMode(app);
+		net.osmand.plus.helpers.NavigateGpxHelper.startNavigation(a,
+				car != null ? car : app.getSettings().getApplicationMode(), null, null, to, null, false);
+		return "navigating to " + to.getLatitude() + "," + to.getLongitude();
 	}
 }

@@ -3,6 +3,7 @@ package net.osmand.plus.chizu;
 import android.app.Activity;
 import android.graphics.Typeface;
 import android.view.Gravity;
+import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -67,10 +68,19 @@ public class ChizuFontPickerDialog {
 			holder.addView(row);
 		}
 
-		TextView addRow = makeRow(activity, density);
-		addRow.setText(R.string.chizu_font_add);
+		// 白い熊 地図 +067: an action that opens the file picker — a regular pill as wide as its label, with ›
+		TextView addRow = new TextView(activity);
+		addRow.setTextSize(16);
+		addRow.setText(activity.getString(R.string.chizu_font_add) + "  ›");
 		addRow.setTextColor(accent);
-		addRow.setTypeface(null, Typeface.BOLD);
+		int ph = Math.round(16 * density);
+		int pv = Math.round(9 * density);
+		addRow.setPadding(ph, pv, ph, pv);
+		addRow.setBackground(ChizuPills.drawable(activity, accent, background, false));
+		android.widget.LinearLayout.LayoutParams addParams = new android.widget.LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		addParams.setMargins(Math.round(16 * density), Math.round(6 * density), 0, Math.round(6 * density));
+		addRow.setLayoutParams(addParams);
 		addRow.setOnClickListener(v -> {
 			dialog.dismiss();
 			callback.onAddFont();
@@ -78,9 +88,7 @@ public class ChizuFontPickerDialog {
 		holder.addView(addRow);
 
 		dialog.show();
-		if (dialog.getButton(AlertDialog.BUTTON_NEGATIVE) != null) {
-			dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(accent);
-		}
+		ChizuPills.styleDialog(dialog); // 白い熊 地図 +067
 	}
 
 	@NonNull

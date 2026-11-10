@@ -28,7 +28,7 @@ public class ChizuTheme {
 	public static final int UNSET = Integer.MIN_VALUE;
 	public static final int BLACK = 0xFF000000;
 	public static final int YELLOW = 0xFFFFFF00;
-	public static final int YELLOW_SECONDARY = 0xB3FFFF00;
+	public static final int YELLOW_SECONDARY = 0xFFC8C800; // 白い熊 地図 +067: the skill’s dim gold (was 70 % yellow)
 
 	private static final String RECENT_COLORS_KEY = "recent_colors";
 	private static final int RECENT_COLORS_MAX = 8;
