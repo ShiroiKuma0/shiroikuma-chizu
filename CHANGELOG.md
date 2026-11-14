@@ -3,6 +3,77 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+075 — 2026-11-14
+
+Rebased onto upstream OsmAnd 5.5.0, `master` at `55e2985b11` (2026-11-09), from `9f7ddb7c95`.
+Builds +035 – +074 were test builds on the phone and are all included here.
+
+### Position on the road
+
+- **One gate for every fix** — accuracy, speed and jump — replaces the weak-fix and gap estimation.
+  A fix may not be faster than the last by more than a car accelerates, the jump allowance comes
+  from the last accepted speed, a turn needing too much sideways acceleration is a stray, and a
+  good fix after a weak run is a correction judged only against the last good fix.
+- **Always on a road.** Off the route a road matcher picks the road among all roads around, with
+  its own map reader on its own thread, and holds the believed road by dead reckoning — also when
+  driving without navigation.
+- **Heading from movement.** At speed the arrow takes the road’s direction turned to agree with the
+  receiver’s bearing; below it the heading holds and only lasting movement the other way turns it
+  round. A weak fix never turns the arrow round; with a fix of 10 m or better the receiver is
+  trusted from a lower speed.
+- **Late fixes.** A backlog of late location fixes is reduced to its newest one, and a late fix of
+  a moving car is moved ahead by speed × delay.
+- **Weak GPS:** fixes up to 100 m move the position along the route; the off-route limit grows with
+  the fix’s error (1.5 × accuracy, at most 150 m) and needs three fixes in a row; tunnel chains up
+  to 10 km with a 3-fix exit; no traffic checks from estimated or stale positions.
+
+### Android Auto
+
+- **Location keeps coming when the car shows something else.** The location service stays in the
+  foreground, typed “location”, for as long as the car session lives, so the fixes no longer stop
+  when the camera or another car app hides the map.
+- **The car map survives a stop.** A stopped but alive session keeps its map, renderer, azimuth,
+  zoom, tilt and tracking, and the car profile with it; the phone’s profile returns only when the
+  car is off. No failed first frame when the car surface comes back.
+- **Car screen load.** The off-screen car renderer is held to 10 fps on its own GL thread, and the
+  copy to the car screen to the same rate: drive CPU about 200 % → 135 %, thermal severe →
+  light/moderate. A car surface that refuses every draw closes the session so Android Auto reopens
+  it with a fresh one.
+- **Route preview on the car:** flat and north-up while open, fitted by measuring on the car screen,
+  centred, shifted right just enough when routes would run under the panel card; phone map fits are
+  skipped while the map is on the car screen.
+- **3D tilt of the car screen:** a slider on the UI page (default 20°, 10 – 89°), applied as the
+  minimum elevation angle; auto-zoom no longer lowers the camera below it.
+- **Smaller things:** during a recalculation the next-turn box keeps the last instruction with a
+  turning arrow instead of the full-box spinner; Start keeps the yellow pill with upstream’s card
+  countdown; arrival and cancel go straight back to the Free ride map.
+
+### Routing, traffic and tiles
+
+- **My speeds table v2**, fitted to the drives of 2026-10-30 – 11-05; a turn cost setting (10 s,
+  measured) in the router and the card times; traffic light 20 s confirmed by measurement.
+- **Route cards named by measured time:** Fastest, Shortest, and the others by what sets them apart.
+- **Traffic check** reads main roads at zoom 13 (1 tile for 16) and smaller streets at 15.
+- **View tiles:** a 15-minute re-download floor, a decoded-tile cache, bitmaps freed after the copy.
+- **Routing engine:** a growth-based native memory guard with retry, route search thread names and
+  priorities, and voice prefetch of the next turn only.
+
+### Overlay
+
+- The on-map transparency slider is locked (long press unlocks it for 10 s); a warning shows on the
+  car screen and the phone when the overlay is under 15 %; the opacity is restored on Go.
+- Layers re-attach after a full map refresh.
+
+### Look
+
+- Dialog and UI-page buttons are black-yellow outlined pills.
+
+### Diagnostics
+
+- A minute line with CPU by thread, memory, battery, charging source, thermal state, tiles and car
+  frames; a raw GNSS log with satellite status, also while only the car screen is in use, and the
+  engine’s extras for weak fixes; watchdog, surface lifecycle and frame-source logging for the car.
+
 ## 5.5.0+034 — 2026-11-03
 
 Base unchanged (OsmAnd 5.5.0, `master` at `9f7ddb7c95`). Fork-side only; builds +024 – +033 were
