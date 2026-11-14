@@ -127,7 +127,8 @@ public class OsmandMap {
 				+ " started=" + (navigationSession != null && navigationSession.hasStarted())
 				+ " mapActivity=" + (mapView.getMapActivity() != null));
 		if (navigationSession != null) {
-			if (navigationSession.hasStarted()) {
+			// 白い熊 地図 +074: a stopped session keeps the car map while the phone map is not in use
+			if (navigationSession.hasStarted() || navigationSession.chizuHoldsMap()) {
 				navigationSession.setMapView(mapView);
 				app.getMapViewTrackingUtilities().setMapView(mapView);
 			} else {
