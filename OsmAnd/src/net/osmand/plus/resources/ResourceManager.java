@@ -135,7 +135,8 @@ public class ResourceManager {
 		ADDRESS,
 		QUICK_SEARCH,
 		ROUTING,
-		TRANSPORT_ROUTING
+		TRANSPORT_ROUTING,
+		CHIZU_ROAD_MATCH // 白い熊 地図 +073: the road matcher's own reader, read on its own thread
 	}
 
 	protected final Map<String, BinaryMapReaderResource> fileReaders = new ConcurrentHashMap<>();

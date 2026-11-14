@@ -99,6 +99,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 	// path back to 2D (a recalculation, a lost fix, a renderer re-setup reading the flat
 	// per-profile angle) is tilted back. Reset on every new session, so it always starts in 3D.
 	private boolean flatByUser;
+	private long chizuSurfaceLostMs; // 白い熊 地図 +074
 	private boolean loggedFlat;
 	private final Runnable keep3D = this::keep3D;
 
@@ -183,7 +184,10 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 				Log.i(TAG, "Surface available " + surfaceContainer);
 				net.osmand.plus.chizu.ChizuDriveLog.log("car surface available " + surfaceContainer.getWidth() + "x" + surfaceContainer.getHeight()
 						+ " dpi=" + surfaceContainer.getDpi() // +068: to set the head unit up like the car
-						+ " mapView=" + (mapView != null)); // 白い熊 地図 +045
+						+ " mapView=" + (mapView != null) // 白い熊 地図 +045
+						+ (chizuSurfaceLostMs > 0 ? " back after " + (android.os.SystemClock.elapsedRealtime() - chizuSurfaceLostMs) / 1000 + " s" : "")
+						+ " renderer=" + (offscreenMapRendererView != null ? "kept" : "none")); // +074
+				chizuSurfaceLostMs = 0;
 				if (surface != null) {
 					surface.release();
 				}
@@ -232,6 +236,7 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 			synchronized (SurfaceRenderer.this) {
 				Log.i(TAG, "Surface destroyed");
 				net.osmand.plus.chizu.ChizuDriveLog.log("car surface destroyed"); // 白い熊 地図 +045
+				chizuSurfaceLostMs = android.os.SystemClock.elapsedRealtime(); // +074
 				if (surface != null) {
 					surface.release();
 					surface = null;
@@ -763,7 +768,12 @@ public final class SurfaceRenderer implements DefaultLifecycleObserver, MapRende
 				if (surfaceAdditionalWidth != 0) {
 					leftOffset = -surfaceAdditionalWidth * ((maxRatio - cachedRatioX) / (maxRatio - minRatio));
 				}
-				canvas.drawBitmap(offscreenMapRendererView.getBitmap(), leftOffset, 0, null);
+				// 白い熊 地図 +075: null on the first frame after the surface comes back (2026-11-13, at every return
+				// from the camera) — the frame failed and was logged; now the overlay is drawn and the map follows
+				android.graphics.Bitmap chizuMap = offscreenMapRendererView.getBitmap();
+				if (chizuMap != null) {
+					canvas.drawBitmap(chizuMap, leftOffset, 0, null);
+				}
 			}
 			mapView.drawOverMap(canvas, tileBox, drawSettings);
 			SurfaceRendererCallback callback = this.callback;

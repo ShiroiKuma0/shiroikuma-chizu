@@ -50,6 +50,7 @@ import net.osmand.plus.AppInitializer;
 import net.osmand.plus.OsmAndConstants;
 import net.osmand.plus.OsmAndLocationProvider;
 import net.osmand.plus.OsmAndLocationProvider.OsmAndLocationListener;
+import net.osmand.plus.NavigationService;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
 import net.osmand.plus.auto.screens.*;
@@ -213,11 +214,27 @@ public class NavigationSession extends Session implements NavigationListener, Os
 		this.mapView = mapView;
 		SurfaceRenderer navigationCarSurface = this.navigationCarSurface;
 		if (navigationCarSurface != null) {
-			navigationCarSurface.setMapView(hasStarted() ? mapView : null);
-			if (mapView != null) {
+			boolean holds = chizuHoldsMap();
+			navigationCarSurface.setMapView(hasStarted() || holds ? mapView : null);
+			if (mapView != null && !holds && !chizuHeldAcrossStop) {
 				navigationCarSurface.handleRecenter();
 			}
 		}
+	}
+
+	// 白い熊 地図 +074: the car map is not torn down while the session is merely stopped
+	private boolean chizuHeldAcrossStop;
+	private boolean chizuCarServiceAsked;
+
+	/**
+	 * 白い熊 地図 +074: the session is stopped but alive — the camera, or another car app, has the screen —
+	 * and the phone map is not in use: the car keeps its map, its renderer, its azimuth, zoom and tilt, and
+	 * the tracking of the car, so that the map comes back as it went instead of being built anew
+	 * (north-up, tiles reloaded, recentred at zoom 15) around a position minutes old.
+	 */
+	public boolean chizuHoldsMap() {
+		return !hasStarted() && isStateAtLeast(State.CREATED) && settings != null && !settings.MAP_ACTIVITY_ENABLED
+				&& navigationCarSurface != null;
 	}
 
 	private OsmandApplication getApp() {
@@ -264,15 +281,27 @@ public class NavigationSession extends Session implements NavigationListener, Os
 				settings.setApplicationMode(carMode, false);
 			}
 		}
-		if (navigationCarSurface != null) {
+		if (navigationCarSurface != null && !chizuHeldAcrossStop) { // 白い熊 地図 +074: a kept map is not recentred
 			navigationCarSurface.handleRecenter();
 		}
 
 		app.onCarNavigationSessionStart(this);
+		// 白い熊 地図 +074: the location keeps coming while the car screen shows something else — see
+		// NavigationService.USED_BY_CAR, and the car app's own foreground call typed again from here
+		NavigationCarAppService carAppService = app.getNavigationCarAppService();
+		if (carAppService != null) {
+			carAppService.chizuForegroundWithLocation();
+		}
+		if (!chizuCarServiceAsked) {
+			chizuCarServiceAsked = true;
+			app.startNavigationService(NavigationService.USED_BY_CAR);
+			net.osmand.plus.chizu.ChizuDriveLog.log("car location service asked for");
+		}
 		// A location that arrived before the session started must not be lost:
 		// OsmAndLocationProvider.setLocationFromService() stores one only while the session has started
 		app.getLocationProvider().ensureLatestLocation();
 		app.getOsmandMap().getMapView().setupRenderingView();
+		chizuHeldAcrossStop = false;
 
 		if (!app.isAppInForegroundOnRootDevice()) {
 			checkAppInitialization(new RestoreNavigationHelper(app, null));
@@ -312,11 +341,18 @@ public class NavigationSession extends Session implements NavigationListener, Os
 
 		boolean routing = settings.FOLLOW_THE_ROUTE.get() || routingHelper.isRouteCalculated()
 				|| routingHelper.isRouteBeingCalculated();
-		if (originalAppMode != null && !routing) {
+		chizuHeldAcrossStop = chizuHoldsMap(); // 白い熊 地図 +074
+		// 白い熊 地図 +075: while the map is kept, the car profile is kept with it. Switching to the phone's profile
+		// here and back in onStart took the overlay off and put it back at every blinker and camera (14 stops on
+		// 2026-11-13) and left the app in Browse once the car was off. The switch back waits for onDestroy.
+		if (originalAppMode != null && !routing && !chizuHeldAcrossStop) {
 			settings.setApplicationMode(originalAppMode);
 		}
-		originalAppMode = null;
+		if (!chizuHeldAcrossStop) {
+			originalAppMode = null;
+		}
 
+		net.osmand.plus.chizu.ChizuDriveLog.log("car session stopped, map " + (chizuHeldAcrossStop ? "kept, profile kept" : "handed back"));
 		app.getOsmandMap().getMapView().setupRenderingView();
 		app.onCarNavigationSessionStop(this);
 		app.getRoutingHelper().removeCalculationProgressListener(this);
@@ -326,6 +362,22 @@ public class NavigationSession extends Session implements NavigationListener, Os
 	public void onDestroy(@NonNull LifecycleOwner owner) {
 		logDiag("onDestroy session=" + System.identityHashCode(this));
 		OsmandApplication app = getApp();
+		// 白い熊 地図 +075: the session is gone for good (the car is off): back to the profile the phone had
+		if (originalAppMode != null) {
+			boolean routing = settings.FOLLOW_THE_ROUTE.get() || routingHelper.isRouteCalculated()
+					|| routingHelper.isRouteBeingCalculated();
+			if (!routing) {
+				settings.setApplicationMode(originalAppMode);
+			}
+			net.osmand.plus.chizu.ChizuDriveLog.log("car session destroyed, profile " + (routing ? "kept for the route" : "given back"));
+			originalAppMode = null;
+		}
+		chizuHeldAcrossStop = false; // 白い熊 地図 +074
+		chizuCarServiceAsked = false;
+		NavigationService chizuService = app.getNavigationService();
+		if (chizuService != null) {
+			chizuService.stopIfNeeded(app, NavigationService.USED_BY_CAR);
+		}
 		removeLocationUpdates();
 		removeLocationSourceListener();
 		app.getSearchHistoryHelper().removeListener(historyListener);

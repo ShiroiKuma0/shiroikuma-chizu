@@ -106,6 +106,27 @@ public final class NavigationCarAppService extends CarAppService implements Acti
 		}
 	}
 
+	/**
+	 * 白い熊 地図 +074: the foreground call again, typed “location”, from a visible session. The one made at
+	 * the session's creation comes before anything is shown, and a service put in the foreground from the
+	 * background is granted no while-in-use location: as soon as the camera or another car app hid 地図,
+	 * the fixes stopped. Typed again while the car shows 地図, the grant is re-evaluated.
+	 */
+	public void chizuForegroundWithLocation() {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !OsmAndLocationProvider.isLocationPermissionAvailable(getApp())) {
+			return;
+		}
+		Notification notification = getApp().getNotificationHelper().buildCarAppNotification();
+		try {
+			startForeground(getApp().getNotificationHelper().getOsmandNotificationId(NotificationType.CAR_APP), notification,
+					ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+			foreground = true;
+			net.osmand.plus.chizu.ChizuDriveLog.log("car app service in the foreground with location, types=" + getForegroundServiceType());
+		} catch (Exception e) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("car app service: location type refused: " + e);
+		}
+	}
+
 	public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
 		List<String> permissionsList = Arrays.asList(permissions);
 		if (getApp().getCarNavigationSession() != null && permissionsList.contains(Manifest.permission.ACCESS_FINE_LOCATION) ||

@@ -49,6 +49,13 @@ public class NavigationService extends Service {
 	public static int USED_BY_NAVIGATION = 1;
 	public static int USED_BY_GPX = 2;
 	public static int USED_BY_AIS = 4;
+	/**
+	 * 白い熊 地図 +074: in the foreground for as long as the car session lives. The location permission is
+	 * “while in use”, and the car app's own foreground call is made before anything is visible, so Android
+	 * grants it no location once the camera or another car app hides 地図: every blinker was a 7–60 s hole
+	 * in the fixes on 2026-11-12. This usage is asked for from a visible car screen.
+	 */
+	public static int USED_BY_CAR = 8;
 	public static final String USAGE_INTENT = "SERVICE_USED_BY";
 
 	private final NavigationServiceBinder binder = new NavigationServiceBinder();
@@ -135,7 +142,12 @@ public class NavigationService extends Service {
 			NotificationHelper notificationHelper = app.getNotificationHelper();
 			Notification notification = notificationHelper.buildTopNotification(this, getNotificationType());
 			try {
-				startForeground(notification != null ? notification : notificationHelper.buildFallbackNotification());
+				if (notification == null && isUsedBy(USED_BY_CAR)) { // 白い熊 地図 +074: the car app's own notification
+					chizuForeground(notificationHelper.getOsmandNotificationId(NotificationType.CAR_APP),
+							notificationHelper.buildCarAppNotification());
+				} else {
+					startForeground(notification != null ? notification : notificationHelper.buildFallbackNotification());
+				}
 			} catch (Exception e) {
 				LOG.error("Failed to keep NavigationService in the foreground (usedBy=" + usedBy.get() + ")", e);
 				resetServiceState(app);
@@ -157,11 +169,22 @@ public class NavigationService extends Service {
 
 		NotificationHelper notificationHelper = app.getNotificationHelper();
 		Notification notification = notificationHelper.buildTopNotification(this, getNotificationType());
+		// 白い熊 地図 +074: for the car alone, under the car app's own notification — one notification, not two
+		boolean chizuCar = notification == null && isUsedBy(USED_BY_CAR);
+		if (chizuCar) {
+			notification = notificationHelper.buildCarAppNotification();
+		}
 
 		boolean hasNotification = notification != null;
 		if (hasNotification) {
 			try {
-				startForeground(notification);
+				if (chizuCar) {
+					chizuForeground(notificationHelper.getOsmandNotificationId(NotificationType.CAR_APP), notification);
+				} else {
+					startForeground(notification);
+				}
+				net.osmand.plus.chizu.ChizuDriveLog.log("car location service up, used by " + usedBy.get()
+						+ (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? " types=" + getForegroundServiceType() : "")); // 白い熊 地図 +074
 			} catch (Exception e) {
 				LOG.error("Failed to start NavigationService (usedBy=" + usedBy.get() + ")", e);
 				resetServiceState(app);
@@ -199,10 +222,15 @@ public class NavigationService extends Service {
 	}
 
 	private void startForeground(@NonNull Notification notification) {
+		chizuForeground(TOP_NOTIFICATION_SERVICE_ID, notification); // 白い熊 地図 +074: the id is a parameter now
+	}
+
+	/** Typed “location” — the platform's own startForeground(int, Notification) is final and untyped. */
+	private void chizuForeground(int id, @NonNull Notification notification) {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-			startForeground(TOP_NOTIFICATION_SERVICE_ID, notification, FOREGROUND_SERVICE_TYPE_LOCATION);
+			startForeground(id, notification, FOREGROUND_SERVICE_TYPE_LOCATION);
 		} else {
-			startForeground(TOP_NOTIFICATION_SERVICE_ID, notification);
+			startForeground(id, notification);
 		}
 	}
 
@@ -291,10 +319,14 @@ public class NavigationService extends Service {
 		} catch (IllegalArgumentException e) {
 			getApp().showToastMessage(R.string.gps_not_available);
 		}
+		if (locationProvider != null) {
+			locationProvider.chizuGnssStatusForService(true); // 白い熊 地図 +075: the sky is logged on this path too
+		}
 	}
 
 	private void removeLocationUpdates() {
 		LOG.info(">>>> removeLocationUpdates from NavigationService");
+		getApp().getLocationProvider().chizuGnssStatusForService(false); // 白い熊 地図 +075
 		if (locationServiceHelper != null) {
 			try {
 				locationServiceHelper.removeLocationUpdates();

@@ -144,6 +144,47 @@ public final class ChizuGnssLog {
 				used, inView, top4, gap, lastStatusMs == 0 ? -1 : now - lastStatusMs, screen ? "on" : "off"));
 	}
 
+	private static final long EXTRAS_EVERY_MS = 30_000;
+	private static final float EXTRAS_FROM_ACC = 30f;
+	private static long lastExtrasMs;
+
+	/**
+	 * +075: what EMUI's “fused” engine says about a fix worse than {@value #EXTRAS_FROM_ACC} m — its extras,
+	 * speed and bearing accuracy — once every {@value #EXTRAS_EVERY_MS} ms. On 2026-11-13 the engine
+	 * dead-reckoned through every loss of the satellites with the accuracy capped at 55 m; whether it
+	 * says so anywhere is the question this answers.
+	 */
+	public static void onExtras(@NonNull android.location.Location l) {
+		if (!on() || !l.hasAccuracy() || l.getAccuracy() <= EXTRAS_FROM_ACC) {
+			return;
+		}
+		long now = SystemClock.elapsedRealtime();
+		if (now - lastExtrasMs < EXTRAS_EVERY_MS) {
+			return;
+		}
+		lastExtrasMs = now;
+		StringBuilder sb = new StringBuilder(128);
+		sb.append(String.format(Locale.US, "gnss extras %s acc=%.1f", l.getProvider(), l.getAccuracy()));
+		if (android.os.Build.VERSION.SDK_INT >= 26) {
+			sb.append(" spd_acc=").append(l.hasSpeedAccuracy() ? String.format(Locale.US, "%.1f", l.getSpeedAccuracyMetersPerSecond()) : "-");
+			sb.append(" brg_acc=").append(l.hasBearingAccuracy() ? String.format(Locale.US, "%.0f", l.getBearingAccuracyDegrees()) : "-");
+			sb.append(" vert_acc=").append(l.hasVerticalAccuracy() ? String.format(Locale.US, "%.0f", l.getVerticalAccuracyMeters()) : "-");
+		}
+		if (android.os.Build.VERSION.SDK_INT >= 31) {
+			sb.append(" mock=").append(l.isMock());
+		}
+		android.os.Bundle b = l.getExtras();
+		if (b == null || b.isEmpty()) {
+			sb.append(" extras=none");
+		} else {
+			for (String k : b.keySet()) {
+				Object v = b.get(k);
+				sb.append(' ').append(k).append('=').append(v instanceof Object[] ? Arrays.toString((Object[]) v) : v);
+			}
+		}
+		ChizuDriveLog.log(sb.toString());
+	}
+
 	@NonNull
 	private static String system(int type) {
 		switch (type) {
