@@ -10,9 +10,40 @@ A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.5.0+075`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.5.0+105`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
+
+---
+
+## 🛰️ Always knows what kind of position it has
+A pill names the position at all times — **satellite** (with the count), **car**, **Wi-Fi**,
+**network** or an **estimate** — and, while the receiver is still searching, how many satellites it
+hears, how strong, and for how long. The marker tells it too: the solid arrow for a satellite fix, a
+hollow ring for a network or learned position, a dimmed arrow for an estimate. On the car screen it
+sits beside the speed box; on the phone, under the info panel. Tap it for the full numbers.
+
+---
+
+## 🚗 The car's own GPS drives the map
+In Android Auto, when the head unit gives its own position — accurate to about a metre and a half —
+that is what moves the map, the route and the voice, so the drive no longer depends on the phone's
+weak in-car signal. The phone's receiver takes back over within seconds whenever the car stops.
+
+---
+
+## 📡 A Wi-Fi locator that learns, on the phone alone
+Indoors and in a weak signal it places you from the Wi-Fi networks around — learned quietly from the
+car's GPS and good fixes, and from spots you **teach by hand** with a crosshair. Nothing is ever sent
+anywhere: the map of networks lives on the phone and travels only inside your own export. A taught
+place is trusted over a satellite fix a few metres off it.
+
+---
+
+## 🗂️ A settings page you fold and reorder
+The long settings page became a **folding accordion with a draggable index** — a row of chips jumps
+to any section, a long-press drags a chip to reorder the whole page live, every section folds away,
+and your arrangement is remembered and carried in the backup.
 
 ---
 
