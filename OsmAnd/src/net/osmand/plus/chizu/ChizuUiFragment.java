@@ -56,6 +56,11 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	private static final int BASE_INSET_DP = 14;
 
 	private LinearLayout holder;
+	private LinearLayout body; // 白い熊 地図 +103: the current section's row target (holder for the pinned top rows)
+	private int sectionCount;
+	private final java.util.Map<String, View> sectionWrappers = new java.util.HashMap<>();
+	private final java.util.Map<String, View> sectionBodies = new java.util.HashMap<>();
+	private final java.util.Map<String, TextView> sectionChevrons = new java.util.HashMap<>();
 	private float density;
 	private ActivityResultLauncher<String[]> fontImportLauncher;
 	private ChizuExim exim;
@@ -130,189 +135,187 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		root.findViewById(R.id.chizu_toolbar_rule).setBackgroundColor(divider);
 
 		holder.removeAllViews();
+		sectionCount = 0;
+		sectionWrappers.clear();
+		sectionBodies.clear();
+		sectionChevrons.clear();
+		body = holder;
 
 		// 白い熊 地図 +067: the page's link to the app's own settings, first and thick (black-yellow skill)
 		addPillRow(getString(R.string.chizu_app_settings), getString(R.string.chizu_app_settings_descr), 0,
 				true, true, v -> net.osmand.plus.settings.fragments.BaseSettingsFragment.showInstance(requireActivity(),
 						net.osmand.plus.settings.fragments.SettingsScreenType.MAIN_SETTINGS));
 
-		// ===== Export / Import =====
-		addSection(R.string.chizu_section_exim, accent);
-		addEximDirRow(1);
-		addEximOpenRow(1);
-		addAutomationSwitchRow(1);
-		addAutomationRequireTokenRow(1);
-		// hidden when the token is not being asked for: a 48-character secret sitting under an
-		// off switch invites pasting it somewhere it will do nothing
-		if (ChizuAutomation.isTokenRequired(requireContext())) {
-			addAutomationTokenRow(1);
-		}
+		java.util.List<String> keys = new java.util.ArrayList<>();
+		java.util.Map<String, Runnable> content = new java.util.HashMap<>();
+		java.util.Map<String, Integer> labels = new java.util.HashMap<>();
 
-		// ===== Foundation =====
-		addSection(R.string.chizu_section_foundation, accent);
-		addColorRow(ChizuTheme.Slot.BACKGROUND, 1);
-		addColorRow(ChizuTheme.Slot.CARD_BACKGROUND, 1);
-		addColorRow(ChizuTheme.Slot.TEXT, 1);
-		addColorRow(ChizuTheme.Slot.TEXT_SECONDARY, 1);
-		addColorRow(ChizuTheme.Slot.ACCENT, 1);
-		addColorRow(ChizuTheme.Slot.ICON, 1);
-		addColorRow(ChizuTheme.Slot.DIVIDER, 1);
-
-		// ===== Text & fonts =====
-		addSection(R.string.chizu_section_fonts, accent);
-		addSubgroup(R.string.chizu_subgroup_app_font, accent, 1);
-		addFontFamilyRow(2);
-		addFontWeightRow(2);
-		TextView fontSample = addSampleRow(2);
-		refreshFontSample(fontSample);
-		addSubgroup(R.string.chizu_subgroup_sizes, accent, 1);
-		addMapTextSizeRow(2);
-
-		// ===== Top bar =====
-		addSection(R.string.chizu_section_top_bar, accent);
-		addColorRow(ChizuTheme.Slot.TOOLBAR_BACKGROUND, 1);
-
-		// ===== Map buttons =====
-		addSection(R.string.chizu_section_map_buttons, accent);
-		addSubgroup(R.string.chizu_subgroup_colors, accent, 1);
-		addColorRow(ChizuTheme.Slot.MAP_BUTTON_BACKGROUND, 2);
-		addColorRow(ChizuTheme.Slot.MAP_BUTTON_ICON, 2);
-		addSubgroup(R.string.chizu_subgroup_shape, accent, 1);
-		addMapButtonSliders(2);
-
-		// ===== Car screen (+068) =====
-		addSection(R.string.chizu_section_car_screen, accent);
-		addSliderRow(getString(R.string.chizu_car_tilt), 1, 10, 89, ChizuCarView.getTilt(requireContext()), "°",
-				(value, preview) -> ChizuCarView.setTilt(requireContext(), value), null);
-		addNoteRow(R.string.chizu_car_tilt_note, 1);
-
-		// ===== Wi-Fi locator (+088) =====
-		addSection(R.string.chizu_section_wifi, accent);
-		View wifiSection = holder.getChildAt(holder.getChildCount() - 1);
-		addWifiRows();
-
-		// ===== Satellite receiver (+092) =====
-		addSection(R.string.chizu_section_gnss, accent);
-		View gnssSection = holder.getChildAt(holder.getChildCount() - 1);
-		addSwitchRow(R.string.chizu_gnss_finish, R.string.chizu_gnss_finish_descr, 1, ChizuFixService.isFinishOn(requireContext()),
-				checked -> ChizuFixService.setFinishOn(requireContext(), checked));
-		addSwitchRow(R.string.chizu_gnss_fresh, R.string.chizu_gnss_fresh_descr, 1, ChizuFixService.isFreshOn(requireContext()),
-				checked -> ChizuFixService.setFreshOn(requireContext(), checked));
-		String chizuSatAge = ChizuFix.lastSatAge(requireContext());
-		addNoteRow(getString(ChizuFixService.hasBackgroundLocation(requireContext()) ? R.string.chizu_gnss_permission_ok
-				: R.string.chizu_gnss_permission_missing) + (chizuSatAge == null ? "" : "\n" + getString(R.string.chizu_fix_last_sat, chizuSatAge)), 1);
-		addPillRow(getString(R.string.chizu_gnss_open_permissions), getString(R.string.chizu_gnss_open_permissions_descr), 1, false, true, v -> {
-			try {
-				startActivity(new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-						Uri.parse("package:" + requireContext().getPackageName())));
-			} catch (Exception e) {
-				Toast.makeText(requireContext(), String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+		reg(keys, content, labels, "exim", R.string.chizu_section_exim, () -> {
+			addEximDirRow(1);
+			addEximOpenRow(1);
+			addAutomationSwitchRow(1);
+			addAutomationRequireTokenRow(1);
+			if (ChizuAutomation.isTokenRequired(requireContext())) {
+				addAutomationTokenRow(1);
 			}
 		});
+		reg(keys, content, labels, "foundation", R.string.chizu_section_foundation, () -> {
+			addColorRow(ChizuTheme.Slot.BACKGROUND, 1);
+			addColorRow(ChizuTheme.Slot.CARD_BACKGROUND, 1);
+			addColorRow(ChizuTheme.Slot.TEXT, 1);
+			addColorRow(ChizuTheme.Slot.TEXT_SECONDARY, 1);
+			addColorRow(ChizuTheme.Slot.ACCENT, 1);
+			addColorRow(ChizuTheme.Slot.ICON, 1);
+			addColorRow(ChizuTheme.Slot.DIVIDER, 1);
+		});
+		reg(keys, content, labels, "fonts", R.string.chizu_section_fonts, () -> {
+			addSubgroup(R.string.chizu_subgroup_app_font, accent, 1);
+			addFontFamilyRow(2);
+			addFontWeightRow(2);
+			TextView fontSample = addSampleRow(2);
+			refreshFontSample(fontSample);
+			addSubgroup(R.string.chizu_subgroup_sizes, accent, 1);
+			addMapTextSizeRow(2);
+		});
+		reg(keys, content, labels, "topbar", R.string.chizu_section_top_bar, () ->
+				addColorRow(ChizuTheme.Slot.TOOLBAR_BACKGROUND, 1));
+		reg(keys, content, labels, "mapbuttons", R.string.chizu_section_map_buttons, () -> {
+			addSubgroup(R.string.chizu_subgroup_colors, accent, 1);
+			addColorRow(ChizuTheme.Slot.MAP_BUTTON_BACKGROUND, 2);
+			addColorRow(ChizuTheme.Slot.MAP_BUTTON_ICON, 2);
+			addSubgroup(R.string.chizu_subgroup_shape, accent, 1);
+			addMapButtonSliders(2);
+		});
+		reg(keys, content, labels, "car", R.string.chizu_section_car_screen, () -> {
+			addSliderRow(getString(R.string.chizu_car_tilt), 1, 10, 89, ChizuCarView.getTilt(requireContext()), "°",
+					(value, preview) -> ChizuCarView.setTilt(requireContext(), value), null);
+			addNoteRow(R.string.chizu_car_tilt_note, 1);
+		});
+		reg(keys, content, labels, "wifi", R.string.chizu_section_wifi, this::addWifiRows);
+		reg(keys, content, labels, "gnss", R.string.chizu_section_gnss, this::addGnssRows);
+		reg(keys, content, labels, "traffic", R.string.chizu_section_traffic, () -> {
+			addSwitchRow(R.string.chizu_traffic_enabled, R.string.chizu_traffic_enabled_descr, 1,
+					ChizuTrafficPrefs.isEnabled(requireContext()),
+					checked -> ChizuTrafficPrefs.setEnabled(requireContext(), checked));
+			addSwitchRow(R.string.chizu_traffic_chooser, R.string.chizu_traffic_chooser_descr, 1,
+					ChizuTrafficPrefs.isChooserEnabled(requireContext()),
+					checked -> ChizuTrafficPrefs.setChooserEnabled(requireContext(), checked));
+			addSliderRow(getString(R.string.chizu_traffic_interval), 1, 1, 15,
+					ChizuTrafficPrefs.getIntervalMinutes(requireContext()), " min",
+					(value, preview) -> ChizuTrafficPrefs.setIntervalMinutes(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_traffic_min_saving), 1, 1, 15,
+					ChizuTrafficPrefs.getMinSavingMinutes(requireContext()), " min",
+					(value, preview) -> ChizuTrafficPrefs.setMinSavingMinutes(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_traffic_long_yellow), 1, 100, 1000,
+					ChizuTrafficPrefs.getLongYellowMeters(requireContext()), " m",
+					(value, preview) -> ChizuTrafficPrefs.setLongYellowMeters(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_traffic_chosen_delay), 1, 1, 30,
+					ChizuTrafficPrefs.getChosenDelayMinutes(requireContext()), " min",
+					(value, preview) -> ChizuTrafficPrefs.setChosenDelayMinutes(requireContext(), value), null);
+			addNoteRow(getString(R.string.chizu_traffic_chosen_delay_descr), 1);
+			addSubgroup(R.string.chizu_subgroup_shimmer, accent, 1);
+			ChizuTrafficPrefs.Shimmer shimmer = ChizuTrafficPrefs.getShimmer(requireContext());
+			addSwitchRow(R.string.chizu_shimmer, R.string.chizu_shimmer_descr, 2, shimmer.on,
+					checked -> ChizuTrafficPrefs.setShimmerOn(requireContext(), checked));
+			addSliderRow(getString(R.string.chizu_shimmer_loop), 2, 1, 10, shimmer.loopSeconds, " s",
+					(value, preview) -> ChizuTrafficPrefs.setShimmerLoopSeconds(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_shimmer_band), 2, 0, 200, shimmer.bandPercent, "%",
+					(value, preview) -> ChizuTrafficPrefs.setShimmerBandPercent(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_shimmer_length), 2, 3, 50, shimmer.lengthPercent, "%",
+					(value, preview) -> ChizuTrafficPrefs.setShimmerLengthPercent(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_shimmer_sparkles), 2, 0, 300, shimmer.sparklesPercent, "%",
+					(value, preview) -> ChizuTrafficPrefs.setShimmerSparklesPercent(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_shimmer_sparkle_size), 2, 30, 300, shimmer.sparkleSizePercent, "%",
+					(value, preview) -> ChizuTrafficPrefs.setShimmerSparkleSizePercent(requireContext(), value), null);
+		});
+		reg(keys, content, labels, "speeds", R.string.chizu_section_speeds, () -> {
+			addSwitchRow(R.string.chizu_speeds_enabled, R.string.chizu_speeds_enabled_descr, 1,
+					ChizuSpeeds.isEnabled(requireContext()),
+					checked -> ChizuSpeeds.setEnabled(requireContext(), checked));
+			addSliderRow(getString(R.string.chizu_speeds_slowest), 1, 1, 50,
+					ChizuSpeeds.getSlowest(requireContext()), " km/h",
+					(value, preview) -> ChizuSpeeds.setSlowest(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_speeds_unknown), 1, 5, 130,
+					ChizuSpeeds.getUnknown(requireContext()), " km/h",
+					(value, preview) -> ChizuSpeeds.setUnknown(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_speeds_traffic_light), 1, 0, 90,
+					ChizuSpeeds.getTrafficLightSeconds(requireContext()), " s",
+					(value, preview) -> ChizuSpeeds.setTrafficLightSeconds(requireContext(), value), null);
+			addSliderRow(getString(R.string.chizu_speeds_turn), 1, 0, 60,
+					ChizuSpeeds.getTurnSeconds(requireContext()), " s",
+					(value, preview) -> ChizuSpeeds.setTurnSeconds(requireContext(), value), null);
+			addSwitchRow(R.string.chizu_speeds_eta_follows, R.string.chizu_speeds_eta_follows_descr, 1,
+					ChizuSpeeds.isEtaFollowsSpeed(requireContext()),
+					checked -> ChizuSpeeds.setEtaFollowsSpeed(requireContext(), checked));
+			addSliderRow(getString(R.string.chizu_speeds_eta_minutes), 1, 1, 60,
+					ChizuSpeeds.getEtaMinutes(requireContext()), " min",
+					(value, preview) -> ChizuSpeeds.setEtaMinutes(requireContext(), value), null);
+			addNoteRow(R.string.chizu_speeds_extra_note, 1);
+			addSpeedGroups(accent);
+		});
+		reg(keys, content, labels, "voice", R.string.chizu_section_voice, () ->
+				addSwitchRow(R.string.chizu_voice_prerender, R.string.chizu_voice_prerender_descr, 1,
+						net.osmand.plus.voice.ChizuVoice.isEnabled(requireContext()),
+						checked -> net.osmand.plus.voice.ChizuVoice.setEnabled(requireContext(), checked)));
+		reg(keys, content, labels, "diag", R.string.chizu_section_diagnostics, () -> addDiagRows(accent));
+		reg(keys, content, labels, "maint", R.string.chizu_section_maintenance, () -> {
+			addResetRow(1);
+			addPillRow(getString(R.string.chizu_reset_order), getString(R.string.chizu_reset_order_descr), 1, false, false, v -> {
+				ChizuPageState.resetOrder(requireContext());
+				buildRows();
+			});
+			addNoteRow(R.string.chizu_restart_note, 1);
+		});
 
-		// +095: the way to the system's Wi-Fi scan limit sits here, with the receiver (白い熊, 2026-11-19)
-		addPillRow(getString(ChizuWifiLocator.isScanLimited(requireContext()) ? R.string.chizu_wifi_scan_limit_on : R.string.chizu_wifi_scan_limit_off),
-				getString(R.string.chizu_wifi_scan_limit_descr), 1, false, true, v -> {
-					try {
-						startActivity(new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));
-					} catch (Exception e) {
-						Toast.makeText(requireContext(), R.string.chizu_wifi_no_developer_options, Toast.LENGTH_LONG).show();
-					}
-				});
-		// ===== Traffic (渋滞回避) =====
-		addSection(R.string.chizu_section_traffic, accent);
-		addSwitchRow(R.string.chizu_traffic_enabled, R.string.chizu_traffic_enabled_descr, 1,
-				ChizuTrafficPrefs.isEnabled(requireContext()),
-				checked -> ChizuTrafficPrefs.setEnabled(requireContext(), checked));
-		addSwitchRow(R.string.chizu_traffic_chooser, R.string.chizu_traffic_chooser_descr, 1,
-				ChizuTrafficPrefs.isChooserEnabled(requireContext()),
-				checked -> ChizuTrafficPrefs.setChooserEnabled(requireContext(), checked));
-		addSliderRow(getString(R.string.chizu_traffic_interval), 1, 1, 15,
-				ChizuTrafficPrefs.getIntervalMinutes(requireContext()), " min",
-				(value, preview) -> ChizuTrafficPrefs.setIntervalMinutes(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_traffic_min_saving), 1, 1, 15,
-				ChizuTrafficPrefs.getMinSavingMinutes(requireContext()), " min",
-				(value, preview) -> ChizuTrafficPrefs.setMinSavingMinutes(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_traffic_long_yellow), 1, 100, 1000,
-				ChizuTrafficPrefs.getLongYellowMeters(requireContext()), " m",
-				(value, preview) -> ChizuTrafficPrefs.setLongYellowMeters(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_traffic_chosen_delay), 1, 1, 30,
-				ChizuTrafficPrefs.getChosenDelayMinutes(requireContext()), " min",
-				(value, preview) -> ChizuTrafficPrefs.setChosenDelayMinutes(requireContext(), value), null);
-		addNoteRow(getString(R.string.chizu_traffic_chosen_delay_descr), 1);
-		addSubgroup(R.string.chizu_subgroup_shimmer, accent, 1);
-		ChizuTrafficPrefs.Shimmer shimmer = ChizuTrafficPrefs.getShimmer(requireContext());
-		addSwitchRow(R.string.chizu_shimmer, R.string.chizu_shimmer_descr, 2, shimmer.on,
-				checked -> ChizuTrafficPrefs.setShimmerOn(requireContext(), checked));
-		addSliderRow(getString(R.string.chizu_shimmer_loop), 2, 1, 10, shimmer.loopSeconds, " s",
-				(value, preview) -> ChizuTrafficPrefs.setShimmerLoopSeconds(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_shimmer_band), 2, 0, 200, shimmer.bandPercent, "%",
-				(value, preview) -> ChizuTrafficPrefs.setShimmerBandPercent(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_shimmer_length), 2, 3, 50, shimmer.lengthPercent, "%",
-				(value, preview) -> ChizuTrafficPrefs.setShimmerLengthPercent(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_shimmer_sparkles), 2, 0, 300, shimmer.sparklesPercent, "%",
-				(value, preview) -> ChizuTrafficPrefs.setShimmerSparklesPercent(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_shimmer_sparkle_size), 2, 30, 300, shimmer.sparkleSizePercent, "%",
-				(value, preview) -> ChizuTrafficPrefs.setShimmerSparkleSizePercent(requireContext(), value), null);
+		// 白い熊 地図 +103: the jump index under the app-settings pill, then the sections in the stored order
+		java.util.List<String> order = ChizuPageState.order(requireContext(), keys);
+		java.util.List<ChizuSectionIndex.Item> items = new java.util.ArrayList<>();
+		for (String k : order) {
+			items.add(new ChizuSectionIndex.Item(k, getString(labels.get(k))));
+		}
+		int dim = color(ChizuTheme.Slot.TEXT_SECONDARY);
+		View indexView = ChizuSectionIndex.build(requireContext(), items, accent, dim, new ChizuSectionIndex.Listener() {
+			@Override
+			public void onJump(@NonNull String key) {
+				jumpToSection(key);
+			}
 
-		// ===== My driving speeds =====
-		View speedsSection = null;
-		addSection(R.string.chizu_section_speeds, accent);
-		speedsSection = holder.getChildAt(holder.getChildCount() - 1);
-		addSwitchRow(R.string.chizu_speeds_enabled, R.string.chizu_speeds_enabled_descr, 1,
-				ChizuSpeeds.isEnabled(requireContext()),
-				checked -> ChizuSpeeds.setEnabled(requireContext(), checked));
-		// what the car profile's Travel speed screen set before, which is greyed out while this is on
-		addSliderRow(getString(R.string.chizu_speeds_slowest), 1, 1, 50,
-				ChizuSpeeds.getSlowest(requireContext()), " km/h",
-				(value, preview) -> ChizuSpeeds.setSlowest(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_speeds_unknown), 1, 5, 130,
-				ChizuSpeeds.getUnknown(requireContext()), " km/h",
-				(value, preview) -> ChizuSpeeds.setUnknown(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_speeds_traffic_light), 1, 0, 90,
-				ChizuSpeeds.getTrafficLightSeconds(requireContext()), " s",
-				(value, preview) -> ChizuSpeeds.setTrafficLightSeconds(requireContext(), value), null);
-		addSliderRow(getString(R.string.chizu_speeds_turn), 1, 0, 60,
-				ChizuSpeeds.getTurnSeconds(requireContext()), " s",
-				(value, preview) -> ChizuSpeeds.setTurnSeconds(requireContext(), value), null);
-		addSwitchRow(R.string.chizu_speeds_eta_follows, R.string.chizu_speeds_eta_follows_descr, 1,
-				ChizuSpeeds.isEtaFollowsSpeed(requireContext()),
-				checked -> ChizuSpeeds.setEtaFollowsSpeed(requireContext(), checked));
-		addSliderRow(getString(R.string.chizu_speeds_eta_minutes), 1, 1, 60,
-				ChizuSpeeds.getEtaMinutes(requireContext()), " min",
-				(value, preview) -> ChizuSpeeds.setEtaMinutes(requireContext(), value), null);
-		addNoteRow(R.string.chizu_speeds_extra_note, 1);
-		addSpeedGroups(accent);
+			@Override
+			public void onReordered(@NonNull java.util.List<String> newOrder) {
+				ChizuPageState.setOrder(requireContext(), newOrder);
+				buildRows();
+			}
+		});
+		LinearLayout indexWrap = new LinearLayout(requireContext());
+		indexWrap.setPadding(dp(SECTION_INSET_DP), dp(6), dp(BASE_INSET_DP), dp(2));
+		indexWrap.addView(indexView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+		holder.addView(indexWrap);
 
-		// ===== Voice =====
-		addSection(R.string.chizu_section_voice, accent);
-		addSwitchRow(R.string.chizu_voice_prerender, R.string.chizu_voice_prerender_descr, 1,
-				net.osmand.plus.voice.ChizuVoice.isEnabled(requireContext()),
-				checked -> net.osmand.plus.voice.ChizuVoice.setEnabled(requireContext(), checked));
+		for (String k : order) {
+			addSection(k, labels.get(k), accent);
+			Runnable r = content.get(k);
+			if (r != null) {
+				r.run();
+			}
+		}
+		body = holder;
 
-		// ===== Diagnostics =====
-		addSection(R.string.chizu_section_diagnostics, accent);
-		addDiagRows(accent);
-
-		// ===== Maintenance =====
-		addSection(R.string.chizu_section_maintenance, accent);
-		addResetRow(1);
-		addNoteRow(R.string.chizu_restart_note, 1);
-		if (speedsSection != null && getArguments() != null && getArguments().getBoolean(ARG_SPEEDS)) {
-			getArguments().remove(ARG_SPEEDS); // once: a later resume keeps the place 白い熊 scrolled to
-			View target = speedsSection;
-			View scroller = (View) holder.getParent();
-			holder.post(() -> scroller.scrollTo(0, target.getTop()));
+		String jump = null;
+		if (getArguments() != null && getArguments().getBoolean(ARG_SPEEDS)) {
+			getArguments().remove(ARG_SPEEDS);
+			jump = "speeds";
 		}
 		if (getArguments() != null && getArguments().getBoolean(ARG_GNSS)) {
 			getArguments().remove(ARG_GNSS);
-			View scroller = (View) holder.getParent();
-			holder.post(() -> scroller.scrollTo(0, gnssSection.getTop()));
+			jump = "gnss";
 		}
 		if (getArguments() != null && getArguments().getBoolean(ARG_WIFI)) {
 			getArguments().remove(ARG_WIFI);
-			View scroller = (View) holder.getParent();
-			holder.post(() -> scroller.scrollTo(0, wifiSection.getTop()));
+			jump = "wifi";
+		}
+		if (jump != null) {
+			final String jj = jump;
+			holder.post(() -> jumpToSection(jj));
 		}
 		ChizuDriveLog.log("ui page rows built in " + (System.currentTimeMillis() - chizuT0) + " ms");
 	}
@@ -340,37 +343,122 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		});
 	}
 
+	/** 白い熊 地図 +092/+103: the satellite receiver's switches, the last-fix age, and the way to the scan limit. */
+	private void addGnssRows() {
+		addSwitchRow(R.string.chizu_gnss_finish, R.string.chizu_gnss_finish_descr, 1, ChizuFixService.isFinishOn(requireContext()),
+				checked -> ChizuFixService.setFinishOn(requireContext(), checked));
+		addSwitchRow(R.string.chizu_gnss_fresh, R.string.chizu_gnss_fresh_descr, 1, ChizuFixService.isFreshOn(requireContext()),
+				checked -> ChizuFixService.setFreshOn(requireContext(), checked));
+		String chizuSatAge = ChizuFix.lastSatAge(requireContext());
+		addNoteRow(getString(ChizuFixService.hasBackgroundLocation(requireContext()) ? R.string.chizu_gnss_permission_ok
+				: R.string.chizu_gnss_permission_missing) + (chizuSatAge == null ? "" : "\n" + getString(R.string.chizu_fix_last_sat, chizuSatAge)), 1);
+		addPillRow(getString(R.string.chizu_gnss_open_permissions), getString(R.string.chizu_gnss_open_permissions_descr), 1, false, true, v -> {
+			try {
+				startActivity(new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+						Uri.parse("package:" + requireContext().getPackageName())));
+			} catch (Exception e) {
+				Toast.makeText(requireContext(), String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+			}
+		});
+		addPillRow(getString(ChizuWifiLocator.isScanLimited(requireContext()) ? R.string.chizu_wifi_scan_limit_on : R.string.chizu_wifi_scan_limit_off),
+				getString(R.string.chizu_wifi_scan_limit_descr), 1, false, true, v -> {
+					try {
+						startActivity(new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));
+					} catch (Exception e) {
+						Toast.makeText(requireContext(), R.string.chizu_wifi_no_developer_options, Toast.LENGTH_LONG).show();
+					}
+				});
+	}
+
 	// ---------- row builders ----------
 
 	// kxkb-style section header: a 1px full-width separator above every group but the
 	// first, then a big bold heading with a text-wide underline.
-	private void addSection(int labelRes, @ColorInt int accent) {
-		boolean first = holder.getChildCount() == 0;
-		LinearLayout section = new LinearLayout(requireContext());
-		section.setOrientation(LinearLayout.VERTICAL);
-		section.setPadding(0, first ? dp(12) : dp(10), 0, dp(2));
+	/** 白い熊 地図 +103: registers a section — a stable key, its heading, and a Runnable that fills its rows. */
+	private void reg(@NonNull java.util.List<String> keys, @NonNull java.util.Map<String, Runnable> content,
+			@NonNull java.util.Map<String, Integer> labels, @NonNull String key, int labelRes, @NonNull Runnable r) {
+		keys.add(key);
+		content.put(key, r);
+		labels.put(key, labelRes);
+	}
 
+	private void toggleSection(@NonNull String key) {
+		setSectionOpen(key, !ChizuPageState.isOpen(requireContext(), key));
+	}
+
+	private void setSectionOpen(@NonNull String key, boolean open) {
+		ChizuPageState.setOpen(requireContext(), key, open);
+		View inner = sectionBodies.get(key);
+		TextView chev = sectionChevrons.get(key);
+		if (inner != null) {
+			inner.setVisibility(open ? View.VISIBLE : View.GONE);
+		}
+		if (chev != null) {
+			chev.setText(open ? "⌄" : "›");
+		}
+	}
+
+	/** A tap on an index chip: unfold the section and scroll to it. */
+	private void jumpToSection(@NonNull String key) {
+		View wrap = sectionWrappers.get(key);
+		if (wrap == null) {
+			return;
+		}
+		setSectionOpen(key, true);
+		View scroller = (View) holder.getParent();
+		holder.post(() -> scroller.scrollTo(0, wrap.getTop()));
+	}
+
+	// 白い熊 地図 +103: a foldable section — the settled heading with a ›/⌄ at its right, the thin section
+	// divider kept above it whether folded or open, and its rows in an inner body that folds away.
+	private void addSection(@NonNull String key, int labelRes, @ColorInt int accent) {
+		boolean first = sectionCount == 0;
+		sectionCount++;
+
+		LinearLayout wrapper = new LinearLayout(requireContext());
+		wrapper.setOrientation(LinearLayout.VERTICAL);
+		wrapper.setPadding(0, first ? dp(12) : dp(10), 0, dp(2));
 		if (!first) {
 			View spacer = new View(requireContext());
 			spacer.setBackgroundColor(accent);
-			section.addView(spacer, new LinearLayout.LayoutParams(
-					ViewGroup.LayoutParams.MATCH_PARENT, 1));
+			wrapper.addView(spacer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
 		}
 
-		LinearLayout inner = new LinearLayout(requireContext());
-		inner.setOrientation(LinearLayout.VERTICAL);
-		inner.setPadding(dp(SECTION_INSET_DP), first ? 0 : dp(8), dp(BASE_INSET_DP), 0);
-
+		LinearLayout header = new LinearLayout(requireContext());
+		header.setOrientation(LinearLayout.HORIZONTAL);
+		header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+		header.setPadding(dp(SECTION_INSET_DP), first ? 0 : dp(8), dp(BASE_INSET_DP), 0);
+		LinearLayout labelCol = new LinearLayout(requireContext());
+		labelCol.setOrientation(LinearLayout.VERTICAL);
 		TextView label = new TextView(requireContext());
 		label.setText(labelRes);
 		label.setTextSize(20);
 		label.setTypeface(currentGlobalOrDefault(), Typeface.BOLD);
 		label.setTextColor(accent);
-		inner.addView(label);
-		inner.addView(textWideRule(label, accent, 2.5f));
+		labelCol.addView(label);
+		labelCol.addView(textWideRule(label, accent, 2.5f));
+		header.addView(labelCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+		TextView chev = new TextView(requireContext());
+		chev.setTextSize(20);
+		chev.setTextColor(accent);
+		chev.setPadding(dp(10), 0, dp(4), 0);
+		header.addView(chev);
+		header.setOnClickListener(v -> toggleSection(key));
+		wrapper.addView(header);
 
-		section.addView(inner);
-		holder.addView(section);
+		LinearLayout inner = new LinearLayout(requireContext());
+		inner.setOrientation(LinearLayout.VERTICAL);
+		wrapper.addView(inner);
+
+		boolean open = ChizuPageState.isOpen(requireContext(), key);
+		inner.setVisibility(open ? View.VISIBLE : View.GONE);
+		chev.setText(open ? "⌄" : "›");
+
+		holder.addView(wrapper);
+		sectionWrappers.put(key, wrapper);
+		sectionBodies.put(key, inner);
+		sectionChevrons.put(key, chev);
+		body = inner;
 	}
 
 	private void addSubgroup(int labelRes, @ColorInt int accent, int level) {
@@ -386,7 +474,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		sub.addView(label);
 		sub.addView(textWideRule(label, accent, 1.5f));
 
-		holder.addView(sub);
+		body.addView(sub);
 	}
 
 	/** An underline exactly as wide as the label's text. */
@@ -437,7 +525,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		applyGlobalFont(statusLine);
 		box.addView(statusLine);
 
-		holder.addView(box);
+		body.addView(box);
 	}
 
 	private void addEximOpenRow(int level) {
@@ -463,7 +551,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		row.addView(toggle);
 
 		row.setOnClickListener(v -> toggle.toggle());
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	// the automation gate lives with the backup rows it drives — 保存復元 contract, §2
@@ -483,7 +571,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		row.addView(toggle);
 
 		row.setOnClickListener(v -> toggle.toggle());
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	/**
@@ -510,7 +598,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		row.addView(toggle);
 
 		row.setOnClickListener(v -> toggle.toggle());
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	private void addAutomationTokenRow(int level) {
@@ -540,7 +628,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		row.addView(regenerate);
 
 		row.setOnClickListener(v -> copyToken(token));
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	private void copyToken(@NonNull String token) {
@@ -618,7 +706,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 						buildRows();
 					}
 				}));
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	private void addFontFamilyRow(int level) {
@@ -645,7 +733,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 						fontImportLauncher.launch(new String[] {"*/*"});
 					}
 				}));
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	private void addFontWeightRow(int level) {
@@ -676,7 +764,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 					.setNegativeButton(android.R.string.cancel, null)
 					.show());
 		});
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	private TextView addSampleRow(int level) {
@@ -684,7 +772,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		sample.setPadding(indent(level), dp(2), dp(BASE_INSET_DP), dp(6));
 		sample.setTextSize(18);
 		sample.setText(R.string.chizu_font_sample);
-		holder.addView(sample);
+		body.addView(sample);
 		return sample;
 	}
 
@@ -706,7 +794,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 					settings.TEXT_SCALE.set(value / 100f);
 					sample.setTextSize(14 * (value / 100f));
 				}, null);
-		holder.addView(sample);
+		body.addView(sample);
 	}
 
 	private void addMapButtonSliders(int level) {
@@ -810,7 +898,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			public void onStopTrackingTouch(SeekBar bar) {
 			}
 		});
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	/** One collapsible heading per road type, a slider per limit under it; 0 is OsmAnd's own speed. */
@@ -831,21 +919,23 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 				label.setTypeface(currentGlobalOrDefault(), Typeface.BOLD);
 				header.addView(label);
 				String title = group;
-				LinearLayout body = rows;
+				// +103: a local for the group's own collapsible container — must not be named "body" (that is the
+				// section's row target field; a blanket rename once made this add the container to itself)
+				LinearLayout groupRows = rows;
 				header.setOnClickListener(v -> {
 					// the sliders are made on first opening, so the page itself opens fast
-					java.util.List<ChizuSpeeds.Row> todo = pending.remove(body);
+					java.util.List<ChizuSpeeds.Row> todo = pending.remove(groupRows);
 					if (todo != null) {
 						for (ChizuSpeeds.Row row : todo) {
-							body.addView(speedRow(row));
+							groupRows.addView(speedRow(row));
 						}
 					}
-					boolean open = body.getVisibility() != View.VISIBLE;
-					body.setVisibility(open ? View.VISIBLE : View.GONE);
+					boolean open = groupRows.getVisibility() != View.VISIBLE;
+					groupRows.setVisibility(open ? View.VISIBLE : View.GONE);
 					label.setText((open ? "▾ " : "▸ ") + title);
 				});
-				holder.addView(header);
-				holder.addView(rows);
+				body.addView(header);
+				body.addView(rows);
 			}
 			pending.get(rows).add(r);
 		}
@@ -932,7 +1022,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		stored.setTextSize(12);
 		stored.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
 		stored.setPadding(indent(2), dp(6), dp(BASE_INSET_DP), 0);
-		holder.addView(stored);
+		body.addView(stored);
 		Context c = requireContext().getApplicationContext();
 		new Thread(() -> {
 			ChizuDiag.Summary s = ChizuDiag.summarize(c);
@@ -1016,7 +1106,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		if (descr != null && level > 0) {
 			ruled(row);
 		}
-		holder.addView(row);
+		body.addView(row);
 	}
 
 	/** The pill itself: 3 dp + bold for the main action, 1.25 dp + normal otherwise; never filled. */
@@ -1168,7 +1258,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		note.setTextSize(12);
 		note.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
 		note.setPadding(indent(level), dp(6), dp(BASE_INSET_DP), 0);
-		holder.addView(note);
+		body.addView(note);
 	}
 
 	// ---------- helpers ----------

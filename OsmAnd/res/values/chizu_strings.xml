@@ -279,4 +279,6 @@
 	<string name="chizu_gnss_refresh_fresh">Refreshing the satellite orbits…</string>
 	<string name="chizu_fix_sat_beside">SAT %1$d set aside</string>
 	<string name="chizu_gnss_menu_settings">Satellite receiver settings</string>
+	<string name="chizu_reset_order">Reset section order</string>
+	<string name="chizu_reset_order_descr">Put the sections back in the built-in order.</string>
 </resources>

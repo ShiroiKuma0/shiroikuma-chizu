@@ -59,4 +59,6 @@
 	<string name="chizu_gnss_refresh_fresh">衛星の軌道情報を更新しています…</string>
 	<string name="chizu_fix_sat_beside">衛星 %1$d は保留</string>
 	<string name="chizu_gnss_menu_settings">衛星受信機の設定</string>
+	<string name="chizu_reset_order">セクションの順序をリセット</string>
+	<string name="chizu_reset_order_descr">セクションを元の順序に戻します。</string>
 </resources>
