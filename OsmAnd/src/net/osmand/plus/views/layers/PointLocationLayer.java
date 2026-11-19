@@ -111,6 +111,7 @@ public class PointLocationLayer extends OsmandMapLayer
 	private final Model3dHelper model3dHelper;
 	private boolean nighMode;
 	private boolean locationOutdated;
+	private boolean chizuRing; // 白い熊 地図 +084: the marker is the hollow ring (a network position, or none current)
 	private Location prevLocation;
 
 	private static final int MARKER_ID_MY_LOCATION = 1;
@@ -600,7 +601,7 @@ public class PointLocationLayer extends OsmandMapLayer
 
 	@Nullable
 	private Float getBearingToShow(@Nullable Location location) {
-		if (!locationOutdated && location != null) {
+		if (!locationOutdated && !chizuRing && location != null) {
 			// Issue 5538: Some devices return positives for hasBearing() at rest, hence add 0.0 check:
 			boolean hasBearing = location.hasBearing() && location.getBearing() != 0.0f;
 			boolean bearingValid = hasBearing || isUseRouting() && lastBearingCached != null;
@@ -737,12 +738,64 @@ public class PointLocationLayer extends OsmandMapLayer
 	@Override
 	public void onDraw(Canvas canvas, RotatedTileBox tileBox, DrawSettings settings) {
 		Location lastKnownLocation = locationProvider.getLastStaleKnownLocation();
+		chizuDrawFixPill(canvas, tileBox, lastKnownLocation); // 白い熊 地図 +084
 		if (view == null || (!hasMapRenderer() && tileBox.getZoom() < MIN_ZOOM) || lastKnownLocation == null) {
 			return;
 		}
 		if (!hasMapRenderer()) {
 			drawMarkers(canvas, tileBox, lastKnownLocation);
 		}
+	}
+
+	/** 白い熊 地図 +084: the pill that names the kind of position, see ChizuFix. */
+	private void chizuDrawFixPill(@NonNull Canvas canvas, @NonNull RotatedTileBox tileBox, @Nullable Location location) {
+		if (view == null || view.isCarView()) {
+			return; // +085: on the car screen the pill sits by the speed box, drawn by the car screen itself
+		}
+		// +086: under the right info panel, as wide as it; with no panel shown, the same place by the right edge
+		float d = getApplication().getResources().getDisplayMetrics().density;
+		float width = 120 * d;
+		float left = tileBox.getPixWidth() - width - 4 * d;
+		float top = tileBox.getPixHeight() * 0.12f;
+		try {
+			MapActivity activity = getMapActivity();
+			android.view.View panel = activity == null ? null : activity.findViewById(R.id.map_right_widgets_panel);
+			android.view.View map = activity == null ? null : activity.findViewById(R.id.MapLayersView);
+			if (panel != null && map != null && panel.getVisibility() == android.view.View.VISIBLE && panel.getWidth() > 0
+					&& panel.getHeight() > 0) {
+				int[] p = new int[2];
+				int[] m = new int[2];
+				panel.getLocationInWindow(p);
+				map.getLocationInWindow(m);
+				width = panel.getWidth();
+				left = p[0] - m[0];
+				top = p[1] - m[1] + panel.getHeight() + 4 * d;
+			}
+		} catch (Exception e) {
+			// the views are being rebuilt: the place by the right edge
+		}
+		canvas.save();
+		canvas.rotate(-tileBox.getRotate(), tileBox.getCenterPixelX(), tileBox.getCenterPixelY());
+		try {
+			// +088: what the Wi-Fi locator has learned, and the crosshair while it is being taught
+			net.osmand.plus.chizu.ChizuWifiLocator.drawCoverage(getApplication(), canvas, tileBox, getMapRenderer());
+			net.osmand.plus.chizu.ChizuWifiTeach.drawCrosshair(getApplication(), canvas, tileBox, getMapRenderer());
+			net.osmand.plus.chizu.ChizuFix.draw(getApplication(), canvas, left, top, width);
+		} finally {
+			canvas.restore();
+		}
+	}
+
+	@Override
+	public boolean onSingleTap(@NonNull android.graphics.PointF point, @NonNull RotatedTileBox tileBox) {
+		return net.osmand.plus.chizu.ChizuFix.onTap(getApplication(), getMapActivity(), point.x, point.y)
+				|| super.onSingleTap(point, tileBox);
+	}
+
+	@Override
+	public boolean onLongPressEvent(@NonNull android.graphics.PointF point, @NonNull RotatedTileBox tileBox) {
+		return net.osmand.plus.chizu.ChizuFix.onLongPress(getMapActivity(), point.x, point.y)
+				|| super.onLongPressEvent(point, tileBox);
 	}
 
 	@Override
@@ -815,6 +868,9 @@ public class PointLocationLayer extends OsmandMapLayer
 	private void setLocationModel() {
 		String modelName = locationIconName;
 		locationModel = model3dHelper.getModel(modelName, model -> {
+			if (chizuRing) {
+				return true; // 白い熊 地図 +084: the ring is shown meanwhile, the model is fetched again when it is wanted
+			}
 			locationModel = model;
 			if (locationModel != null) {
 				locationModel.setMainColor(NativeUtilities.createFColorARGB(profileColor));
@@ -839,6 +895,9 @@ public class PointLocationLayer extends OsmandMapLayer
 		String navigationIconName = getNavigationIconName(appMode);
 		float textScale = getTextScale();
 		boolean carView = getApplication().getOsmandMap().getMapView().isCarView();
+		// 白い熊 地図 +084: a network position, or none current, is the hollow ring
+		net.osmand.plus.chizu.ChizuFix.Kind chizuKind = net.osmand.plus.chizu.ChizuFix.kind(getApplication());
+		boolean chizuRing = net.osmand.plus.chizu.ChizuFix.ring(chizuKind);
 		boolean locationIconChanged = !locationIconName.equals(this.locationIconName);
 		boolean navigationIconChanged = !navigationIconName.equals(this.navigationIconName);
 		if (appMode != this.appMode || this.nighMode != nighMode || this.locationOutdated != locationOutdated
@@ -846,6 +905,7 @@ public class PointLocationLayer extends OsmandMapLayer
 				|| locationIconChanged
 				|| navigationIconChanged
 				|| this.textScale != textScale
+				|| this.chizuRing != chizuRing
 				|| this.carView != carView) {
 			this.appMode = appMode;
 			this.profileColor = profileColor;
@@ -855,6 +915,7 @@ public class PointLocationLayer extends OsmandMapLayer
 			this.navigationIconName = navigationIconName;
 			this.textScale = textScale;
 			this.carView = carView;
+			this.chizuRing = chizuRing;
 
 			if (LocationIcon.isModel(navigationIconName)) {
 				navigationModel = model3dHelper.getModel(navigationIconName, model -> {
@@ -864,7 +925,7 @@ public class PointLocationLayer extends OsmandMapLayer
 					}
 					brokenNavigationModelName = model == null ? navigationIconName : null;
 					markersInvalidated = true;
-					if (LocationIcon.isModel(locationIconName)) {
+					if (LocationIcon.isModel(locationIconName) && !this.chizuRing) {
 						setLocationModel();
 					}
 					return true;
@@ -887,7 +948,10 @@ public class PointLocationLayer extends OsmandMapLayer
 			}
 
 			LocationIcon locationIconType = LocationIcon.fromName(locationIconName, true);
-			if (LocationIcon.isModel(locationIconName)) {
+			if (chizuRing) {
+				locationIcon = net.osmand.plus.chizu.ChizuFix.ringIcon(getApplication(), profileColor);
+				locationModel = null;
+			} else if (LocationIcon.isModel(locationIconName)) {
 				if (!LocationIcon.isModel(navigationIconName) || navigationModel != null) {
 					setLocationModel();
 				}

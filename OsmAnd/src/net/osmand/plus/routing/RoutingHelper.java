@@ -125,6 +125,51 @@ public class RoutingHelper {
 
 	void setRoute(RouteCalculationResult route) {
 		this.route = route;
+		chizuResetRouteState(); // 白い熊 地図 +078
+	}
+
+	// ---------- 白い熊 地図 +078: leaving the route, judged once and shown the same way everywhere ----------
+
+	private int chizuWrongDirCount; // fixes in a row moving against the route beyond the allowed deviation
+	private int chizuOnCount; // fixes in a row back on the route
+	private volatile boolean chizuStale;
+	private volatile Location chizuDrawProjection;
+	private volatile int chizuDrawIndex;
+	private volatile RouteCalculationResult chizuDrawRoute;
+
+	private void chizuResetRouteState() {
+		chizuOffCount = 0;
+		chizuWrongDirCount = 0;
+		chizuOnCount = 0;
+		chizuStale = false;
+		chizuDrawRoute = null;
+		chizuDrawProjection = null;
+	}
+
+	/**
+	 * 白い熊 地図 +078: the car has left the route and the route in place is the old one — its turns, lanes and
+	 * distances mean nothing until the new route is set (白い熊, 2026-11-16: “showing old turn directions after
+	 * I've left the route and they are nonsensical now”). Set on the fix that judges the car off the route (three
+	 * fixes in a row, so a stray fix cannot set it), cleared by a new route or by three fixes back on this one.
+	 */
+	public boolean chizuGuidanceStale() {
+		return chizuStale && isFollowingMode;
+	}
+
+	/**
+	 * 白い熊 地図 +078: where the drawn route line starts. While the car is off the route the line stays as it was
+	 * when the car left it: trimmed by the live position it shrank away from the car at the car's own speed, and
+	 * no route at all was to be seen while the new one was calculated.
+	 *
+	 * @return the held position on the route, or null when the live one is to be used
+	 */
+	@Nullable
+	public Location chizuHeldDrawProjection(@NonNull RouteCalculationResult drawn) {
+		return chizuStale && chizuDrawRoute == drawn ? chizuDrawProjection : null;
+	}
+
+	public int chizuHeldDrawIndex() {
+		return chizuDrawIndex;
 	}
 
 	long getDeviateFromRouteDetected() {
@@ -254,6 +299,7 @@ public class RoutingHelper {
 		app.logRoutingEvent("clearCurrentRoute newFinalLocation " + newFinalLocation + " newIntermediatePoints " + newIntermediatePoints);
 		routeWasFinished = false; // Prevent stale "arrived" state from leaking into the next navigation session
 		route = new RouteCalculationResult("");
+		chizuResetRouteState(); // 白い熊 地図 +078
 		isDeviatedFromRoute = false;
 		routeRecalculationHelper.resetEvalWaitInterval();
 		routeRecalculationHelper.onRouteCleared();
@@ -450,6 +496,7 @@ public class RoutingHelper {
 		float posTolerance = getPosTolerance(currentLocation.hasAccuracy() ? currentLocation.getAccuracy() : 0);
 		boolean calculateRoute = false;
 		boolean deviationChanged;
+		boolean chizuStaleChanged = false;
 		synchronized (this) {
 			boolean wasDeviatedFromRoute = isDeviatedFromRoute;
 			isDeviatedFromRoute = false;
@@ -482,7 +529,12 @@ public class RoutingHelper {
 				// >100m off current route (sideways) or parameter (for Straight line)
 				if (allowableDeviation > 0) {
 					if (currentRoute == 0) {
-						distOrth = currentLocation.distanceTo(routeNodes.get(currentRoute)); // deviation at the start
+						// 白い熊 地図 +078: at the start too the deviation is the distance to the route's line, not to
+						// its first point — a route that began where its calculation started was 50 m "off" as soon as
+						// the car was 50 m down it, and was calculated again every 2 s (2026-11-16, 100 routes in 56 min)
+						distOrth = routeNodes.size() > 1
+								? RoutingHelperUtils.getOrthogonalDistance(currentLocation, routeNodes.get(0), routeNodes.get(1))
+								: currentLocation.distanceTo(routeNodes.get(currentRoute));
 					} else {
 						distOrth = RoutingHelperUtils.getOrthogonalDistance(currentLocation, routeNodes.get(currentRoute - 1), routeNodes.get(currentRoute));
 					}
@@ -503,13 +555,37 @@ public class RoutingHelper {
 				Location prev = route.getRouteLocationByDistance(-15);//-15 meters
 				boolean isStraight =
 						route.getRouteService() == RouteService.DIRECT_TO || route.getRouteService() == RouteService.STRAIGHT;
+				// 白い熊 地図 +078: with no route point 15 m back (the first metres of a route) the direction is that of
+				// the segment the car is on. Stock took the bearing to the next point instead — a point the car has
+				// just passed at the start of a fresh route — and called every such fix "wrong direction".
+				if (prev == null && routeNodes.size() > 1) {
+					int seg = Math.max(1, Math.min(currentRoute, routeNodes.size() - 1));
+					prev = routeNodes.get(seg - 1);
+					next = routeNodes.get(seg);
+				}
 				boolean wrongMovementDirection = RoutingHelperUtils.checkWrongMovementDirection(currentLocation, prev, next);
 				if ((allowableDeviation > 0 && wrongMovementDirection && !isStraight
-						&& (currentLocation.distanceTo(routeNodes.get(currentRoute)) > allowableDeviation)) && !settings.DISABLE_WRONG_DIRECTION_RECALC.get()) {
-					log.info("Recalculate route, because wrong movement direction: " + currentLocation.distanceTo(routeNodes.get(currentRoute))); //$NON-NLS-1$
-					isDeviatedFromRoute = true;
-					calculateRoute = true;
+						&& (currentLocation.distanceTo(routeNodes.get(currentRoute)) > allowableDeviation)) && !settings.DISABLE_WRONG_DIRECTION_RECALC.get()
+						&& currentLocation.hasSpeed() && currentLocation.getSpeed() >= RouteProvider.CHIZU_HEADING_MIN_SPEED) {
+					// +078: three fixes in a row, as for the sideways deviation — one fix did it until now
+					chizuWrongDirCount++;
+					if (chizuWrongDirCount >= 3) {
+						log.info("Recalculate route, because wrong movement direction: " + currentLocation.distanceTo(routeNodes.get(currentRoute))); //$NON-NLS-1$
+						isDeviatedFromRoute = true;
+						calculateRoute = true;
+					}
+				} else {
+					chizuWrongDirCount = 0;
 				}
+				// +078: the route in place is the old one from here on, until a new one is set or the car is back
+				boolean chizuStaleBefore = chizuStale;
+				if (isFollowingMode && (chizuOffCount >= 3 || chizuWrongDirCount >= 3)) {
+					chizuStale = true;
+					chizuOnCount = 0;
+				} else if (chizuStale && chizuOffCount == 0 && chizuWrongDirCount == 0 && ++chizuOnCount >= 3) {
+					chizuStale = false;
+				}
+				chizuStaleChanged = chizuStaleBefore != chizuStale;
 				// 4. Identify if UTurn is needed
 				boolean chizuUTurn = RoutingHelperUtils.identifyUTurnIsNeeded(this, currentLocation, posTolerance);
 				if (chizuUTurn) {
@@ -525,7 +601,7 @@ public class RoutingHelper {
 				// Do not update in route planning mode
 				boolean inRecalc = (calculateRoute || isRouteBeingCalculated());
 				if (isFollowingMode) {
-					if (!inRecalc && !wrongMovementDirection) {
+					if (!inRecalc && !wrongMovementDirection && chizuOffCount == 0 && !chizuStale) { // +078: no old turn spoken off the route
 						voiceRouter.updateStatus(currentLocation, false);
 						voiceRouterStopped = false;
 					} else if (isDeviatedFromRoute && !voiceRouterStopped) {
@@ -549,11 +625,20 @@ public class RoutingHelper {
 							isRouteBeingCalculated()));
 				}
 				// calculate projection of current location
-				if (currentRoute > 0 && !inRecalc) {
+				// 白い熊 地図 +078: the position stays on the route while a calculation runs, as long as the car is not
+				// judged off it — and on the route's first segment too. Until now every calculation (397 s of them
+				// on 2026-11-16) and every first segment drew the raw fix: beside the road, in the other carriageway.
+				if (routeNodes.size() > 1 && (!inRecalc || (!isDeviatedFromRoute && !calculateRoute && !chizuStale))) {
+					currentRoute = Math.max(1, currentRoute);
 					Location previousRouteLocation = routeNodes.get(currentRoute - 1);
 					Location currentRouteLocation = routeNodes.get(currentRoute);
 					locationProjection = RoutingHelperUtils.getProject(currentLocation, previousRouteLocation,
 							currentRouteLocation);
+					if (!chizuStale) {
+						chizuDrawProjection = locationProjection;
+						chizuDrawIndex = route.getCurrentStraightAngleRoute();
+						chizuDrawRoute = route;
+					}
 					if (settings.SNAP_TO_ROAD.get() && currentRoute + 1 < routeNodes.size()) {
 						boolean previewNextTurn = settings.PREVIEW_NEXT_TURN.get();
 						Location nextRouteLocation = routeNodes.get(currentRoute + 1);
@@ -571,12 +656,15 @@ public class RoutingHelper {
 			deviationChanged = wasDeviatedFromRoute != isDeviatedFromRoute;
 		}
 		// route point events above fire while the flag is reset, so repeat the update while off route
-		if (deviationChanged || isDeviatedFromRoute) {
+		if (deviationChanged || isDeviatedFromRoute || chizuStaleChanged) {
 			fireRoutingDataUpdateEvent();
 		}
 
 		if (calculateRoute) {
-			routeRecalculationHelper.recalculateRouteInBackground(currentLocation, finalLocation, intermediatePoints, currentGPXRoute,
+			// 白い熊 地図 +078: the new route starts on the road the car is on, not at the bare fix — between a
+			// motorway and its exit ramp the search took the motorway each time, and each route was left at once
+			Location chizuStart = app.getLocationProvider().chizuRouteStart(currentLocation);
+			routeRecalculationHelper.recalculateRouteInBackground(chizuStart, finalLocation, intermediatePoints, currentGPXRoute,
 					previousRoute.isCalculated() ? previousRoute : null, false, !targetPointsChanged);
 		} else {
 			routeRecalculationHelper.stopCalculationIfParamsNotChanged();
@@ -941,6 +1029,12 @@ public class RoutingHelper {
 	@Nullable
 	public List<RouteSegmentResult> getChizuTunnelChain(float distToStart, float maxGap, float maxLength) {
 		return route.getChizuTunnelChain(distToStart, maxGap, maxLength);
+	}
+
+	/** 白い熊 地図 +078: the route ahead, to estimate the position along when the fixes stop; null off the route. */
+	@Nullable
+	public List<RouteSegmentResult> getChizuAheadChain(float maxLength) {
+		return chizuStale || isDeviatedFromRoute || route.isEmpty() ? null : route.getChizuAheadChain(maxLength);
 	}
 
 	public synchronized NextDirectionInfo getNextRouteDirectionInfoAfter(NextDirectionInfo previous, NextDirectionInfo to, boolean toSpeak) {

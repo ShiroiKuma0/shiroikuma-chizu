@@ -102,7 +102,10 @@ public class TripHelper {
 		TurnType turnType = null;
 		TurnType nextTurnType = null;
 		boolean leftSide = app.getSettings().DRIVING_REGION.get().leftHandDriving;
-		boolean deviatedFromRoute = routingHelper.isDeviatedFromRoute();
+		// 白い熊 地図 +078: off the route for good (three fixes running) counts as deviated on every fix, not only
+		// on the fixes the check happens to flag — no turn, lanes or road of the old route in between
+		boolean chizuStale = routingHelper.chizuGuidanceStale();
+		boolean deviatedFromRoute = routingHelper.isDeviatedFromRoute() || chizuStale;
 		int turnImminent = 0;
 		int nextTurnDistance = 0;
 		NextDirectionInfo nextDirInfo = null;
@@ -143,7 +146,7 @@ public class TripHelper {
 		stepBuilder.setManeuver(maneuver);
 		stepBuilder.setCue(TripUtils.getNextTurnDescription(app, nextDirInfo, turnType, nextTurnType));
 
-		nextDirInfo = routingHelper.getNextRouteDirectionInfo(calc, false);
+		nextDirInfo = chizuStale ? null : routingHelper.getNextRouteDirectionInfo(calc, false);
 		if (nextDirInfo != null && nextDirInfo.directionInfo != null && nextDirInfo.directionInfo.getTurnType() != null) {
 			int[] lanes = nextDirInfo.directionInfo.getTurnType().getLanes();
 			int locimminent = nextDirInfo.imminent;

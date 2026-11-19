@@ -34,6 +34,11 @@ public final class ChizuGnssLog {
 	private static long lastSkyMs;
 	private static int lastSkyUsed = -1;
 	private static volatile long lastFixMs;
+	// +082: how many satellites the receiver holds an orbit (ephemeris) and an almanac entry for, and hears
+	private static volatile int eph = -1;
+	private static volatile int alm;
+	private static volatile int heard;
+	private static volatile int strong; // +092: at 27 dB-Hz and more, strong enough to read an orbit from
 
 	private ChizuGnssLog() {
 	}
@@ -57,13 +62,30 @@ public final class ChizuGnssLog {
 	public static void onStatus(@NonNull GnssStatus status) {
 		int n = status.getSatelliteCount();
 		int u = 0;
+		int e = 0, a = 0, h = 0, st = 0;
 		float[] cn0 = new float[n];
 		for (int i = 0; i < n; i++) {
 			if (status.usedInFix(i)) {
 				u++;
 			}
 			cn0[i] = status.getCn0DbHz(i);
+			if (status.hasEphemerisData(i)) {
+				e++;
+			}
+			if (status.hasAlmanacData(i)) {
+				a++;
+			}
+			if (cn0[i] > 0) {
+				h++;
+			}
+			if (cn0[i] >= 27f) {
+				st++;
+			}
 		}
+		strong = st;
+		eph = e;
+		alm = a;
+		heard = h;
 		Arrays.sort(cn0);
 		float sum = 0;
 		int k = 0;
@@ -88,7 +110,7 @@ public final class ChizuGnssLog {
 		for (int i = 0; i < n; i++) {
 			order[i] = i;
 		}
-		Arrays.sort(order, (a, b) -> Float.compare(status.getElevationDegrees(a), status.getElevationDegrees(b)));
+		Arrays.sort(order, (p, q) -> Float.compare(status.getElevationDegrees(p), status.getElevationDegrees(q)));
 		StringBuilder sb = new StringBuilder(64 + n * 20);
 		sb.append(String.format(Locale.US, "gnss sky used=%d/%d top4=%.1f", u, n, top4));
 		int low = 0, lowUsed = 0;
@@ -101,7 +123,8 @@ public final class ChizuGnssLog {
 				}
 			}
 		}
-		sb.append(" below30=").append(lowUsed).append('/').append(low).append(" |");
+		sb.append(" below30=").append(lowUsed).append('/').append(low)
+				.append(" eph=").append(eph).append(" alm=").append(alm).append(" heard=").append(heard).append(" |");
 		for (Integer i : order) {
 			sb.append(' ').append(system(status.getConstellationType(i))).append(status.getSvid(i))
 					.append(String.format(Locale.US, ":e%.0f/a%.0f/%.0f", status.getElevationDegrees(i),
@@ -114,6 +137,45 @@ public final class ChizuGnssLog {
 			}
 		}
 		ChizuDriveLog.log(sb.toString());
+	}
+
+	/** +082: the receiver has a position — it uses four satellites or more, by a status not older than {@code ms}. */
+	public static boolean fixWithin(long ms) {
+		return used >= 4 && SystemClock.elapsedRealtime() - lastStatusMs <= ms;
+	}
+
+	public static boolean statusWithin(long ms) {
+		return lastStatusMs != 0 && SystemClock.elapsedRealtime() - lastStatusMs <= ms;
+	}
+
+	/** Satellites heard at 27 dB-Hz and more, by a status not older than 5 s; else 0. */
+	public static int strongCount() {
+		return statusWithin(5000) ? strong : 0;
+	}
+
+	public static int usedCount() {
+		return used;
+	}
+
+	public static int heardCount() {
+		return heard;
+	}
+
+	public static float top4() {
+		return top4;
+	}
+
+	public static int ephemerides() {
+		return eph;
+	}
+
+	/** +082: what the receiver holds and hears, for the log and the messages. */
+	@NonNull
+	public static String orbits() {
+		if (eph < 0 || SystemClock.elapsedRealtime() - lastStatusMs > 15_000) {
+			return "receiver silent";
+		}
+		return String.format(Locale.US, "orbits for %d of %d satellites, %d heard, %d used", eph, inView, heard, used);
 	}
 
 	/**

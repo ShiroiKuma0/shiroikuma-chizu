@@ -77,9 +77,27 @@ public final class ChizuTrafficPrefs {
 		prefs(context).edit().putInt(INTERVAL_MIN, minutes).apply();
 	}
 
+	/**
+	 * +078: 3 minutes by default (was 1), and a stored 1 or 2 is lifted to 3 once — on 2026-11-16 about thirty
+	 * swaps were taken in 56 minutes, some for 61 s and 102 s of claimed gain (白い熊: “this cannot be without a
+	 * significant time gain”). The slider still goes down to 1 afterwards.
+	 */
 	public static int getMinSavingMinutes(@NonNull Context context) {
-		return Math.max(0, prefs(context).getInt(MIN_SAVING_MIN, 1));
+		android.content.SharedPreferences p = prefs(context);
+		if (!p.getBoolean(MIN_SAVING_MIN + "_v2", false)) {
+			android.content.SharedPreferences.Editor e = p.edit().putBoolean(MIN_SAVING_MIN + "_v2", true);
+			if (p.getInt(MIN_SAVING_MIN, DEFAULT_MIN_SAVING_MIN) < DEFAULT_MIN_SAVING_MIN) {
+				e.putInt(MIN_SAVING_MIN, DEFAULT_MIN_SAVING_MIN);
+			}
+			e.apply();
+			return Math.max(DEFAULT_MIN_SAVING_MIN, p.getInt(MIN_SAVING_MIN, DEFAULT_MIN_SAVING_MIN));
+		}
+		return Math.max(0, p.getInt(MIN_SAVING_MIN, DEFAULT_MIN_SAVING_MIN));
 	}
+
+	private static final int DEFAULT_MIN_SAVING_MIN = 3;
+	/** +078: …and at least this share of the time left on the current route. */
+	public static final float MIN_SAVING_SHARE = 0.10f;
 
 	public static void setMinSavingMinutes(@NonNull Context context, int minutes) {
 		prefs(context).edit().putInt(MIN_SAVING_MIN, minutes).apply();

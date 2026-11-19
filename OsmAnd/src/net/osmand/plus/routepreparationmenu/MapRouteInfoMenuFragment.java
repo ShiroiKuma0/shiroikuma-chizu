@@ -307,6 +307,8 @@ public class MapRouteInfoMenuFragment extends ContextMenuFragment
 
 		RoutingHelper rh = app.getRoutingHelper();
 		if (rh.isRoutePlanningMode()) {
+			// 白い熊 地図 +076: the routes are shown flat and north-up, as on the car's route preview
+			net.osmand.plus.chizu.ChizuRoutePreview.enter(mapActivity);
 			QuadRect r = menu.getRouteRect(mapActivity);
 			RotatedTileBox tb = mapActivity.getMapView().getRotatedTileBox();
 			int tileBoxWidthPx = 0;

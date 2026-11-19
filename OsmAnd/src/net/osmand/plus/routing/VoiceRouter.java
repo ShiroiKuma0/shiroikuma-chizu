@@ -1024,6 +1024,13 @@ public class VoiceRouter {
 		nextRouteDirection = null;
 	}
 
+	/** 白い熊 地図 +078: a route was put in place without a word — the prompts start afresh on it all the same. */
+	public void chizuRouteReplacedSilently() {
+		currentStatus = STATUS_UNKNOWN;
+		suppressDest = false;
+		nextRouteDirection = null;
+	}
+
 	/**
 	 * 白い熊 地図: the traffic check switched to a faster route; says so, with the time it saves.
 	 * Spoken whether or not reroutes are announced, since nobody asked for this one. TTS voices only.

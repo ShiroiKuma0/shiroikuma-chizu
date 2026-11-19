@@ -47,6 +47,8 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 
 	public static final String TAG = ChizuUiFragment.class.getName();
 	private static final String ARG_SPEEDS = "speeds";
+	private static final String ARG_WIFI = "wifi";
+	private static final String ARG_GNSS = "gnss";
 
 	// kxkb indent ladder: section heading 36, its rows 72, sub-heading 54, sub-rows 90
 	private static final int SECTION_INSET_DP = 36;
@@ -184,6 +186,39 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 				(value, preview) -> ChizuCarView.setTilt(requireContext(), value), null);
 		addNoteRow(R.string.chizu_car_tilt_note, 1);
 
+		// ===== Wi-Fi locator (+088) =====
+		addSection(R.string.chizu_section_wifi, accent);
+		View wifiSection = holder.getChildAt(holder.getChildCount() - 1);
+		addWifiRows();
+
+		// ===== Satellite receiver (+092) =====
+		addSection(R.string.chizu_section_gnss, accent);
+		View gnssSection = holder.getChildAt(holder.getChildCount() - 1);
+		addSwitchRow(R.string.chizu_gnss_finish, R.string.chizu_gnss_finish_descr, 1, ChizuFixService.isFinishOn(requireContext()),
+				checked -> ChizuFixService.setFinishOn(requireContext(), checked));
+		addSwitchRow(R.string.chizu_gnss_fresh, R.string.chizu_gnss_fresh_descr, 1, ChizuFixService.isFreshOn(requireContext()),
+				checked -> ChizuFixService.setFreshOn(requireContext(), checked));
+		String chizuSatAge = ChizuFix.lastSatAge(requireContext());
+		addNoteRow(getString(ChizuFixService.hasBackgroundLocation(requireContext()) ? R.string.chizu_gnss_permission_ok
+				: R.string.chizu_gnss_permission_missing) + (chizuSatAge == null ? "" : "\n" + getString(R.string.chizu_fix_last_sat, chizuSatAge)), 1);
+		addPillRow(getString(R.string.chizu_gnss_open_permissions), getString(R.string.chizu_gnss_open_permissions_descr), 1, false, true, v -> {
+			try {
+				startActivity(new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+						Uri.parse("package:" + requireContext().getPackageName())));
+			} catch (Exception e) {
+				Toast.makeText(requireContext(), String.valueOf(e.getMessage()), Toast.LENGTH_LONG).show();
+			}
+		});
+
+		// +095: the way to the system's Wi-Fi scan limit sits here, with the receiver (白い熊, 2026-11-19)
+		addPillRow(getString(ChizuWifiLocator.isScanLimited(requireContext()) ? R.string.chizu_wifi_scan_limit_on : R.string.chizu_wifi_scan_limit_off),
+				getString(R.string.chizu_wifi_scan_limit_descr), 1, false, true, v -> {
+					try {
+						startActivity(new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));
+					} catch (Exception e) {
+						Toast.makeText(requireContext(), R.string.chizu_wifi_no_developer_options, Toast.LENGTH_LONG).show();
+					}
+				});
 		// ===== Traffic (渋滞回避) =====
 		addSection(R.string.chizu_section_traffic, accent);
 		addSwitchRow(R.string.chizu_traffic_enabled, R.string.chizu_traffic_enabled_descr, 1,
@@ -269,7 +304,40 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			View scroller = (View) holder.getParent();
 			holder.post(() -> scroller.scrollTo(0, target.getTop()));
 		}
+		if (getArguments() != null && getArguments().getBoolean(ARG_GNSS)) {
+			getArguments().remove(ARG_GNSS);
+			View scroller = (View) holder.getParent();
+			holder.post(() -> scroller.scrollTo(0, gnssSection.getTop()));
+		}
+		if (getArguments() != null && getArguments().getBoolean(ARG_WIFI)) {
+			getArguments().remove(ARG_WIFI);
+			View scroller = (View) holder.getParent();
+			holder.post(() -> scroller.scrollTo(0, wifiSection.getTop()));
+		}
 		ChizuDriveLog.log("ui page rows built in " + (System.currentTimeMillis() - chizuT0) + " ms");
+	}
+
+	/** 白い熊 地図 +088: the Wi-Fi locator's switches, what it knows, the way to the system's scan limit, and forgetting. */
+	private void addWifiRows() {
+		net.osmand.plus.OsmandApplication app = (net.osmand.plus.OsmandApplication) requireContext().getApplicationContext();
+		addSwitchRow(R.string.chizu_wifi_on, R.string.chizu_wifi_on_descr, 1, ChizuWifiLocator.isOn(app),
+				checked -> ChizuWifiLocator.setOn(app, checked));
+		addSwitchRow(R.string.chizu_wifi_in_car, R.string.chizu_wifi_in_car_descr, 1, ChizuWifiLocator.isLearningInCar(app),
+				checked -> ChizuWifiLocator.setLearningInCar(app, checked));
+		addSwitchRow(R.string.chizu_wifi_coverage, R.string.chizu_wifi_coverage_descr, 1, ChizuWifiLocator.isCoverageShown(app),
+				checked -> ChizuWifiLocator.setCoverageShown(app, checked));
+		addNoteRow(ChizuWifiLocator.describe(app), 1);
+		addPillRow(getString(R.string.chizu_wifi_forget_all), getString(R.string.chizu_wifi_forget_all_descr), 1, false, false, v -> {
+			AlertDialog dialog = new AlertDialog.Builder(requireContext())
+					.setMessage(R.string.chizu_wifi_forget_all_confirm)
+					.setNegativeButton(R.string.shared_string_cancel, null)
+					.setPositiveButton(R.string.chizu_wifi_forget_do, (d, w) -> {
+						ChizuWifiLocator.forgetAll(app);
+						buildRows();
+					})
+					.show();
+			pillDialog(dialog);
+		});
 	}
 
 	// ---------- row builders ----------
@@ -980,10 +1048,8 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 
 	@NonNull
 	private SwitchCompat flatSwitch() {
-		SwitchCompat toggle = new SwitchCompat(requireContext());
-		toggle.setMinHeight(0);
-		toggle.setMinimumHeight(0);
-		return toggle;
+		// 白い熊 地図 +090: the theme's outlined switch — an outline with a dot, never filled
+		return ChizuMenuPills.newSwitch(requireContext(), false);
 	}
 
 	/** Shown dialogs get the pill buttons: the positive one the main pill. */
@@ -1201,12 +1267,28 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		showInstance(activity, false);
 	}
 
+	/** 白い熊 地図 +088: opened at the Wi-Fi locator's section, from the position pill's menu. */
+	public static void showWifiSection(@NonNull FragmentActivity activity) {
+		showInstance(activity, false, true, false);
+	}
+
+	/** 白い熊 地図 +094: opened at the satellite receiver's section, from the position pill's menu. */
+	public static void showGnssSection(@NonNull FragmentActivity activity) {
+		showInstance(activity, false, false, true);
+	}
+
 	/** {@code speeds}: opened at “My driving speeds”, from the car profile's greyed-out Travel speed. */
 	public static void showInstance(@NonNull FragmentActivity activity, boolean speeds) {
+		showInstance(activity, speeds, false, false);
+	}
+
+	private static void showInstance(@NonNull FragmentActivity activity, boolean speeds, boolean wifi, boolean gnss) {
 		FragmentManager manager = activity.getSupportFragmentManager();
 		if (AndroidUtils.isFragmentCanBeAdded(manager, TAG)) {
 			ChizuUiFragment fragment = new ChizuUiFragment();
 			Bundle args = new Bundle();
+			args.putBoolean(ARG_WIFI, wifi);
+			args.putBoolean(ARG_GNSS, gnss);
 			args.putBoolean(ARG_SPEEDS, speeds);
 			fragment.setArguments(args);
 			manager.beginTransaction()

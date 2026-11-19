@@ -702,6 +702,7 @@ public class MapActivity extends OsmandActionBarActivity implements DownloadEven
 	@Override
 	protected void onResume() {
 		super.onResume();
+		net.osmand.plus.chizu.ChizuRoutePreview.checkLater(this); // 白い熊 地図 +076: no flat map left behind
 		if (chizuStatsStrip == null) {
 			chizuStatsStrip = new ChizuRouteStatsStrip(this);
 		}

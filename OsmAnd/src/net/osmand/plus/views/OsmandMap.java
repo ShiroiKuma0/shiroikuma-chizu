@@ -191,7 +191,9 @@ public class OsmandMap {
 	 */
 	public void saveLastKnownMapElevation(@NonNull ApplicationMode appMode) {
 		NavigationSession carNavigationSession = app.getCarNavigationSession();
-		if (carNavigationSession == null || !carNavigationSession.hasStarted()) {
+		// 白い熊 地図 +076: nor is the flat map of the phone's route planning the tilt to remember
+		if ((carNavigationSession == null || !carNavigationSession.hasStarted())
+				&& !net.osmand.plus.chizu.ChizuRoutePreview.isActive()) {
 			app.getSettings().setLastKnownMapElevation(appMode, mapView.getElevationAngle());
 		}
 	}

@@ -88,6 +88,11 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	private static final int RUN_SIMULATE_LOCATION_MSG_ID = OsmAndConstants.UI_HANDLER_LOCATION_SERVICE + 3;
 	private static final long LOST_LOCATION_CHECK_DELAY = 18000;
 	private static final long START_LOCATION_SIMULATION_DELAY = 2000;
+	// 白い熊 地図 +079: the estimate along the believed road, off the route and without navigation
+	private static final int CHIZU_ROAD_ESTIMATE_START_MSG_ID = OsmAndConstants.UI_HANDLER_LOCATION_SERVICE + 31;
+	private static final int CHIZU_ROAD_ESTIMATE_RUN_MSG_ID = OsmAndConstants.UI_HANDLER_LOCATION_SERVICE + 32;
+	private static final float CHIZU_ROAD_ESTIMATE_MAX_S = 180f;
+	private static final long CHIZU_ROAD_ESTIMATE_MATCH_MS = 5000; // the last match may be this old when it starts
 	private static final int UPCOMING_TUNNEL_DISTANCE = 250;
 
 	public static final float ACCURACY_FOR_GPX_AND_ROUTING = 50;
@@ -140,6 +145,19 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	private static final float CHIZU_EXIT_ACC = 30f;
 	private static final int CHIZU_EXIT_FIXES = 3;
 	private static final float CHIZU_TUNNEL_GAP_M = 1000f;
+	private static final float CHIZU_ESTIMATE_MIN_SPEED = 3f; // m/s: a car standing when the fixes stop stays where it is
+	private static final float CHIZU_ESTIMATE_MAX_S = 360f; // the estimate runs at most this long at the last speed
+	private boolean chizuEstimateOpen; // the running estimate was started outside a tunnel
+	private long chizuEstimateStartMs; // +079: when the fixes stopped, whichever estimate runs
+	private float chizuEstimateSpeed; // …and the car's speed then
+	private net.osmand.Location chizuEstimateFrom; // the fix it started from
+	private boolean chizuRoadEstimate; // the estimate runs along the believed road, not the route
+	// +081: the speeds of the last accepted fixes, for the speed an estimate runs at
+	private static final int CHIZU_SPEEDS = 3;
+	private static final long CHIZU_SPEEDS_MS = 4000;
+	private final float[] chizuSpeeds = new float[CHIZU_SPEEDS];
+	private final long[] chizuSpeedsMs = new long[CHIZU_SPEEDS];
+	private int chizuSpeedsAt;
 	private static final float CHIZU_TUNNEL_CHAIN_M = 10_000f;
 	private final net.osmand.plus.chizu.ChizuDisplayFix chizuDisplay = new net.osmand.plus.chizu.ChizuDisplayFix();
 	private net.osmand.plus.chizu.ChizuRoadMatcher chizuMatcher; // 白い熊 地図 +073, made on first use
@@ -147,6 +165,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	private long cachedLocationTimeFix;
 	private long timeToNotUseOtherGPS;
 	private net.osmand.Location cachedLocation;
+	private boolean chizuLastSeeded;
 	private net.osmand.Location customLocation;
 	private net.osmand.Location prevLocation;
 
@@ -222,6 +241,8 @@ public class OsmAndLocationProvider implements SensorEventListener {
 
 	public void resumeAllUpdates() {
 		LOG.info(">>>> resumeAllUpdates");
+		net.osmand.plus.chizu.ChizuWifiLocator.start(app, "phone"); // 白い熊 地図 +088
+		net.osmand.plus.chizu.ChizuFixService.stopNow(app); // +092: 地図 runs the receiver itself again
 
 		registerOrUnregisterCompassListener(true);
 
@@ -286,6 +307,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 			// Issue 6410: Test not forcing cold start here
 			//service.sendExtraCommand(LocationManager.GPS_PROVIDER,"delete_aiding_data", null);
 			Bundle bundle = new Bundle();
+			service.sendExtraCommand(GPS_PROVIDER, "force_psds_injection", bundle); // 白い熊 地図 +083: its name since Android 10
 			service.sendExtraCommand(GPS_PROVIDER, "force_xtra_injection", bundle);
 			service.sendExtraCommand(GPS_PROVIDER, "force_time_injection", bundle);
 			app.getSettings().AGPS_DATA_LAST_TIME_DOWNLOADED.set(System.currentTimeMillis());
@@ -306,6 +328,29 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	private boolean chizuGnssByPhone;
 	private boolean chizuGnssByService;
 
+	/** 白い熊 地図 +092: the orbit refresh (ChizuFixService) wants the satellites' status too. */
+	public void chizuGnssStatusForFix(boolean wanted) {
+		chizuGnssByFix = wanted;
+		chizuApplyGnssStatus();
+	}
+
+	private boolean chizuGnssByFix;
+
+	/** 白い熊 地図 +099: the receiver is let go of (the orbit test empties it while it is off)… */
+	public void chizuStopReceiver() {
+		stopLocationRequests();
+	}
+
+	/** …and asked for again. */
+	public void chizuStartReceiver() {
+		resumeAllUpdates();
+	}
+
+	/** 白い熊 地図 +092: driving — navigating, in the driving profile, or connected to the car. */
+	public boolean chizuIsOnTheRoad() {
+		return chizuOnTheRoad();
+	}
+
 	/** The location service (the car, a recording, a navigation with the screen off) wants the satellites too. */
 	public void chizuGnssStatusForService(boolean wanted) {
 		chizuGnssByService = wanted;
@@ -314,7 +359,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 
 	@SuppressLint("MissingPermission")
 	private void chizuApplyGnssStatus() {
-		boolean want = chizuGnssByPhone || chizuGnssByService;
+		boolean want = chizuGnssByPhone || chizuGnssByService || chizuGnssByFix;
 		LocationManager service = (LocationManager) app.getSystemService(LOCATION_SERVICE);
 		if (service == null) {
 			return;
@@ -617,7 +662,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 
 	/** 白い熊 地図: the position is an estimate (a tunnel) — the arrow is drawn dimmed meanwhile. */
 	public boolean isChizuEstimating() {
-		return simulatePosition != null;
+		return simulatePosition != null || chizuRoadEstimate;
 	}
 
 	/**
@@ -690,12 +735,14 @@ public class OsmAndLocationProvider implements SensorEventListener {
 				}
 			}
 		}
-		if (why == null && simulatePosition != null) {
+		if (why == null && (simulatePosition != null || chizuRoadEstimate)) {
 			// coming out of a tunnel: the estimate goes on until three good fixes agree
 			boolean consistent = chizuExitLast != null && now - chizuExitLastMs < 3000
 					&& MapUtils.getDistance(chizuExitLast.getLatitude(), chizuExitLast.getLongitude(),
 					l.getLatitude(), l.getLongitude()) <= (spd + 10) * Math.max(0.5, (now - chizuExitLastMs) / 1000.0) + 2 * acc;
-			chizuExitGood = acc <= CHIZU_EXIT_ACC ? (consistent ? chizuExitGood + 1 : 1) : 0;
+			// +078: an estimate started outside a tunnel hands over to any fixes the gate accepts, three agreeing
+			chizuExitGood = acc <= (simulatePosition == null || chizuEstimateOpen ? CHIZU_GATE_MAX_ACC : CHIZU_EXIT_ACC)
+					? (consistent ? chizuExitGood + 1 : 1) : 0;
 			chizuExitLast = l;
 			chizuExitLastMs = now;
 			if (chizuExitGood < CHIZU_EXIT_FIXES) {
@@ -748,6 +795,8 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	}
 
 	public void pauseAllUpdates() {
+		net.osmand.plus.chizu.ChizuWifiLocator.stop(app, "phone"); // 白い熊 地図 +088
+		net.osmand.plus.chizu.ChizuFixService.finishIfWorthIt(app); // +092: a fix within reach is finished first
 		stopLocationRequests();
 		registerOrUnregisterCompassListener(false);
 	}
@@ -837,11 +886,28 @@ public class OsmAndLocationProvider implements SensorEventListener {
 				// 白い熊 地図: the whole chain of tunnels ahead, not the first one only
 				List<RouteSegmentResult> tunnel = routingHelper.getChizuTunnelChain(UPCOMING_TUNNEL_DISTANCE,
 						CHIZU_TUNNEL_GAP_M, CHIZU_TUNNEL_CHAIN_M);
+				// 白い熊 地図 +078: no tunnel the route knows of within reach, yet the receiver is silent and the car
+				// was moving — the position goes on along the route all the same. On 2026-11-16 the receiver fell
+				// silent five times for 38–269 s (covered stretches of the city ring, one fix let through inside a
+				// tunnel) with no tunnel 250 m ahead on the route at that moment, and the arrow stood still each
+				// time, once for 4.5 minutes and 2.4 km.
+				chizuEstimateOpen = false;
+				float steady = chizuSteadySpeed(location); // +081
+				if (tunnel == null && steady >= CHIZU_ESTIMATE_MIN_SPEED) {
+					tunnel = routingHelper.getChizuAheadChain(Math.max(500f,
+							Math.min(CHIZU_TUNNEL_CHAIN_M, steady * CHIZU_ESTIMATE_MAX_S)));
+					chizuEstimateOpen = tunnel != null;
+				}
 				if (tunnel != null) {
-					simulatePosition = new SimulationProvider(location, tunnel);
+					net.osmand.Location from = new net.osmand.Location(location);
+					from.setSpeed(steady);
+					simulatePosition = new SimulationProvider(from, tunnel, chizuEstimateOpen);
+					chizuEstimateStartMs = android.os.SystemClock.elapsedRealtime();
+					chizuEstimateSpeed = steady;
 					chizuExitGood = 0;
 					chizuExitLast = null;
-					net.osmand.plus.chizu.ChizuDriveLog.log("tunnel simulation starts, " + tunnel.size() + " segments, speed " + location.getSpeed()); // 白い熊 地図 drive log
+					net.osmand.plus.chizu.ChizuDriveLog.log((chizuEstimateOpen ? "position estimate along the route starts (no fixes), "
+							: "tunnel simulation starts, ") + tunnel.size() + " segments, speed " + steady + " (last fix " + location.getSpeed() + ")"); // 白い熊 地図 drive log
 					scheduleSimulatedPositionRun();
 				}
 			}, START_LOCATION_SIMULATION_DELAY);
@@ -852,12 +918,168 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		if (simulatePosition != null) {
 			net.osmand.Location loc = simulatePosition.getSimulatedLocationForTunnel();
 			if (loc != null) {
+				// 白い熊 地図 +079: the tunnel is behind and still no fix — on along the route, see chizuEstimateGoesOn
+				if (!chizuEstimateOpen && simulatePosition.isChizuPastEnd() && chizuEstimateGoesOn(loc)) {
+					loc = simulatePosition.getSimulatedLocationForTunnel();
+					if (loc == null) {
+						net.osmand.plus.chizu.ChizuDriveLog.log("position estimate ends: nothing of the route to go on");
+						simulatePosition = null;
+						return;
+					}
+				}
 				setLocation(loc);
 				app.runInUIThreadAndCancelPrevious(RUN_SIMULATE_LOCATION_MSG_ID, this::scheduleSimulatedPositionRun, 600);
 			} else {
-				net.osmand.plus.chizu.ChizuDriveLog.log("tunnel simulation ends"); // 白い熊 地図 drive log
+				net.osmand.plus.chizu.ChizuDriveLog.log(chizuEstimateOpen ? "position estimate ends: its time or the route is over"
+						: "tunnel simulation ends"); // 白い熊 地図 drive log
 				simulatePosition = null;
 			}
+		}
+	}
+
+	/**
+	 * 白い熊 地図 +079: the tunnel estimate has reached the end of its tunnels and no fix has come. Stock OsmAnd
+	 * runs it 100 m further in a straight line and stops, leaving the arrow there. On 2026-11-16 at 16:38:01
+	 * the route knew one tunnel of some 150 m ahead (Zlíchov) with the next more than
+	 * {@value #CHIZU_TUNNEL_GAP_M} m on: the estimate ended after 13 s, the receiver stayed silent for
+	 * another 20 s in the open, gave one fix, and was gone for 269 s through the two tunnels after it — the
+	 * arrow stood still throughout, and the route was then judged left by 2.4 km. So past the tunnel the
+	 * estimate goes on along the route at the speed the car had, for what is left of
+	 * {@value #CHIZU_ESTIMATE_MAX_S} s, and hands back to any three agreeing fixes.
+	 */
+	private boolean chizuEstimateGoesOn(@NonNull net.osmand.Location from) {
+		float left = CHIZU_ESTIMATE_MAX_S - (android.os.SystemClock.elapsedRealtime() - chizuEstimateStartMs) / 1000f;
+		if (left <= 0 || chizuEstimateSpeed < CHIZU_ESTIMATE_MIN_SPEED) {
+			return false;
+		}
+		List<RouteSegmentResult> ahead = app.getRoutingHelper().getChizuAheadChain(
+				Math.max(500f, Math.min(CHIZU_TUNNEL_CHAIN_M, chizuEstimateSpeed * left)));
+		if (ahead == null) {
+			return false;
+		}
+		net.osmand.Location start = new net.osmand.Location(from);
+		start.setSpeed(chizuEstimateSpeed);
+		start.setTime(System.currentTimeMillis());
+		SimulationProvider next = new SimulationProvider(start, ahead, true);
+		if (!next.isSimulatedDataAvailable()) {
+			return false;
+		}
+		simulatePosition = next;
+		chizuEstimateOpen = true;
+		net.osmand.plus.chizu.ChizuDriveLog.log(String.format(java.util.Locale.US,
+				"position estimate goes on along the route past the tunnel (no fixes), %d segments, speed %.1f, %.0f s left",
+				ahead.size(), chizuEstimateSpeed, left));
+		return true;
+	}
+
+	/**
+	 * 白い熊 地図 +079: the receiver is silent and there is no route to estimate along — the car has left it, or
+	 * drives without navigation. The position goes on along the road the car is matched to, at the speed it
+	 * had, straight on where the road ends, drawn dimmed like any estimate. It is display only: the route
+	 * is not told (a new one is not searched from a guess), and nothing of it is recorded. It ends with
+	 * three agreeing fixes, with the road, or after {@value #CHIZU_ROAD_ESTIMATE_MAX_S} s — half the time of
+	 * the estimate along a route, for without one every junction is a guess, and a car that drove into a
+	 * garage is not to be shown wandering off for long.
+	 */
+	private void chizuScheduleRoadEstimate(@NonNull net.osmand.Location fix) {
+		app.runInUIThreadAndCancelPrevious(CHIZU_ROAD_ESTIMATE_START_MSG_ID, () -> {
+			if (prevLocation != fix || simulatePosition != null || chizuRoadEstimate || chizuMatcher == null
+					|| !chizuOnTheRoad() || chizuSteadySpeed(fix) < CHIZU_ESTIMATE_MIN_SPEED) {
+				return; // a newer fix came, the route estimate runs, or the car stood
+			}
+			chizuEstimateStartMs = android.os.SystemClock.elapsedRealtime();
+			chizuEstimateSpeed = chizuSteadySpeed(fix);
+			chizuEstimateFrom = fix;
+			chizuRoadEstimate = true;
+			chizuExitGood = 0;
+			chizuExitLast = null;
+			if (chizuRoadEstimateStep()) {
+				net.osmand.plus.chizu.ChizuDriveLog.log(String.format(java.util.Locale.US,
+						"position estimate along the road starts (no fixes), speed %.1f", chizuEstimateSpeed));
+			}
+		}, START_LOCATION_SIMULATION_DELAY + 200); // after the route estimate had its chance
+	}
+
+	private boolean chizuRoadEstimateStep() {
+		if (!chizuRoadEstimate) {
+			return false;
+		}
+		long now = android.os.SystemClock.elapsedRealtime();
+		boolean first = now - chizuEstimateStartMs < 300;
+		String why = null;
+		net.osmand.plus.chizu.ChizuRoadMatcher.Match m = null;
+		if (!chizuOnTheRoad() || chizuMatcher == null) {
+			why = "no longer driving";
+		} else if (now - chizuEstimateStartMs > CHIZU_ROAD_ESTIMATE_MAX_S * 1000) {
+			why = "its time is over";
+		} else {
+			m = chizuMatcher.estimate(chizuEstimateSpeed, CHIZU_ROAD_ESTIMATE_MATCH_MS);
+			if (m == null) {
+				why = first ? null : "the road ends";
+			}
+		}
+		if (m == null) {
+			chizuRoadEstimate = false;
+			if (why != null) {
+				net.osmand.plus.chizu.ChizuDriveLog.log("position estimate along the road ends: " + why);
+			}
+			return false; // at the start: the car was matched to no road, nothing to go along
+		}
+		net.osmand.Location loc = new net.osmand.Location(SimulationProvider.SIMULATED_PROVIDER_TUNNEL);
+		loc.setLatitude(m.lat);
+		loc.setLongitude(m.lon);
+		loc.setBearing(m.dir);
+		loc.setSpeed(chizuEstimateSpeed);
+		loc.setTime(System.currentTimeMillis());
+		if (chizuEstimateFrom != null && chizuEstimateFrom.hasAltitude()) {
+			loc.setAltitude(chizuEstimateFrom.getAltitude());
+		}
+		net.osmand.plus.chizu.ChizuDriveLog.location("ph", loc);
+		this.location = loc;
+		updateLocation(loc);
+		app.runInUIThreadAndCancelPrevious(CHIZU_ROAD_ESTIMATE_RUN_MSG_ID, this::chizuRoadEstimateStep, 600);
+		return true;
+	}
+
+	/**
+	 * 白い熊 地図 +081: the speed an estimate runs at — the median of the last {@value #CHIZU_SPEEDS} accepted
+	 * fixes within {@value #CHIZU_SPEEDS_MS} ms, not the last fix's own claim. The engine's last fix before it
+	 * goes silent is often its worst (2026-11-16 16:38:34: 22 km/h claimed at about 70).
+	 */
+	private float chizuSteadySpeed(@NonNull net.osmand.Location fix) {
+		long now = android.os.SystemClock.elapsedRealtime();
+		float[] v = new float[CHIZU_SPEEDS];
+		int n = 0;
+		for (int i = 0; i < CHIZU_SPEEDS; i++) {
+			if (chizuSpeedsMs[i] != 0 && now - chizuSpeedsMs[i] <= CHIZU_SPEEDS_MS + START_LOCATION_SIMULATION_DELAY) {
+				v[n++] = chizuSpeeds[i];
+			}
+		}
+		float own = fix.hasSpeed() ? fix.getSpeed() : 0f;
+		if (n < 2) {
+			return own;
+		}
+		java.util.Arrays.sort(v, 0, n);
+		return n == 2 ? (v[0] + v[1]) / 2 : v[n / 2];
+	}
+
+	private void chizuNoteSpeed(@NonNull net.osmand.Location fix) {
+		if (fix.hasSpeed()) {
+			chizuSpeeds[chizuSpeedsAt] = fix.getSpeed();
+			chizuSpeedsMs[chizuSpeedsAt] = android.os.SystemClock.elapsedRealtime();
+			chizuSpeedsAt = (chizuSpeedsAt + 1) % CHIZU_SPEEDS;
+		}
+	}
+
+	/** 白い熊 地図 +079: a fix the gate accepted is here — both estimates are over. */
+	private void chizuEstimatesEnd() {
+		if (simulatePosition != null) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("tunnel simulation ends: fixes back"); // 白い熊 地図 drive log
+		}
+		simulatePosition = null;
+		if (chizuRoadEstimate) {
+			chizuRoadEstimate = false;
+			net.osmand.plus.chizu.ChizuDriveLog.log("position estimate along the road ends: fixes back");
 		}
 	}
 
@@ -891,7 +1113,8 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	}
 
 	public void setLocationFromService(net.osmand.Location location) {
-		if (locationSimulation.isRouteAnimating() || shouldIgnoreLocation(location)) {
+		if (locationSimulation.isRouteAnimating() || shouldIgnoreLocation(location)
+				|| net.osmand.plus.chizu.ChizuWifiLocator.suppresses(location)) {
 			return;
 		}
 		if (!chizuGate(location, "aa")) {
@@ -907,12 +1130,11 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		if (location != null) {
 			lastTimeLocationFixed = System.currentTimeMillis();
 			if (isPointAccurateForRouting(location) && !isTunnelLocationSimulated(location)) {
-				if (simulatePosition != null) {
-					net.osmand.plus.chizu.ChizuDriveLog.log("tunnel simulation ends: fixes back"); // 白い熊 地図 drive log
-				}
-				simulatePosition = null;
+				chizuEstimatesEnd(); // 白い熊 地図
+				chizuNoteSpeed(location);
 				notifyGpsLocationRecovered();
 				scheduleCheckIfGpsLost(location);
+				chizuScheduleRoadEstimate(location);
 			}
 		}
 		RoutingHelper routingHelper = app.getRoutingHelper();
@@ -929,6 +1151,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		if (carNavigationSession != null) {
 			carNavigationSession.updateLocation(location);
 			this.location = chizuShown(location, updatedLocation); // 白い熊 地図
+			net.osmand.plus.chizu.ChizuLastPosition.note(app, this.location); // +088
 			updateLocation(this.location);
 		}
 	}
@@ -937,9 +1160,16 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		setLocation(location);
 	}
 
+	/** 白い熊 地図 +088: a position from the Wi-Fi networks in range (ChizuWifiLocator) — never while a route is followed. */
+	public void chizuSetWifiLocation(@NonNull net.osmand.Location location) {
+		if (!app.getRoutingHelper().isFollowingMode()) {
+			setLocation(location);
+		}
+	}
+
 	private void setLocation(@Nullable net.osmand.Location location) {
-		if (shouldIgnoreLocation(location)) {
-			return;
+		if (shouldIgnoreLocation(location) || net.osmand.plus.chizu.ChizuWifiLocator.suppresses(location)) {
+			return; // 白い熊 地図 +088: the system's network position gives way while 地図's own Wi-Fi one is sure
 		}
 		if (!chizuGate(location, "ph")) {
 			return; // 白い熊 地図
@@ -960,12 +1190,11 @@ public class OsmAndLocationProvider implements SensorEventListener {
 			// use because there is a bug on some devices with location.getTime()
 			lastTimeLocationFixed = System.currentTimeMillis();
 			if (isPointAccurateForRouting(location) && !isTunnelLocationSimulated(location)) {
-				if (simulatePosition != null) {
-					net.osmand.plus.chizu.ChizuDriveLog.log("tunnel simulation ends: fixes back"); // 白い熊 地図 drive log
-				}
-				simulatePosition = null;
+				chizuEstimatesEnd(); // 白い熊 地図
+				chizuNoteSpeed(location);
 				notifyGpsLocationRecovered();
 				scheduleCheckIfGpsLost(location);
+				chizuScheduleRoadEstimate(location);
 			}
 		}
 
@@ -982,6 +1211,7 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		net.osmand.Location updatedLocation = setLocationForRouting(location, routingHelper);
 		app.getWaypointHelper().locationChanged(location);
 		this.location = chizuShown(location, updatedLocation); // 白い熊 地図
+		net.osmand.plus.chizu.ChizuLastPosition.note(app, this.location); // +088
 
 		// Update information
 		updateLocation(this.location);
@@ -1002,6 +1232,12 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		return app.getRoutingHelper().isFollowingMode() || chizuDriving() || app.getCarNavigationSession() != null;
 	}
 
+	/** 白い熊 地図 +078: the start of a new route — on the road the car is matched to, see ChizuDisplayFix.routeStart. */
+	@NonNull
+	public net.osmand.Location chizuRouteStart(@NonNull net.osmand.Location raw) {
+		return isTunnelLocationSimulated(raw) ? raw : chizuDisplay.routeStart(raw);
+	}
+
 	private net.osmand.Location chizuShown(@Nullable net.osmand.Location raw, @Nullable net.osmand.Location routed) {
 		// 白い熊 地図 +061: snapped whenever driving, navigating or not (白い熊, 2026-11-06)
 		boolean active = chizuOnTheRoad();
@@ -1017,6 +1253,9 @@ public class OsmAndLocationProvider implements SensorEventListener {
 		boolean onRoute = routed != raw;
 		if (!onRoute && isTunnelLocationSimulated(raw)) {
 			return routed; // the tunnel estimate runs along the route already
+		}
+		if (!onRoute && net.osmand.plus.chizu.ChizuWifiLocator.PROVIDER.equals(raw.getProvider())) {
+			return routed; // +088: a taught spot is where 白い熊 stands, not the nearest road
 		}
 		if (chizuMatcher == null) {
 			chizuMatcher = new net.osmand.plus.chizu.ChizuRoadMatcher(app);
@@ -1108,14 +1347,15 @@ public class OsmAndLocationProvider implements SensorEventListener {
 	@Nullable
 	public net.osmand.Location getLastStaleKnownLocation() {
 		net.osmand.Location newLoc = getLastKnownLocation();
+		// 白い熊 地図 +088: the last position is kept across starts and shown (grey) until a current one comes; it
+		// is no longer dropped after twenty minutes either
+		if (newLoc == null && cachedLocation == null && !chizuLastSeeded) {
+			chizuLastSeeded = true;
+			cachedLocation = net.osmand.plus.chizu.ChizuLastPosition.load(app);
+			cachedLocationTimeFix = System.currentTimeMillis();
+		}
 		if (newLoc == null && cachedLocation != null) {
-			int counter = staleLocationRequestsCounter.incrementAndGet();
-			if (counter >= REQUESTS_BEFORE_CHECK_LOCATION && staleLocationRequestsCounter.compareAndSet(counter, 0)) {
-				net.osmand.Location cached = cachedLocation;
-				if (cached != null && System.currentTimeMillis() - cachedLocationTimeFix > STALE_LOCATION_TIMEOUT_TO_BE_GONE) {
-					cachedLocation = null;
-				}
-			}
+			// kept
 		} else {
 			cachedLocation = newLoc;
 			cachedLocationTimeFix = lastTimeLocationFixed;

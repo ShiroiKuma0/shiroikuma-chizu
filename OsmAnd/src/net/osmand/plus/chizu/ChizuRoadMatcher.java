@@ -54,6 +54,16 @@ import java.util.concurrent.Executors;
  * {@value #HOLD_MAX_MS} ms; neither the drifting bearing nor the drifting position lets go of it. A good
  * fix (the truth coming back) matches as always, and the gate lets it through now. Unpaved roads are no
  * candidates for a weak fix at any speed.
+ * <p>
+ * +080 (白い熊, 2026-11-16: shown going the wrong way round a roundabout, on the other side of the highway,
+ * and through fields). <b>A one-way road is matched only the way it runs</b> from {@value #STRICT_MPS} m/s —
+ * until now going against it cost 15 m, less than the width of a motorway's median, and three slip roads
+ * were taken backwards that day; a roundabout counts as one-way whatever its tags say, and a held position
+ * never goes on into a one-way road against it. And <b>at {@value #WIDE_MPS} m/s and above the car is on a
+ * road</b>: fixes 30–60 m off with a claimed accuracy of 13–30 m (Vrbova for 19 s, the D0 exit for 14 s)
+ * found no road within their reach and were drawn bare. With nothing to match and nothing to hold, the best
+ * road within {@value #WIDE_MIN_M}–{@value #WIDE_MAX_M} m running within {@value #WIDE_ALIGN_DEG}° of the
+ * car's movement is taken.
  */
 public final class ChizuRoadMatcher {
 
@@ -69,6 +79,19 @@ public final class ChizuRoadMatcher {
 	/** +075: a fix worse than this chooses no road. */
 	static final float WEAK_ACC = 30f;
 	private static final int STREAK = 3;
+	private static final int OPPOSED_FIXES = 3;
+	private static final float OPPOSED_DEG = 135f;
+	private static final float OPPOSED_MPS = 5f;
+	/** +078: the receiver's bearing of the fix being matched, NaN when it has none. Set before {@link #match}. */
+	public float rawBearing = Float.NaN;
+	private int opposed;
+	/** +080: from this speed a one-way road is matched only the way it runs. */
+	private static final float STRICT_MPS = 3f;
+	/** +080: from this speed a car with no road within the usual reach is put on the best road within the wide one. */
+	private static final float WIDE_MPS = 5f;
+	private static final float WIDE_ALIGN_DEG = 30f;
+	private static final double WIDE_MIN_M = 80;
+	private static final double WIDE_MAX_M = 150;
 	private static final double MINOR_PENALTY_M = 200;
 	private static final double AGAINST_ONEWAY_PENALTY_M = 15;
 	private static final double COST_PER_DEG = 0.3;
@@ -80,6 +103,7 @@ public final class ChizuRoadMatcher {
 		final String name;
 		final String highway;
 		final int oneway; // 1 along the points, -1 against them, 0 both ways
+		final boolean roundabout;
 		final double[] lat;
 		final double[] lon;
 		final long[] keys;
@@ -95,6 +119,7 @@ public final class ChizuRoadMatcher {
 			String h = o.getHighway();
 			this.highway = h == null ? "" : h;
 			this.oneway = oneway;
+			this.roundabout = o.roundabout();
 			int len = o.getPointsLength();
 			lat = new double[len];
 			lon = new double[len];
@@ -184,12 +209,22 @@ public final class ChizuRoadMatcher {
 
 		@NonNull
 		public String describe() {
-			return String.format(Locale.US, "%s %s (%s) d=%.0fm dir=%.0f", how, road.name, road.highway, dist, dir);
+			return String.format(Locale.US, "%s %s (%s) d=%.0fm dir=%.0f%s", how, road.name, road.highway, dist, dir, way());
 		}
 
 		@NonNull
 		String brief() {
-			return String.format(Locale.US, "%s %s (%s) d=%.0f ang=%.0f cost=%.0f", how, road.name, road.highway, dist, ang, cost);
+			return String.format(Locale.US, "%s %s (%s) d=%.0f ang=%.0f cost=%.0f%s", how, road.name, road.highway, dist, ang, cost, way());
+		}
+
+		/** +081, for the log: a one-way road or a roundabout, and whether the car is put on it the way it runs. */
+		@NonNull
+		private String way() {
+			if (road.oneway == 0 || seg < 1 || seg >= road.lat.length) {
+				return "";
+			}
+			float along = norm(road.oneway > 0 ? road.segBearing(seg) : road.segBearing(seg) + 180);
+			return (road.roundabout ? " way=roundabout" : " way=oneway") + (diff(dir, along) > 90 ? "-AGAINST" : "");
 		}
 	}
 
@@ -281,11 +316,12 @@ public final class ChizuRoadMatcher {
 		double joinedBonus = Math.max(4, acc / 2);
 		// a road not joined to the believed one: within the fix's own error, not merely within reach
 		double nearReach = believed == null ? reach : Math.max(15, Math.min(60, acc));
+		boolean strict = speed >= STRICT_MPS && !Float.isNaN(ref);
 
 		// 1. the believed road itself
 		Match mine = null;
 		if (believed != null) {
-			mine = bestOn(believed, lat, lon, ref, alignDeg, believedReach);
+			mine = bestOn(believed, lat, lon, ref, alignDeg, believedReach, strict);
 			if (mine != null) {
 				mine = with(mine, mine.cost - believedBonus, "on");
 			}
@@ -300,7 +336,7 @@ public final class ChizuRoadMatcher {
 			if (r.unpaved() && (weak || (fast && !joined))) {
 				continue; // a car at 30 km/h is not on a forest track, and a weak fix does not put it on one (+075)
 			}
-			Match m = bestOn(r, lat, lon, ref, alignDeg, joined ? believedReach : nearReach);
+			Match m = bestOn(r, lat, lon, ref, alignDeg, joined ? believedReach : nearReach, strict);
 			if (m == null) {
 				continue;
 			}
@@ -373,7 +409,34 @@ public final class ChizuRoadMatcher {
 			}
 			return best;
 		}
-		return hold(lat, lon, ref, speed, acc, now);
+		Match held = hold(lat, lon, ref, speed, acc, now);
+		if (held != null || speed < WIDE_MPS || Float.isNaN(ref)) {
+			return held;
+		}
+		// +080: driving, and no road to match or hold — the best road within the wide reach, running the car's way
+		double wideReach = Math.max(WIDE_MIN_M, Math.min(WIDE_MAX_M, 3 * acc));
+		Match wide = null;
+		for (Road r : roads) {
+			if (r.unpaved()) {
+				continue;
+			}
+			Match m = bestOn(r, lat, lon, ref, WIDE_ALIGN_DEG, wideReach, true);
+			if (m == null) {
+				continue;
+			}
+			double cost = m.cost + (r.minor() ? MINOR_PENALTY_M : 0);
+			if (wide == null || cost < wide.cost) {
+				wide = with(m, cost, "wide");
+			}
+		}
+		if (wide != null) {
+			take(wide, now);
+			if (wide.road.id != lastReportedId) {
+				lastReportedId = wide.road.id;
+				ChizuDriveLog.log("loc road → " + wide.brief() + String.format(Locale.US, " (nothing within reach, wide %.0f m)", wideReach));
+			}
+		}
+		return wide;
 	}
 
 	/** The car has stopped being on any road (another profile, a reset): forget the believed one. */
@@ -466,6 +529,27 @@ public final class ChizuRoadMatcher {
 	@Nullable
 	private Match holdWeak(double lat, double lon, float speed, long now) {
 		long since = holdSinceMs == 0 ? now : holdSinceMs;
+		// +078: …and the car going the other way. On 2026-11-16 the hold marched down Na Pankráci at the fixes'
+		// speed while the fixes moved steadily the opposite way, 252 m apart after 9 s (and 422 m, 243 m on two
+		// other roads). A drift wanders; a bearing against the held direction on OPPOSED_FIXES fixes running, at
+		// speed, is the car.
+		float heldDir = believed.segBearing(shownSeg);
+		if (!shownForward) {
+			heldDir = norm(heldDir + 180);
+		}
+		if (!Float.isNaN(rawBearing) && speed >= OPPOSED_MPS && diff(rawBearing, heldDir) > OPPOSED_DEG) {
+			opposed++;
+		} else {
+			opposed = 0;
+		}
+		if (opposed >= OPPOSED_FIXES) {
+			ChizuDriveLog.log(String.format(Locale.US, "loc hold on %s released: %d weak fixes moving %.0f against the held %.0f",
+					believed.name, opposed, rawBearing, heldDir));
+			opposed = 0;
+			holdSinceMs = 0;
+			shownMs = 0;
+			return null;
+		}
 		if (now - since > HOLD_MAX_MS) {
 			ChizuDriveLog.log("loc hold on " + believed.name + " released: held through weak fixes for " + (now - since) / 1000 + " s");
 			holdSinceMs = 0;
@@ -487,6 +571,32 @@ public final class ChizuRoadMatcher {
 		}
 		double d = MapUtils.getDistance(lat, lon, shownLat, shownLon);
 		return new Match(shownLat, shownLon, dir, d, believed, shownSeg, 0, d, "held/weak");
+	}
+
+	/**
+	 * +079: no fix at all — the position goes on along the believed road at {@code speed}, onto the joined
+	 * road that runs straight on at its end. Null when the car is on no road, the last match is older than
+	 * {@code maxAgeMs}, or the road ends with nothing joined ahead. Main thread.
+	 */
+	@Nullable
+	public Match estimate(float speed, long maxAgeMs) {
+		long now = android.os.SystemClock.elapsedRealtime();
+		if (believed == null || shownMs == 0 || now - shownMs > maxAgeMs) {
+			return null;
+		}
+		double metres = speed * (now - shownMs) / 1000.0;
+		shownMs = now;
+		holdSinceMs = 0;
+		if (!advance(metres, Float.NaN)) {
+			shownMs = 0;
+			return null;
+		}
+		request(shownLat, shownLon); // the roads ahead, as the estimate moves on
+		float dir = believed.segBearing(shownSeg);
+		if (!shownForward) {
+			dir = norm(dir + 180);
+		}
+		return new Match(shownLat, shownLon, dir, 0, believed, shownSeg, 0, 0, "estimated");
 	}
 
 	/** Moves the shown point {@code metres} along the believed road, onto a joined road at its end. */
@@ -530,7 +640,7 @@ public final class ChizuRoadMatcher {
 				if (at < 0) {
 					continue;
 				}
-				if (at + 1 < o.lat.length) {
+				if (at + 1 < o.lat.length && o.oneway >= 0) { // +080: never into a one-way road against it
 					float dir = o.segBearing(at + 1);
 					if (diff(dir, want) < bestDiff) {
 						bestDiff = diff(dir, want);
@@ -539,7 +649,7 @@ public final class ChizuRoadMatcher {
 						bestForward = true;
 					}
 				}
-				if (at >= 1) {
+				if (at >= 1 && o.oneway <= 0) {
 					float dir = norm(o.segBearing(at) + 180);
 					if (diff(dir, want) < bestDiff) {
 						bestDiff = diff(dir, want);
@@ -562,7 +672,8 @@ public final class ChizuRoadMatcher {
 
 	/** The nearest point of {@code r} to the fix within {@code reach}, running within {@code alignDeg} of {@code ref}. */
 	@Nullable
-	private static Match bestOn(@NonNull Road r, double lat, double lon, float ref, float alignDeg, double reach) {
+	private static Match bestOn(@NonNull Road r, double lat, double lon, float ref, float alignDeg, double reach,
+	                            boolean strict) {
 		if (!r.near(lat, lon, reach)) {
 			return null;
 		}
@@ -575,16 +686,17 @@ public final class ChizuRoadMatcher {
 			}
 			float seg = r.segBearing(i);
 			float dir = Float.isNaN(ref) ? seg : align(seg, ref);
+			float along = r.oneway == 0 ? dir : norm(r.oneway > 0 ? seg : seg + 180);
+			if (strict) {
+				dir = along; // +080: a one-way road only the way it runs
+			}
 			float ang = Float.isNaN(ref) ? 0 : diff(dir, ref);
 			if (ang > alignDeg) {
 				continue;
 			}
 			double cost = d + COST_PER_DEG * ang;
-			if (r.oneway != 0) {
-				float along = r.oneway > 0 ? seg : norm(seg + 180);
-				if (diff(dir, along) > 90) {
-					cost += AGAINST_ONEWAY_PENALTY_M;
-				}
+			if (diff(dir, along) > 90) {
+				cost += AGAINST_ONEWAY_PENALTY_M;
 			}
 			if (best == null || cost < best.cost) {
 				best = new Match(p.getLatitude(), p.getLongitude(), dir, d, r, i, ang, cost, "");
@@ -616,7 +728,8 @@ public final class ChizuRoadMatcher {
 				if (o.getPointsLength() < 2 || !seen.add(o.getId())) {
 					continue;
 				}
-				Road r = new Road(o, ctx.getRouter().isOneWay(o));
+				int oneway = ctx.getRouter().isOneWay(o);
+				Road r = new Road(o, oneway == 0 && o.roundabout() ? 1 : oneway); // +080
 				if (r.near(lat, lon, KEEP_M)) {
 					list.add(r);
 				}

@@ -605,6 +605,8 @@ public class POIMapLayer extends OsmandMapLayer implements IContextMenuProvider,
 		}
 	}
 
+	private static final Set<PoiUIFilter> CHIZU_NO_FILTERS = java.util.Collections.emptySet();
+
 	private Set<PoiUIFilter> collectFilters() {
 		Set<PoiUIFilter> calculatedFilters = new TreeSet<>(filters);
 		if (showTravel) {
@@ -747,6 +749,10 @@ public class POIMapLayer extends OsmandMapLayer implements IContextMenuProvider,
 	public void onPrepareBufferImage(Canvas canvas, RotatedTileBox tileBox, DrawSettings settings) {
 		super.onPrepareBufferImage(canvas, tileBox, settings);
 		Set<PoiUIFilter> selectedPoiFilters = app.getPoiFilters().getSelectedPoiFilters();
+		// 白い熊 地図 +076: no POI overlay over the routes while the phone's route planning shows them
+		if (net.osmand.plus.chizu.ChizuRoutePreview.isActive() && !view.isCarView()) {
+			selectedPoiFilters = CHIZU_NO_FILTERS;
+		}
 		boolean showTravel = app.getSettings().SHOW_TRAVEL.get();
 		boolean routeArticleFilterEnabled = travelRendererHelper.getRouteArticlesProperty().get();
 		boolean routeArticlePointsFilterEnabled = travelRendererHelper.getRouteArticlePointsProperty().get();

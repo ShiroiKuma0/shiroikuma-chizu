@@ -154,6 +154,11 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 				int offset = speedometerBitmap != null ? speedometerBitmap.getWidth() : 0;
 				canvas.drawBitmap(alarmBitmap, visibleArea.right - alarmBitmap.getWidth() - 10 - offset, visibleArea.top + 10, new Paint());
 			}
+			// 白い熊 地図 +085: the position pill, left of the speed box (and of the alarm beside it), as high as the box
+			float pillHeight = speedometerBitmap != null ? speedometerBitmap.getHeight() : 48 * surfaceRenderer.getDensity();
+			float pillRight = visibleArea.right - 10 - (speedometerBitmap != null ? speedometerBitmap.getWidth() : 0)
+					- (alarmBitmap != null ? alarmBitmap.getWidth() : 0) - pillHeight * 0.2f;
+			net.osmand.plus.chizu.ChizuFix.drawOnCar(getApp(), canvas, pillRight, visibleArea.top + 10, pillHeight);
 		}
 	}
 
@@ -193,7 +198,7 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 		this.steps = steps;
 		this.stepRemainingDistance = stepRemainingDistance;
 		// 白い熊 地図 +059: the last instruction, kept through a recalculation
-		if (!Algorithms.isEmpty(steps) && stepRemainingDistance != null) {
+		if (!Algorithms.isEmpty(steps) && stepRemainingDistance != null && !getApp().getRoutingHelper().chizuGuidanceStale()) {
 			chizuLastSteps = steps;
 			chizuLastDistance = stepRemainingDistance;
 		}
@@ -340,11 +345,18 @@ public final class NavigationScreen extends BaseAndroidAutoScreen implements Sur
 			List<Step> shownSteps = steps;
 			Distance shownDistance = stepRemainingDistance;
 			boolean recalculating = isRerouting() && !arrived;
-			if (recalculating && !Algorithms.isEmpty(chizuLastSteps) && chizuLastDistance != null) {
+			// +078: …but only while the car is still on the route. Once it is judged off it (three fixes running, so
+			// weak fixes no longer flicker this), the old instruction is nonsense and a plain line takes its place
+			// until the new route is set (白い熊, 2026-11-16)
+			boolean chizuStale = !arrived && getApp().getRoutingHelper().chizuGuidanceStale();
+			if (recalculating && !chizuStale && !Algorithms.isEmpty(chizuLastSteps) && chizuLastDistance != null) {
 				shownSteps = chizuLastSteps;
 				shownDistance = chizuLastDistance;
 			}
-			if (recalculating && (Algorithms.isEmpty(shownSteps) || shownDistance == null)) {
+			if (chizuStale) {
+				builder.setNavigationInfo(new MessageInfo.Builder(
+						getCarContext().getString(R.string.chizu_car_off_route)).build());
+			} else if (recalculating && (Algorithms.isEmpty(shownSteps) || shownDistance == null)) {
 				builder.setNavigationInfo(new RoutingInfo.Builder().setLoading(true).build());
 			} else if (arrived) {
 				MessageInfo messageInfo = new MessageInfo.Builder(

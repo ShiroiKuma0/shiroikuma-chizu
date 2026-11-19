@@ -2521,6 +2521,7 @@ public class MapRouteInfoMenu implements IRouteInformationListener, CardListener
 				if (onDismissListener != null) {
 					onDismissListener.onDismiss(null);
 				}
+				net.osmand.plus.chizu.ChizuRoutePreview.checkLater(mapActivity); // 白い熊 地図 +076
 			} else if (fragment instanceof ChooseRouteFragment) {
 				routeSelected = true;
 				MapRouteMenuStateHolder holder = new MapRouteMenuStateHolder(this, ROUTE_DETAILS, currentMenuState, fragment.getArguments());
@@ -2533,6 +2534,7 @@ public class MapRouteInfoMenu implements IRouteInformationListener, CardListener
 					menuBackStack.push(holder);
 					holder.onDismiss(null);
 				}
+				net.osmand.plus.chizu.ChizuRoutePreview.checkLater(mapActivity); // 白い熊 地図 +076
 			} else if (fragment instanceof TrackDetailsMenuFragment) {
 				if (backPressed) {
 					onBackPressed();

@@ -85,7 +85,7 @@ public final class ChizuSpeeds {
 	private static final int[] NONE = {};
 
 	public static final List<Row> ROWS = Collections.unmodifiableList(Arrays.asList(
-			new Row(1, "Motorway", MOTORWAY, false, new int[] {130}, 130, 160),
+			new Row(1, "Motorway", MOTORWAY, false, new int[] {130}, 130, 130),
 			new Row(2, "Motorway", MOTORWAY, false, new int[] {110}, 110, 140),
 			new Row(3, "Motorway", MOTORWAY, false, new int[] {100}, 100, 130),
 			new Row(4, "Motorway", MOTORWAY, false, new int[] {80}, 80, 100),
@@ -94,14 +94,14 @@ public final class ChizuSpeeds {
 			new Row(7, "Trunk", TRUNK, false, new int[] {110}, 110, 130),
 			new Row(8, "Trunk", TRUNK, false, new int[] {100}, 100, 130),
 			new Row(9, "Trunk", TRUNK, false, new int[] {90}, 90, 110),
-			new Row(10, "Trunk", TRUNK, false, new int[] {80}, 80, 110),
+			new Row(10, "Trunk", TRUNK, false, new int[] {80}, 80, 85),
 			new Row(11, "Trunk", TRUNK, false, new int[] {70}, 70, 75),
 			new Row(12, "Trunk", TRUNK, true, new int[] {70}, 70, 75),
 			new Row(13, "Trunk", TRUNK, false, new int[] {60}, 60, 70),
 			new Row(14, "Trunk", TRUNK, false, new int[] {50}, 50, 65),
 			new Row(15, "Primary", PRIMARY, false, new int[] {90}, 90, 110),
 			new Row(16, "Primary", PRIMARY, false, new int[] {80}, 80, 95),
-			new Row(17, "Primary", PRIMARY, false, new int[] {70}, 70, 75),
+			new Row(17, "Primary", PRIMARY, false, new int[] {70}, 70, 70),
 			new Row(18, "Primary", PRIMARY, false, new int[] {50}, 50, 70),
 			new Row(19, "Primary", PRIMARY, false, NONE, 65, 90),
 			new Row(20, "Secondary", SECONDARY, false, new int[] {90}, 90, 80),
@@ -109,21 +109,21 @@ public final class ChizuSpeeds {
 			new Row(22, "Secondary", SECONDARY, false, new int[] {50}, 50, 0),
 			new Row(23, "Secondary", SECONDARY, false, new int[] {40}, 40, 0),
 			new Row(24, "Secondary", SECONDARY, false, new int[] {30}, 30, 40),
-			new Row(25, "Secondary", SECONDARY, false, NONE, 60, 0),
+			new Row(25, "Secondary", SECONDARY, false, NONE, 60, 65),
 			new Row(26, "Tertiary", TERTIARY, false, new int[] {90}, 90, 0),
 			new Row(27, "Tertiary", TERTIARY, false, new int[] {70}, 70, 0),
 			new Row(28, "Tertiary", TERTIARY, false, new int[] {50}, 50, 40),
 			new Row(29, "Tertiary", TERTIARY, false, new int[] {40}, 40, 0),
 			new Row(30, "Tertiary", TERTIARY, false, new int[] {30}, 30, 40),
-			new Row(31, "Tertiary", TERTIARY, false, NONE, 45, 35),
+			new Row(31, "Tertiary", TERTIARY, false, NONE, 45, 40),
 			new Row(32, "Unclassified", UNCLASSIFIED, false, new int[] {90}, 90, 0),
 			new Row(33, "Unclassified", UNCLASSIFIED, false, new int[] {70}, 70, 0),
 			new Row(34, "Unclassified", UNCLASSIFIED, false, new int[] {50}, 50, 0),
 			new Row(35, "Unclassified", UNCLASSIFIED, false, new int[] {30}, 30, 0),
 			new Row(36, "Unclassified", UNCLASSIFIED, false, NONE, 35, 0),
 			new Row(37, "Residential", RESIDENTIAL, false, new int[] {50}, 50, 40),
-			new Row(38, "Residential", RESIDENTIAL, false, new int[] {40}, 40, 45),
-			new Row(39, "Residential", RESIDENTIAL, false, new int[] {30}, 30, 45),
+			new Row(38, "Residential", RESIDENTIAL, false, new int[] {40}, 40, 40),
+			new Row(39, "Residential", RESIDENTIAL, false, new int[] {30}, 30, 40),
 			new Row(40, "Residential", RESIDENTIAL, false, new int[] {20}, 20, 0),
 			new Row(41, "Residential", RESIDENTIAL, false, NONE, 35, 30),
 			new Row(42, "Living street and service road", LIVING, false, new int[] {20}, 20, 0),
@@ -132,8 +132,8 @@ public final class ChizuSpeeds {
 			new Row(45, "Living street and service road", SERVICE, false, new int[] {30}, 30, 0),
 			new Row(46, "Living street and service road", SERVICE, false, new int[] {20}, 20, 0),
 			new Row(47, "Living street and service road", SERVICE, false, NONE, 30, 20),
-			new Row(48, "Ramps", MOTORWAY_LINK, false, new int[] {130}, 100, 0),
-			new Row(49, "Ramps", MOTORWAY_LINK, false, new int[] {80, 90}, 100, 0),
+			new Row(48, "Ramps", MOTORWAY_LINK, false, new int[] {130}, 100, 80),
+			new Row(49, "Ramps", MOTORWAY_LINK, false, new int[] {80, 90}, 100, 80),
 			new Row(50, "Ramps", MOTORWAY_LINK, false, NONE, 100, 0),
 			new Row(51, "Ramps", TRUNK_LINK, false, new int[] {80}, 90, 0),
 			new Row(52, "Ramps", TRUNK_LINK, false, new int[] {50}, 90, 60),
@@ -267,15 +267,15 @@ public final class ChizuSpeeds {
 	}
 
 	/**
-	 * 白い熊 地図 +050: the table fitted to 白い熊's drives of 2026-10-30 – 11-05 (110 km of free-flowing road,
-	 * OK'd 2026-11-06), written once over the stored rows so it takes effect; any row can still be changed.
+	 * 白い熊 地図 +050: the table fitted to 白い熊's drives, written once over the stored rows so it takes effect;
+	 * any row can still be changed. v2 (OK'd 2026-11-06): the drives of 2026-10-30 – 11-05, 110 km of free road.
+	 * v3 (+078, OK'd 2026-11-16): the drives up to 2026-11-16 — nine rows moved toward what was driven; the
+	 * motorway and ramp rows on one day's data, taken to the limit or part of the way only. Row 38 has no data
+	 * and follows row 39 down, so a lower limit is never faster than a higher one.
 	 */
-	private static final int TABLE_VERSION = 2;
+	private static final int TABLE_VERSION = 3;
 	private static final int[][] FITTED = {
-			{11, 75}, {12, 75}, {14, 65}, {16, 95}, {17, 75}, {18, 70}, {20, 80}, {21, 60}, {28, 40}, {30, 40},
-			{31, 35}, {37, 40}, {39, 45}, {41, 30}, {47, 20}, {52, 60}, {55, 50},
-			// no data, kept below the faster limit next to them
-			{13, 70}, {38, 45}, {24, 40}};
+			{1, 130}, {10, 85}, {17, 70}, {25, 65}, {31, 40}, {38, 40}, {39, 40}, {48, 80}, {49, 80}};
 
 	public static void migrate(@NonNull Context context) {
 		SharedPreferences p = prefs(context);
