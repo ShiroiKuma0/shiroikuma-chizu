@@ -3,6 +3,71 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+105 — 2026-11-19
+
+Built on the same upstream base as 5.5.0+075 (OsmAnd 5.5.0, `master` at `55e2985b11`). Builds
++076 – +104 were test builds on the phone and are all included here.
+
+### Position and location sources
+
+- **The car's own GPS is the position in Android Auto.** When the head unit supplies a location
+  (Car App `CarHardwareLocation`, ~1 Hz, ~1.5 m), it drives the map, the route and the voice; the
+  phone's own receiver takes over within seconds when the car stops giving one.
+- **A position-kind pill** names what the position is at all times — satellite (with the count), car,
+  Wi-Fi, network or an estimate — and, while the receiver has no fix, how many satellites it hears,
+  how strong, and for how long. It sits by the speed box on the car screen (switchable from the
+  phone) and under the right info panel on the phone. A tap shows the full numbers; a long-press
+  opens a menu (teach a position, what the locator knows, forget, coverage, settings). The marker is
+  a hollow ring for a network or Wi-Fi position, the dimmed arrow for an estimate.
+- **A satellite fix is judged by the satellites actually used** and a real altitude, not by any
+  position that merely carries a speed; made-up "all at one point of the sky" status reports are left
+  out of the count.
+- **A Wi-Fi locator built and kept on the phone alone.** It learns where the networks around are —
+  from the car's GPS and good satellite fixes — and from places taught by hand with a crosshair, and
+  places the phone among them when there is no other position. Networks that move are ignored, a
+  coverage overlay shows what it knows, and a taught place holds against a satellite fix beside it
+  when not driving. Everything is kept in the app's own preferences and travels with export/import.
+- **The last position is kept across app starts** and shown as a grey ring until a current one comes.
+
+### Driving, reroute and estimates
+
+- **The reroute loop is fixed** (drives of 2026-11-16): the off-route test measures to the route's
+  line, "wrong direction" needs three fixes, a new route starts on the road the car is matched to,
+  and the pause after a reroute works again.
+- **Traffic swaps need a real gain** — at least 3 minutes and 10 % of the time left, seen on two
+  checks 30 s apart, five minutes between swaps, never onto the route already driven.
+- **The position carries on when the receiver goes silent** — along the route, along the believed
+  road, or past a tunnel the route knew of — at the median of the last few speeds.
+- **The old route line stays** while off the route until a new one is set; old turn directions are
+  not shown or spoken off the route ("recalculating" on the car screen instead); lanes and the turn
+  after next are hidden.
+- **One-way roads and roundabouts are matched only the way they run** at speed; a car with no road
+  within reach is put on the best road nearby rather than drawn in a field.
+- **Finishing a fix and keeping the orbits fresh:** the receiver is held on briefly after 地図 leaves
+  the screen if a fix is within reach, and an optional 90-minute refresh wakes it where the signal is
+  good; the last satellite fix's age is shown.
+- Speed table v3, fitted to the drives.
+
+### The settings page and menus
+
+- **The UI settings page is a folding accordion with a draggable jump index.** A grid of small chips,
+  one per section, sits on top: a tap jumps to and unfolds a section, a long-press drags a chip —
+  reordering the chips live under the finger — and the sections reorder to match on drop. Every
+  section folds (folded by default), the fold state and the order are kept across restarts and
+  carried in the export, the thin section dividers stay, and a "Reset section order" action lives in
+  Maintenance.
+- **Every popup menu is the black-yellow menu:** each action row an outlined pill as wide as the menu
+  with its icon, a › when it opens something, red for a destructive row, the outlined switch for a
+  checkable one, a clear divider, a yellow border, and no scrolling while the screen has room.
+- **The route-planning screen shows the routes flat and north-up** without the POI overlay, as the
+  car's preview does; a tap on a route selects it.
+
+### Fixes
+
+- Settings → "白い熊 地図 UI" no longer crashes in the release build (the page's class keeps its name
+  under code shrinking).
+- Japanese texts for all the new parts.
+
 ## 5.5.0+075 — 2026-11-14
 
 Rebased onto upstream OsmAnd 5.5.0, `master` at `55e2985b11` (2026-11-09), from `9f7ddb7c95`.
