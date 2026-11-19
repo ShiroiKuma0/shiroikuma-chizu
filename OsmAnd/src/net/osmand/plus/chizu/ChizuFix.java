@@ -127,7 +127,9 @@ public final class ChizuFix {
 		if (!SimulationProvider.isNotSimulatedLocation(l)) {
 			return true; // a simulated drive
 		}
-		return l.hasSpeed() && !"network".equals(l.getProvider()) && ChizuGnssLog.fixWithin(10_000);
+		// +102: …and it has a height. At 20:55:46 that day a network position came as “fused” with a speed of
+		// 90 m/s while the receiver did have a fix; a satellite fix carries an altitude, the network's does not
+		return l.hasSpeed() && l.hasAltitude() && !"network".equals(l.getProvider()) && ChizuGnssLog.fixWithin(10_000);
 	}
 
 	/** The marker is the hollow ring: a network position, or none that is current. */

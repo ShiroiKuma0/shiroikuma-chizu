@@ -59,7 +59,43 @@ public final class ChizuGnssLog {
 		ChizuDriveLog.log("gnss first fix after " + ttffMs + " ms");
 	}
 
+	private static long lastSyntheticMs;
+
+	/**
+	 * +102: a made-up sky. With Huawei's location service installed (白い熊, 2026-11-19) a second kind of status
+	 * arrives beside the receiver's own while a fix is being reached: five GPS satellites, every one at
+	 * elevation 60°, azimuth 90°, all “used” at 2–15 dB-Hz — the quick-fix helper's placeholder, not what the
+	 * receiver hears. It made the log read “5 used” at the moment of a 17-satellite fix. A status whose
+	 * satellites all stand at one and the same point of the sky is not a sky and is left out.
+	 */
+	private static boolean synthetic(@NonNull GnssStatus status) {
+		int n = status.getSatelliteCount();
+		if (n < 3) {
+			return false;
+		}
+		float el = status.getElevationDegrees(0);
+		float az = status.getAzimuthDegrees(0);
+		if (el == 0f && az == 0f) {
+			return false; // satellites the receiver has only just found stand at 0/0 until it knows better
+		}
+		for (int i = 1; i < n; i++) {
+			if (status.getElevationDegrees(i) != el || status.getAzimuthDegrees(i) != az) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	public static void onStatus(@NonNull GnssStatus status) {
+		if (synthetic(status)) {
+			long t = SystemClock.elapsedRealtime();
+			if (on() && t - lastSyntheticMs > 60_000) {
+				ChizuDriveLog.log("gnss sky: a made-up status of " + status.getSatelliteCount()
+						+ " satellites all at one point of the sky left out");
+			}
+			lastSyntheticMs = t;
+			return;
+		}
 		int n = status.getSatelliteCount();
 		int u = 0;
 		int e = 0, a = 0, h = 0, st = 0;
