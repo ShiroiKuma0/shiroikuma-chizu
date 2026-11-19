@@ -296,6 +296,9 @@ public class NavigationSession extends Session implements NavigationListener, Os
 			chizuCarServiceAsked = true;
 			app.startNavigationService(NavigationService.USED_BY_CAR);
 			net.osmand.plus.chizu.ChizuDriveLog.log("car location service asked for");
+			net.osmand.plus.chizu.ChizuAgps.onDriveStart(app); // 白い熊 地図 +082
+			net.osmand.plus.chizu.ChizuCarGps.start(getCarContext()); // 白い熊 地図 +083
+			net.osmand.plus.chizu.ChizuWifiLocator.start(app, "car"); // +088: the car's GPS teaches it the roads
 		}
 		// A location that arrived before the session started must not be lost:
 		// OsmAndLocationProvider.setLocationFromService() stores one only while the session has started
@@ -362,6 +365,8 @@ public class NavigationSession extends Session implements NavigationListener, Os
 	public void onDestroy(@NonNull LifecycleOwner owner) {
 		logDiag("onDestroy session=" + System.identityHashCode(this));
 		OsmandApplication app = getApp();
+		net.osmand.plus.chizu.ChizuCarGps.stop(); // 白い熊 地図 +083
+		net.osmand.plus.chizu.ChizuWifiLocator.stop(app, "car");
 		// 白い熊 地図 +075: the session is gone for good (the car is off): back to the profile the phone had
 		if (originalAppMode != null) {
 			boolean routing = settings.FOLLOW_THE_ROUTE.get() || routingHelper.isRouteCalculated()

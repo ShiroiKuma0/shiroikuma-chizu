@@ -108,6 +108,9 @@
 -keep class * extends androidx.preference.PreferenceFragmentCompat { <init>(); }
 -keep class net.osmand.plus.profiles.EditProfilesFragment { <init>(); }
 -keep class net.osmand.plus.settings.fragments.CoordinatesFormatFragment { <init>(); }
+# 白い熊 地図 +101: named in res/xml/settings_main_screen.xml (app:fragment) and created from that name — renamed
+# by the shrinker, Settings → “白い熊 地図 UI” crashed with ClassNotFoundException (白い熊, 2026-11-19)
+-keep class net.osmand.plus.chizu.ChizuUiFragment { <init>(); }
 # app:layout_behavior in layouts.
 -keep class * extends androidx.coordinatorlayout.widget.CoordinatorLayout$Behavior {
 	<init>(android.content.Context, android.util.AttributeSet);

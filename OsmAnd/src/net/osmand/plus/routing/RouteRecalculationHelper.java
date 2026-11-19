@@ -163,9 +163,47 @@ class RouteRecalculationHelper {
 		return routingHelper.getLastProjection();
 	}
 
+	private long chizuLastRerouteMs;
+	private int chizuWait;
+
+	private int chizuNextWait() {
+		if (!isFollowingMode()) {
+			return 0;
+		}
+		long now = System.currentTimeMillis();
+		chizuWait = now - chizuLastRerouteMs < 60_000 ? Math.min(15_000, Math.max(3000, chizuWait * 3 / 2)) : 3000;
+		chizuLastRerouteMs = now;
+		return chizuWait;
+	}
+
 	// 白い熊 地図: make an already calculated traffic candidate the active route
 	void chizuSetNewRoute(@NonNull RouteCalculationResult res) {
-		setNewRoute(routingHelper.getRoute(), res, getLastFixedLocation());
+		chizuQuiet = true; // +078: the traffic swap has its own announcement; "route recalculated" came on top of it
+		try {
+			setNewRoute(routingHelper.getRoute(), res, getLastFixedLocation());
+		} finally {
+			chizuQuiet = false;
+		}
+	}
+
+	private boolean chizuQuiet;
+
+	/**
+	 * 白い熊 地図 +078: the new route runs on the roads the old one had ahead — a recalculation that changed
+	 * nothing worth saying. It is put in place (its start is the car's place now) without the prompt.
+	 */
+	private boolean chizuSameAhead(@NonNull RouteCalculationResult prev, @NonNull RouteCalculationResult res) {
+		try {
+			if (!prev.isCalculated() || !res.isCalculated()) {
+				return false;
+			}
+			List<net.osmand.router.RouteSegmentResult> now = res.getOriginalRoute();
+			List<net.osmand.router.RouteSegmentResult> before = prev.getOriginalRoute(prev.getCurrentRoute());
+			return now != null && before != null && !now.isEmpty() && !before.isEmpty()
+					&& net.osmand.plus.chizu.ChizuTraffic.sharedFraction(now, before) > 0.95f;
+		} catch (RuntimeException e) {
+			return false;
+		}
 	}
 
 	private void setNewRoute(RouteCalculationResult prevRoute, RouteCalculationResult res, Location start) {
@@ -205,7 +243,12 @@ class RouteRecalculationHelper {
 			}
 			// trigger voice prompt only if new route is in forward direction
 			// If route is in wrong direction after one more setLocation it will be recalculated
-			if (shouldAnnounceNewRoute(res)) {
+			boolean chizuSame = !newRoute && chizuSameAhead(prevRoute, res);
+			if (chizuQuiet || chizuSame) {
+				net.osmand.plus.chizu.ChizuDriveLog.log("route prompt left out: "
+						+ (chizuQuiet ? "traffic swap, announced by itself" : "same roads ahead as before"));
+				getVoiceRouter().chizuRouteReplacedSilently();
+			} else if (shouldAnnounceNewRoute(res)) {
 				if (newRoute) {
 					suppressedRecalculationPrompt.reset();
 					getVoiceRouter().newRouteIsCalculated(true);
@@ -573,7 +616,11 @@ class RouteRecalculationHelper {
 				}
 			}
 			if (t == null && task != null) {
-				evalWaitInterval = task.evalWaitInterval;
+				// 白い熊 地図 +078: a task carries a wait only when it failed; after a success stock wrote its 0 over
+				// the pause setNewRoute had just set, so every reroute could be followed by the next at once
+				// (wait=0 on 13 of 16 recalculations on 2026-11-09). Now 3 s after a reroute, growing by half to
+				// 15 s while reroutes follow each other within a minute.
+				evalWaitInterval = task.evalWaitInterval > 0 ? task.evalWaitInterval : chizuNextWait();
 				lastRouteCalcError = task.routeCalcError;
 				lastRouteCalcErrorShort = task.routeCalcErrorShort;
 			}

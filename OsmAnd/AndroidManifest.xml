@@ -22,12 +22,18 @@
 		tools:ignore="ScopedStorage" />
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+	<!-- 白い熊 地図 +088: the Wi-Fi locator asks for scans itself -->
+	<uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 	<uses-permission android:name="android.permission.WAKE_LOCK" />
 	<uses-permission android:name="android.permission.CAMERA" />
 	<uses-permission android:name="android.permission.VIBRATE" />
 	<uses-permission android:name="android.permission.RECORD_AUDIO" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+	<!-- 白い熊 地図 +092: the 90-minute orbit refresh (ChizuFixService) runs while 地図 is not on the screen: it needs the
+	     location “Allow all the time”, and an exact alarm to be allowed to start -->
+	<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+	<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 	<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
 	<uses-permission android:name="androidx.car.app.MAP_TEMPLATES"/>
@@ -1310,6 +1316,15 @@
 		<meta-data android:name="androidx.car.app.theme"
 			android:resource="@style/ChizuCarAppTheme"
 			tools:ignore="MetadataTagInsideApplicationTag" />
+
+		<!-- 白い熊 地図 +092: keeps the satellite receiver on a little longer, see the class -->
+		<service
+			android:name="net.osmand.plus.chizu.ChizuFixService"
+			android:foregroundServiceType="location"
+			android:exported="false" />
+		<receiver
+			android:name="net.osmand.plus.chizu.ChizuFixService$Alarm"
+			android:exported="false" />
 
 		<service
 			android:process="${applicationId}"

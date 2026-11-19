@@ -602,8 +602,16 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 				}
 				startLocationIndex = currentRoute;
 			} else {
-				lastProjection = straight || routeUpdated ? helper.getLastFixedLocation() : helper.getLastProjection();
-				startLocationIndex = route.getCurrentStraightAngleRoute();
+				// 白い熊 地図 +078: while the car is off the route the line starts where the car left it (see
+				// RoutingHelper.chizuHeldDrawProjection) — the old route stays in view until the new one is set
+				Location chizuHeld = straight || routeUpdated ? null : helper.chizuHeldDrawProjection(route);
+				if (chizuHeld != null) {
+					lastProjection = chizuHeld;
+					startLocationIndex = helper.chizuHeldDrawIndex();
+				} else {
+					lastProjection = straight || routeUpdated ? helper.getLastFixedLocation() : helper.getLastProjection();
+					startLocationIndex = route.getCurrentStraightAngleRoute();
+				}
 			}
 			lastRouteProjection = lastProjection;
 			boolean draw = true;
@@ -1246,7 +1254,7 @@ public class RouteLayer extends BaseRouteLayer implements IContextMenuProvider {
 	}
 
 	/** Tapping a route of the traffic chooser selects it; true when the tap was taken. */
-	private boolean selectChizuRouteAt(@NonNull PointF point, @NonNull RotatedTileBox tileBox) {
+	public boolean selectChizuRouteAt(@NonNull PointF point, @NonNull RotatedTileBox tileBox) {
 		ChizuRouteCandidates chooser = helper.getChizuCandidates();
 		if (!helper.isRoutePlanningMode() || !chooser.hasChoice()) {
 			return false;

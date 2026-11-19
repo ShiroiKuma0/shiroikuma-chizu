@@ -462,6 +462,10 @@ public class ContextMenuLayer extends OsmandMapLayer implements ChangeMarkerPosi
 	@Override
 	@RequiresPermission(Manifest.permission.VIBRATE)
 	public boolean onLongPressEvent(@NonNull PointF point, @NonNull RotatedTileBox tileBox) {
+		// 白い熊 地図 +088: the position pill's menu, before the map's own long press
+		if (net.osmand.plus.chizu.ChizuFix.onLongPress(getMapActivity(), point.x, point.y)) {
+			return true;
+		}
 		if (menu == null || disableLongPressOnMap(point, tileBox)) {
 			return false;
 		}
@@ -914,6 +918,10 @@ public class ContextMenuLayer extends OsmandMapLayer implements ChangeMarkerPosi
 	@Override
 	public boolean onSingleTap(@NonNull PointF point, @NonNull RotatedTileBox tileBox) {
 		MapActivity mapActivity = getMapActivity();
+		// 白い熊 地図 +088: a tap on the position pill (teaching, or its numbers), before anything on the map under it
+		if (net.osmand.plus.chizu.ChizuFix.onTap(getApplication(), mapActivity, point.x, point.y)) {
+			return true;
+		}
 		if (mapActivity == null || menu == null || mInChangeMarkerPositionMode || isInGpxDetailsMode()
 				|| mapActivity.getFragmentsHelper().getGpsFilterFragment() != null
 				|| mapActivity.getFragmentsHelper().getStarMapFragment() != null
@@ -934,6 +942,13 @@ public class ContextMenuLayer extends OsmandMapLayer implements ChangeMarkerPosi
 			CallbackWithObject<LatLon> cb = selectOnMap;
 			cb.processResult(latlon);
 			selectOnMap = null;
+			return true;
+		}
+
+		// 白い熊 地図 +077: a tap on a route offered selects it. This layer is asked before the route layer, and
+		// opened the menu of whatever lay under the route — a road, a place — so the tap never reached it.
+		if (getApplication().getOsmandMap().getMapLayers().getRouteLayer().selectChizuRouteAt(point, tileBox)) {
+			net.osmand.plus.chizu.ChizuDriveLog.log("route picked by a tap on the map");
 			return true;
 		}
 

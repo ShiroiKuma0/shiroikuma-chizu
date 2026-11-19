@@ -75,7 +75,10 @@ public class NextTurnWidget extends NextTurnBaseWidget {
 			// 白い熊 地図: while off the route or recalculating, the next turn of the route stays in the
 			// box, with a small spinner in its corner — never the grey off-route sign in its place
 			chizuRecalc = deviatedFromRoute || routingHelper.isRouteBeingCalculated();
-			deviatedFromRoute = false;
+			// +078: …but once the car is judged off the route (three fixes running) the old route's turn means
+			// nothing: the off-route sign with the distance from the route takes its place, spinner and all,
+			// until the new route is set (白い熊, 2026-11-16)
+			deviatedFromRoute = routingHelper.chizuGuidanceStale();
 
 			if (deviatedFromRoute) {
 				turnType = TurnType.valueOf(TurnType.OFFR, settings.DRIVING_REGION.get().leftHandDriving);

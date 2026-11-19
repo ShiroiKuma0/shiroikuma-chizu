@@ -31,8 +31,16 @@ public class SimulationProvider {
 	private int currentRoad = -1;
 	private int currentSegment;
 	private QuadPointDouble currentPoint;
+	// 白い熊 地図 +079: not a tunnel but the open route — the car's own speed, not the lowest limit on the way
+	private final boolean chizuFree;
+	private boolean chizuPastEnd;
 
 	public SimulationProvider(@NonNull Location location, @NonNull List<RouteSegmentResult> roads) {
+		this(location, roads, false);
+	}
+
+	public SimulationProvider(@NonNull Location location, @NonNull List<RouteSegmentResult> roads, boolean chizuFree) {
+		this.chizuFree = chizuFree;
 		this.startLocation = new Location(location);
 		this.roads = new ArrayList<>(roads);
 		long time = System.currentTimeMillis();
@@ -128,7 +136,7 @@ public class SimulationProvider {
 			return null;
 		}
 		Location location = new Location(SIMULATED_PROVIDER_TUNNEL);
-		float spd = Math.min(minOfMaxSpeedInTunnel, startLocation.getSpeed());
+		float spd = chizuFree ? startLocation.getSpeed() : Math.min(minOfMaxSpeedInTunnel, startLocation.getSpeed());
 
 		location.setSpeed(spd);
 		location.setAltitude(startLocation.getAltitude());
@@ -139,11 +147,17 @@ public class SimulationProvider {
 		if (metersSimLocationFromDesiredLocation < 0) { // error simulation
 			return null;
 		}
+		chizuPastEnd = metersSimLocationFromDesiredLocation > 0;
 		// limit 100m if we overpass tunnel
 		if (metersSimLocationFromDesiredLocation >= 100) {
 			return null;
 		}
 		return location;
+	}
+
+	/** 白い熊 地図 +079: the last location given lies past the end of the roads, on the last one's straight line. */
+	public boolean isChizuPastEnd() {
+		return chizuPastEnd;
 	}
 
 	public boolean isSimulatedDataAvailable() {

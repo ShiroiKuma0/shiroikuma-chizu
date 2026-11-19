@@ -57,6 +57,14 @@ public final class ChizuDisplayFix {
 	private String lastState = "";
 	private float lastCourse = Float.NaN;
 	private long lastCourseMs;
+	private static final int WEAK_OPPOSED_FIXES = 3;
+	private static final long MATCH_FRESH_MS = 3000;
+	private int weakOpposed;
+	private double matchLat;
+	private double matchLon;
+	private float matchDir;
+	private String matchWhat = "";
+	private long matchMs;
 
 	@NonNull
 	public synchronized Location shown(@NonNull Location raw, @NonNull Location routed, boolean onRoute,
@@ -78,8 +86,18 @@ public final class ChizuDisplayFix {
 		boolean weakBearing = acc > BEARING_TURN_ACC;
 		if (!Float.isNaN(trusted) && weakBearing && !Float.isNaN(heading)
 				&& ChizuRoadMatcher.diff(trusted, heading) > ROAD_ALIGN_DEG) {
-			trusted = Float.NaN;
+			// +078: …unless it says so three fixes running: a drift wanders, a car that has turned keeps its
+			// course (2026-11-16: the arrow faced 148° for 20 s while the car drove 338°)
+			weakOpposed = ChizuRoadMatcher.diff(trusted, heading) > REVERSE_DEG ? weakOpposed + 1 : 0;
+			if (weakOpposed < WEAK_OPPOSED_FIXES) {
+				trusted = Float.NaN;
+			} else {
+				weakBearing = false;
+			}
+		} else {
+			weakOpposed = 0;
 		}
+		matcher.rawBearing = raw.hasBearing() ? raw.getBearing() : Float.NaN;
 
 		// the car's own course over the last stretch of at least MOVE_M
 		float course = Float.NaN;
@@ -105,7 +123,11 @@ public final class ChizuDisplayFix {
 		String state;
 		ChizuRoadMatcher.Match m = null;
 		if (onRoute) {
+			// +078: the roads around are kept loaded on the route too, so the first fix off it has them — until
+			// now they were loaded only once the car had left, and the first fixes were drawn bare
+			matcher.request(raw.getLatitude(), raw.getLongitude());
 			matcher.forget();
+			matchMs = 0;
 			if (routed.hasBearing()) {
 				roadDir = routed.getBearing();
 			}
@@ -118,10 +140,16 @@ public final class ChizuDisplayFix {
 				out.setLatitude(m.lat);
 				out.setLongitude(m.lon);
 				roadDir = m.dir;
+				matchLat = m.lat;
+				matchLon = m.lon;
+				matchDir = m.dir;
+				matchWhat = m.describe();
+				matchMs = now;
 				state = "held".equals(m.how) ? "held on the last road"
 						: "held/weak".equals(m.how) ? "held on the last road through weak fixes" : "on the nearest road";
 			} else {
 				state = "free, no road near";
+				matchMs = 0;
 			}
 		}
 		if (!state.equals(lastState)) {
@@ -184,7 +212,37 @@ public final class ChizuDisplayFix {
 		return Float.isNaN(a) ? "-" : String.format(java.util.Locale.US, "%.0f", a);
 	}
 
+	/**
+	 * +078: where a new route is to start — on the road the car was last matched to, facing along it, when that
+	 * match is fresh and within the fix's error; else the fix as it is. On 2026-11-16 the car left the motorway by
+	 * its exit ramp and the search, given the bare fix between the two, started on the motorway eight times running.
+	 */
+	@NonNull
+	public synchronized Location routeStart(@NonNull Location raw) {
+		long now = android.os.SystemClock.elapsedRealtime();
+		if (matchMs == 0 || now - matchMs > MATCH_FRESH_MS) {
+			return raw;
+		}
+		float acc = raw.hasAccuracy() ? raw.getAccuracy() : 10f;
+		double d = MapUtils.getDistance(matchLat, matchLon, raw.getLatitude(), raw.getLongitude());
+		// the match is a fix old: allow what the car has driven since
+		float speed = raw.hasSpeed() ? raw.getSpeed() : 0f;
+		if (d > Math.max(40, 2 * acc) + speed * (now - matchMs) / 1000.0) {
+			return raw;
+		}
+		Location start = new Location(raw);
+		start.setLatitude(matchLat);
+		start.setLongitude(matchLon);
+		float dir = Float.isNaN(heading) ? matchDir : ChizuRoadMatcher.align(matchDir, heading);
+		start.setBearing(dir);
+		ChizuDriveLog.log(String.format(java.util.Locale.US, "reroute starts on the matched road: %s, %.0f m from the fix, facing %.0f",
+				matchWhat, d, dir));
+		return start;
+	}
+
 	public synchronized void reset() {
+		matchMs = 0;
+		weakOpposed = 0;
 		heading = Float.NaN;
 		hasAnchor = false;
 		reverseSince = 0;

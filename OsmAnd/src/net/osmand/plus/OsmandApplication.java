@@ -283,6 +283,7 @@ public class OsmandApplication extends MultiDexApplication {
 		net.osmand.plus.chizu.ChizuDriveLog.init(this);
 		net.osmand.plus.chizu.ChizuRoadLog.init(this);
 		net.osmand.plus.chizu.ChizuSpeeds.migrate(this); // 白い熊 地図 +050: the table fitted to the drives
+		net.osmand.plus.chizu.ChizuFixService.arm(this); // +092: the 90-minute orbit refresh, when switched on
 		net.osmand.plus.chizu.ChizuOverlayGuard.init(this); // 白い熊 地図 +045: the overlay never vanishes unnoticed
 		appInitializer.initVariables();
 		if (appInitializer.isAppVersionChanged() && appInitializer.getPrevAppVersion() < AppVersionUpgradeOnInit.VERSION_2_3) {

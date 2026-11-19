@@ -103,7 +103,7 @@ public class LanesWidget extends MapWidget {
 					lanes = RouteResultPreparation.parseLanes(ro, degree / 180 * Math.PI);
 				}
 			}
-		} else if (routingHelper.isRouteCalculated() && followingMode) {
+		} else if (routingHelper.isRouteCalculated() && followingMode && !routingHelper.chizuGuidanceStale()) { // 白い熊 地図 +078
 			NextDirectionInfo directionInfo = routingHelper.getNextRouteDirectionInfo(new NextDirectionInfo(), false);
 			RouteDirectionInfo routeDirectionInfo = directionInfo != null ? directionInfo.directionInfo : null;
 			TurnType turnType = routeDirectionInfo != null ? routeDirectionInfo.getTurnType() : null;

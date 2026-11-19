@@ -71,6 +71,9 @@ public class SecondNextTurnWidget extends NextTurnBaseWidget {
 					info = routingHelper.getNextRouteDirectionInfoAfter(info, nextDirectionInfo, true);
 				}
 			}
+			if (routingHelper.chizuGuidanceStale()) {
+				info = null; // 白い熊 地図 +078: nothing of the old route once the car is off it
+			}
 			if (info != null && info.distanceTo > 0 && info.directionInfo != null) {
 				streetName = TripUtils.getStreetName(info);
 				if (verticalWidget && Algorithms.isEmpty(streetName.text)) {

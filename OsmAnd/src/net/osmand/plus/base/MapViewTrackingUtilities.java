@@ -482,7 +482,8 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 	}
 
 	public void updateMapTilt() {
-		if (mapView != null && !trackingPaused) {
+		// 白い熊 地図 +076: the route planning map stays flat when the profile is changed on its card
+		if (mapView != null && !trackingPaused && !net.osmand.plus.chizu.ChizuRoutePreview.isActive()) {
 			mapView.setElevationAngle(settings.getLastKnownMapElevation());
 		}
 	}
@@ -531,9 +532,12 @@ public class MapViewTrackingUtilities implements OsmAndLocationListener, IMapLoc
 			}
 			if (location == null) {
 				//Hardy, 2019-12-15: Inject A-GPS data if backToLocationImpl fails with no fix:
-				if (app.getSettings().isInternetConnectionAvailable(true)) {
-					locationProvider.redownloadAGPS();
-					app.showToastMessage(app.getString(R.string.unknown_location) + "\n\n" + app.getString(R.string.agps_data_last_downloaded, (new SimpleDateFormat("yyyy-MM-dd  HH:mm")).format(app.getSettings().AGPS_DATA_LAST_TIME_DOWNLOADED.get())));
+				// 白い熊 地図 +082: says what was done and what the receiver holds, not “downloaded” — nothing tells an
+				// app whether anything was
+				if (net.osmand.plus.chizu.ChizuAgps.online(app)) {
+					net.osmand.plus.chizu.ChizuAgps.ask(app, false);
+					app.showToastMessage(app.getString(R.string.unknown_location) + "\n\n" + app.getString(R.string.chizu_agps_asked_now,
+							net.osmand.plus.chizu.ChizuGnssLog.orbits()));
 				} else {
 					app.showToastMessage(R.string.unknown_location);
 				}

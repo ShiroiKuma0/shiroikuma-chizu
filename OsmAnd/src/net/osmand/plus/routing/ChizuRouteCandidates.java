@@ -81,7 +81,16 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 	// planning shows what it has after this long; a slower alternative is not worth the wait
 	private static final long PLAN_BUDGET_MS = 60_000;
 	// after an off-route recalculation, read the traffic on the new route this soon
-	private static final long REROUTE_CHECK_DELAY_MS = 3_000;
+	// 白い熊 地図 +078: 30 s (was 3). Each reroute restarts the wait, so a run of reroutes is checked once, when
+	// it is over, and only with the car on the route — on 2026-11-16 some eighty forced checks of 15–45 s of
+	// search each ran between the reroutes, and their swaps set off the next reroutes.
+	private static final long REROUTE_CHECK_DELAY_MS = 30_000;
+	private static final long SWAP_COOLDOWN_MS = 5 * 60_000L;
+	private static final long SWAP_CONFIRM_WITHIN_MS = 5 * 60_000L;
+	private static final long SWAP_CONFIRM_AFTER_MS = 30_000;
+	private static final float SWAP_SAME_SHARE = 0.95f;
+	private long lastSwapMs;
+	private long swapSeenMs; // a gain worth a swap was seen at this time, and waits to be seen again
 
 	public enum Kind {
 		AVOID_RED(R.string.chizu_traffic_avoid_red),
@@ -261,7 +270,11 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 			public void run() {
 				if (rerouteCheck == this) {
 					rerouteCheck = null;
-					checkAhead(true);
+					if (routingHelper.chizuGuidanceStale() || routingHelper.isRouteBeingCalculated()) {
+						scheduleRerouteCheck(); // still off the route: look once the car is on one
+					} else {
+						checkAhead(true);
+					}
 				}
 			}
 		};
@@ -949,7 +962,10 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 				while (levels.size() < ahead.size()) {
 					levels.add(Level.UNKNOWN); // beyond the sampled head: the router's own time
 				}
-				float currentTime = ChizuTraffic.adjustedTime(ahead, levels);
+				// 白い熊 地図 +078: like for like — a candidate's time has its turns in it (+050), the current route's
+				// had not, so the route the car was on looked faster than its own twin from the search
+				float currentTime = ChizuTraffic.adjustedTime(ahead, levels)
+						+ net.osmand.plus.chizu.ChizuSpeeds.countTurns(ahead) * net.osmand.plus.chizu.ChizuSpeeds.turnSeconds;
 				if (chosenProtected) {
 					// a route picked on purpose is left alone until its own conditions change
 					long delay = Math.round((System.currentTimeMillis() + currentTime * 1000 - chosenArrivalMs) / 1000.0);
@@ -1007,14 +1023,45 @@ public class ChizuRouteCandidates implements IRouteInformationListener {
 					if (gen != generation || !routingHelper.isFollowingMode()) {
 						return;
 					}
-					if (chosen != null && saving >= ChizuTrafficPrefs.getMinSavingMinutes(app) * 60) {
-						net.osmand.plus.chizu.ChizuDriveLog.log("traffic reroute taken: " + chosen.kind + ", saves " + saving + " s");
+					// 白い熊 地図 +078: a swap must be worth it — the minimum saving AND a tenth of the time left; not
+					// the route the car is on already; not while the car is off the route; not within five minutes
+					// of the last swap; and only when a second look half a minute later still finds the gain.
+					long now = System.currentTimeMillis();
+					int need = Math.max(ChizuTrafficPrefs.getMinSavingMinutes(app) * 60,
+							Math.round(currentTime * ChizuTrafficPrefs.MIN_SAVING_SHARE));
+					String held = null;
+					if (chosen == null || saving < need) {
+						swapSeenMs = 0;
+					} else if (ChizuTraffic.sharedFraction(chosen.segments, ahead) > SWAP_SAME_SHARE
+							&& ChizuTraffic.sharedFraction(ahead, chosen.segments) > SWAP_SAME_SHARE) {
+						held = "it is the route the car is on";
+						swapSeenMs = 0;
+					} else if (routingHelper.chizuGuidanceStale() || routingHelper.isRouteBeingCalculated()) {
+						held = "the car is off the route";
+					} else if (now - lastSwapMs < SWAP_COOLDOWN_MS) {
+						held = "the last swap was " + (now - lastSwapMs) / 1000 + " s ago";
+					} else if (swapSeenMs == 0 || now - swapSeenMs > SWAP_CONFIRM_WITHIN_MS) {
+						held = "waiting for a second look in " + SWAP_CONFIRM_AFTER_MS / 1000 + " s";
+						swapSeenMs = now;
+						app.runInUIThread(() -> checkAhead(true), SWAP_CONFIRM_AFTER_MS);
+					}
+					if (held != null) {
+						net.osmand.plus.chizu.ChizuDriveLog.log("traffic reroute held back (" + chosen.kind + ", saves " + saving
+								+ " s, needs " + need + " s): " + held);
+					}
+					if (chosen != null && saving >= need && held == null) {
+						swapSeenMs = 0;
+						lastSwapMs = now;
+						net.osmand.plus.chizu.ChizuDriveLog.log("traffic reroute taken: " + chosen.kind + ", saves " + saving
+								+ " s (needed " + need + " s), seen twice");
 						chosenProtected = false; // off the chosen route now: back to the fastest-first rule
 						ChizuTrafficBans.setActive(chosen.bans);
 						selecting = true;
 						routingHelper.chizuSetActiveRoute(chosen.route);
 						routingHelper.getVoiceRouter().chizuAnnounceTrafficReroute(saving);
-					} else {
+					} else if (!routingHelper.chizuGuidanceStale()) {
+						// +078: the bans stay as they are while the car is off the route — changing them between
+						// two reroutes made each reroute a different route (10.0, 7.4, 7.0, 9.9, 6.2 km in two minutes)
 						ChizuTrafficBans.setActive(jamsNow);
 					}
 				});

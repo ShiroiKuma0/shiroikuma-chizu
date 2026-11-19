@@ -1167,6 +1167,30 @@ public class RouteCalculationResult {
 		return chain;
 	}
 
+	/**
+	 * 白い熊 地図 +078: the route ahead of the current position, up to {@code maxLength} metres — the path the
+	 * position is estimated along when the receiver goes silent away from any tunnel the route knows of.
+	 */
+	@Nullable
+	public List<RouteSegmentResult> getChizuAheadChain(float maxLength) {
+		int cs = currentRoute > 0 ? currentRoute - 1 : 0;
+		if (cs >= segments.size()) {
+			return null;
+		}
+		List<RouteSegmentResult> chain = new ArrayList<>();
+		RouteSegmentResult prev = null;
+		float length = 0;
+		for (int i = cs; i < segments.size() && length < maxLength; i++) {
+			RouteSegmentResult segment = segments.get(i);
+			if (segment != prev && segment != null) {
+				chain.add(segment);
+				length += segment.getDistance();
+				prev = segment;
+			}
+		}
+		return chain.isEmpty() ? null : chain;
+	}
+
 	public float getCurrentMaxSpeed(int profile) {
 		RouteSegmentResult res = getCurrentSegmentResult();
 		if (res != null) {
