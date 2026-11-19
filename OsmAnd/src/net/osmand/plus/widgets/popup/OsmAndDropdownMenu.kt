@@ -212,7 +212,15 @@ fun <T> OsmAndDropdownMenuContent(
 	title: String? = null,
 	onDismissRequest: () -> Unit = {}
 ) {
-	val resolvedContainerColor = colors?.background ?: containerColor
+	// 白い熊 地図 +090: the black-yellow menu look, see ChizuMenuPills — its colours whatever the caller passed
+	val chizuContext = LocalContext.current
+	val chizuAccent = Color(net.osmand.plus.chizu.ChizuMenuPills.accent(chizuContext))
+	val chizuWarning = Color(net.osmand.plus.chizu.ChizuMenuPills.warning(chizuContext))
+	val chizuDivider = Color(net.osmand.plus.chizu.ChizuMenuPills.divider(chizuContext))
+	val chizuSwitchOff = Color(net.osmand.plus.chizu.ChizuMenuPills.switchOff(chizuContext))
+	val chizuNote = Color(net.osmand.plus.chizu.ChizuTheme.getColor(chizuContext, net.osmand.plus.chizu.ChizuTheme.Slot.TEXT_SECONDARY))
+	val chizuAnyIcon = options.any { it.iconId != null || it.iconDrawable != null }
+	val resolvedContainerColor = Color(net.osmand.plus.chizu.ChizuMenuPills.background(chizuContext))
 	val hasSelection = options.any { it.selected && !it.isCheckbox }
 
 	Surface(
@@ -221,7 +229,7 @@ fun <T> OsmAndDropdownMenuContent(
 		color = resolvedContainerColor,
 		tonalElevation = tonalElevation,
 		shadowElevation = shadowElevation,
-		border = border
+		border = BorderStroke(1.25.dp, chizuAccent) // +094: every menu has a yellow border
 	) {
 		val scrollModifier = if (scrollState != null) Modifier.verticalScroll(scrollState) else Modifier
 		Column(
@@ -241,7 +249,7 @@ fun <T> OsmAndDropdownMenuContent(
 				) {
 					Text(
 						text = title,
-						color = colors?.secondaryText ?: MaterialTheme.colorScheme.onSurfaceVariant,
+						color = chizuNote,
 						style = MaterialTheme.typography.labelMedium,
 						fontWeight = FontWeight.Medium
 					)
@@ -259,23 +267,21 @@ fun <T> OsmAndDropdownMenuContent(
 					) {
 						Text(
 							text = option.labelText,
-							color = colors?.secondaryText ?: MaterialTheme.colorScheme.onSurfaceVariant,
+							color = chizuNote,
 							style = MaterialTheme.typography.labelMedium,
 							fontWeight = FontWeight.Medium
 						)
 					}
 				}
 
-				val titleColor = option.titleColor
-					?: if (!option.enabled) {
-						(colors?.text ?: MaterialTheme.colorScheme.onSurface).copy(alpha = 0.38f)
-					} else if (option.isDestructive) {
-						colors?.error?.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.error
-					} else if (option.titleBold) {
-						colors?.secondaryText ?: MaterialTheme.colorScheme.onSurfaceVariant
-					} else {
-						colors?.text ?: Color.Unspecified
-					}
+				// 白い熊 地図 +090: a row that toggles (a checkbox, or one of a list of choices) stays plain with the
+				// outlined switch; every other row is a pill in its row colour — red when it deletes
+				val chizuToggle = option.isCheckbox || option.selected || hasSelection
+				val chizuRowColor = (if (option.isDestructive && !chizuToggle) chizuWarning else chizuAccent)
+					.let { if (option.enabled) it else it.copy(alpha = 0.38f) }
+				val chizuIconColor = Color(net.osmand.plus.chizu.ChizuMenuPills.iconColor(chizuContext, option.title,
+					option.isDestructive && !chizuToggle)).let { if (option.enabled) it else it.copy(alpha = 0.38f) }
+				val titleColor = chizuRowColor
 
 				val text: @Composable () -> Unit = {
 					if (option.supportingText != null) {
@@ -289,11 +295,7 @@ fun <T> OsmAndDropdownMenuContent(
 							)
 							Text(
 								text = option.supportingText,
-								color = if (option.enabled) {
-									colors?.secondaryText ?: MaterialTheme.colorScheme.onSurfaceVariant
-								} else {
-									colors?.secondaryText?.copy(alpha = 0.38f) ?: MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-								},
+								color = if (option.enabled) chizuNote else chizuNote.copy(alpha = 0.38f),
 								fontSize = 12.sp,
 								maxLines = 1,
 								overflow = TextOverflow.Ellipsis
@@ -313,12 +315,7 @@ fun <T> OsmAndDropdownMenuContent(
 				val leadingIcon: (@Composable () -> Unit)? = when {
 					option.iconId != null -> {
 						{
-							val resolvedColor = when {
-								!option.enabled -> (option.iconColor ?: colors?.icon ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.38f)
-								option.isDestructive -> colors?.error?.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.error
-								option.iconColor != null -> option.iconColor
-								else -> colors?.icon ?: MaterialTheme.colorScheme.onSurfaceVariant
-							}
+							val resolvedColor = chizuIconColor // 白い熊 地図 +090: coloured by what the row does
 							Icon(
 								painter = painterResource(option.iconId),
 								contentDescription = null,
@@ -330,12 +327,7 @@ fun <T> OsmAndDropdownMenuContent(
 
 					option.iconDrawable != null -> {
 						{
-							val resolvedColor = when {
-								!option.enabled -> (option.iconColor ?: colors?.icon ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.38f)
-								option.isDestructive -> colors?.error?.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.error
-								option.iconColor != null -> option.iconColor
-								else -> colors?.icon ?: MaterialTheme.colorScheme.onSurfaceVariant
-							}
+							val resolvedColor = chizuIconColor // 白い熊 地図 +090: coloured by what the row does
 							AndroidDrawableIcon(
 								drawable = option.iconDrawable,
 								tint = resolvedColor,
@@ -452,18 +444,34 @@ fun <T> OsmAndDropdownMenuContent(
 					else -> null
 				}
 
-				DropdownMenuItem(
-					text = text,
+				val chizuLeading: (@Composable () -> Unit)? = leadingIcon
+					?: if (chizuAnyIcon) {
+						{ Spacer(modifier = Modifier.size(MENU_ICON_SIZE)) } // the icon column is kept: labels share one edge
+					} else null
+				val chizuTrailing: (@Composable () -> Unit)? = when {
+					chizuToggle -> {
+						{ net.osmand.plus.chizu.ChizuMenuSwitch(checked = option.selected, on = chizuAccent, off = chizuSwitchOff) }
+					}
+					option.trailingBadgeTitle != null || option.trailingText != null || option.trailingIconId != null
+						|| option.trailingIconDrawable != null -> trailingIcon
+					else -> null
+				}
+				net.osmand.plus.chizu.ChizuMenuRow(
+					pill = !chizuToggle,
+					color = chizuRowColor,
+					enabled = option.enabled,
+					opens = !chizuToggle && net.osmand.plus.chizu.ChizuMenuPills.opens(option.title),
 					onClick = { onOptionSelected(option.value) },
-					leadingIcon = leadingIcon,
-					trailingIcon = trailingIcon,
-					enabled = option.enabled
+					leading = chizuLeading,
+					trailing = chizuTrailing,
+					text = text
 				)
 
 				if (option.showDividerAfter) {
 					HorizontalDivider(
-						modifier = Modifier.padding(horizontal = MENU_HORIZONTAL_PADDING, vertical = 2.dp),
-						color = colors?.divider ?: MaterialTheme.colorScheme.outlineVariant
+						modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+						thickness = 1.dp,
+						color = chizuDivider
 					)
 				}
 			}
@@ -684,11 +692,18 @@ fun showComposeDropdownMenu(displayData: PopUpMenuDisplayData): PopupWindow? {
 		(displayData.customDropDown != PopUpMenuDisplayData.CustomDropDown.BOTTOM_DROPDOWN &&
 			spaceBelow < approxMenuHeightPx && spaceAbove > spaceBelow)
 
-	val availableSpacePx = if (shouldShowAbove) {
+	val chizuBasePx = if (shouldShowAbove) {
 		spaceAbove - screenMarginPx - verticalSpacingPx
 	} else {
 		spaceBelow - screenMarginPx - verticalSpacingPx
 	}
+	// 白い熊 地図 +090: a menu never scrolls while the screen has room — it is shifted by what is missing on
+	// its side of the anchor, into the room on the other side
+	val chizuWantPx = AndroidUtils.dpToPx(context, (totalHeight - MENU_SCREEN_MARGIN).value)
+	val chizuOtherPx = (if (shouldShowAbove) spaceBelow + anchorView.height else spaceAbove + anchorView.height) -
+		screenMarginPx - AndroidUtils.getStatusBarHeight(context)
+	val chizuShiftPx = if (chizuWantPx > chizuBasePx) minOf(chizuWantPx - chizuBasePx, maxOf(0, chizuOtherPx)) else 0
+	val availableSpacePx = chizuBasePx + chizuShiftPx
 	val density = context.resources.displayMetrics.density
 	val availableSpaceDp = availableSpacePx / density
 	val minSensibleHeightDp = (MENU_ITEM_HEIGHT * 1.5f + MENU_CONTAINER_VERTICAL_PADDING * 2).value
@@ -726,9 +741,9 @@ fun showComposeDropdownMenu(displayData: PopUpMenuDisplayData): PopupWindow? {
 	val effectiveMenuHeightPx = minOf(actualMenuHeightPx, maxMenuHeightPx)
 
 	val vOffset = if (shouldShowAbove) {
-		-anchorView.height - effectiveMenuHeightPx + shadowPaddingPx - verticalSpacingPx
+		-anchorView.height - effectiveMenuHeightPx + shadowPaddingPx - verticalSpacingPx + chizuShiftPx
 	} else {
-		-shadowPaddingPx + verticalSpacingPx
+		-shadowPaddingPx + verticalSpacingPx - chizuShiftPx
 	}
 
 	val popupWindow = PopupWindow(
