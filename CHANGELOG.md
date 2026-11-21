@@ -3,6 +3,23 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+106 — 2026-11-21
+
+Built on the same upstream base as 5.5.0+105 (OsmAnd 5.5.0, `master` at `55e2985b11`).
+
+### Language
+
+- **The app's language no longer flips to the phone's.** With 地図 set to a language other than the
+  phone's, any configuration change — folding, rotating, day/night, the car connecting — wrote the
+  phone's language into the resources the application hands out, and they came back only on a
+  density change: strings taken through the application (the position pill among them) read "車" on
+  one drive and "CAR" on the next. The localized resources are now rebuilt in the app's own language
+  on every configuration change and never overwritten with the system's.
+- **"Map pills in Japanese"** — a switch in the UI settings (Text & fonts → Map pills), off by
+  default. When on, the pills drawn over the map — the position pill on the phone and on the car
+  screen — are worded in Japanese whatever language 地図 and the phone use. It takes effect at once
+  and travels with export/import.
+
 ## 5.5.0+105 — 2026-11-19
 
 Built on the same upstream base as 5.5.0+075 (OsmAnd 5.5.0, `master` at `55e2985b11`). Builds
