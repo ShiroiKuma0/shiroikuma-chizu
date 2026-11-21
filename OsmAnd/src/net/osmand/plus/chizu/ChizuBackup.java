@@ -1384,6 +1384,7 @@ public class ChizuBackup {
 	private static void applyChizuPrefsJson(@NonNull OsmandApplication app, @NonNull JSONObject json)
 			throws Exception {
 		applyPrefsJson(app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE), json);
+		ChizuPills.forgetJapanese();
 	}
 
 	/**
@@ -1559,6 +1560,7 @@ public class ChizuBackup {
 						continue;
 					}
 					applyPrefsJson(app.getSharedPreferences(name, Context.MODE_PRIVATE), one);
+					ChizuPills.forgetJapanese();
 					applied[0] = true;
 				}
 			} catch (Exception e) {

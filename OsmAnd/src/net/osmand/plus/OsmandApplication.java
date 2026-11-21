@@ -608,6 +608,9 @@ public class OsmandApplication extends MultiDexApplication {
 
 	@Override
 	public void onConfigurationChanged(@NonNull Configuration newConfig) {
+		// 白い熊 地図 +106: the localized resources are rebuilt in the app's language, never overwritten with the system's
+		localeHelper.onConfigurationChanged(newConfig);
+
 		Locale preferredLocale = localeHelper.getPreferredLocale();
 		boolean applyPreferredLocale = preferredLocale != null && !Objects.equals(newConfig.locale.getLanguage(), preferredLocale.getLanguage());
 
