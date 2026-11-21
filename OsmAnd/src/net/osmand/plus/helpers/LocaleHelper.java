@@ -144,6 +144,23 @@ public class LocaleHelper {
 		updateTimeFormatting(newLocale != null ? newLocale : Locale.getDefault());
 	}
 
+	/**
+	 * 白い熊 地図 +106: the system reports a new configuration. The localized resources keep the app's language:
+	 * everything else is taken from the new configuration, and the cached object is dropped so that the next
+	 * use builds it afresh. (Upstream wrote the system's configuration, its language included, into the cached
+	 * object and rebuilt it only when the density changed — strings taken through the application flipped
+	 * between the app's language and the phone's.)
+	 */
+	public void onConfigurationChanged(@NonNull Configuration newConfig) {
+		if (localizedConf != null) {
+			Configuration conf = new Configuration(newConfig);
+			conf.setLocales(localizedConf.getLocales());
+			conf.setLayoutDirection(localizedConf.getLocales().get(0));
+			localizedConf = conf;
+		}
+		localizedResources = null;
+	}
+
 	@Nullable
 	public Resources getLocalizedResources(Context ctx, Resources ctxRes) {
 		if (localizedResources == null && localizedConf != null

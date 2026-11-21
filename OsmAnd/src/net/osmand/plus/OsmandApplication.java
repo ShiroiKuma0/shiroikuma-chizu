@@ -605,10 +605,10 @@ public class OsmandApplication extends MultiDexApplication {
 
 	@Override
 	public void onConfigurationChanged(@NonNull Configuration newConfig) {
-		Resources resources = getResources();
-		resources.updateConfiguration(newConfig, resources.getDisplayMetrics());
+		// 白い熊 地図 +106: the localized resources are rebuilt in the app's language, never overwritten with the system's
+		localeHelper.onConfigurationChanged(newConfig);
 
-		resources = getBaseContext().getResources();
+		Resources resources = getBaseContext().getResources();
 		resources.updateConfiguration(newConfig, resources.getDisplayMetrics());
 
 		DisplayMetrics displayMetrics = resources.getDisplayMetrics();

@@ -176,6 +176,10 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			refreshFontSample(fontSample);
 			addSubgroup(R.string.chizu_subgroup_sizes, accent, 1);
 			addMapTextSizeRow(2);
+			addSubgroup(R.string.chizu_subgroup_pill_language, accent, 1);
+			net.osmand.plus.OsmandApplication chizuApp = (net.osmand.plus.OsmandApplication) requireContext().getApplicationContext();
+			addSwitchRow(R.string.chizu_pills_japanese, R.string.chizu_pills_japanese_descr, 2, ChizuPills.isJapanese(chizuApp),
+					checked -> ChizuPills.setJapanese(chizuApp, checked));
 		});
 		reg(keys, content, labels, "topbar", R.string.chizu_section_top_bar, () ->
 				addColorRow(ChizuTheme.Slot.TOOLBAR_BACKGROUND, 1));

@@ -182,40 +182,40 @@ public final class ChizuFix {
 		if (kind == Kind.SAT) {
 			// +091: always shown (白い熊, 2026-11-18: “we need to keep the pill”) — a satellite fix is told from
 			// every other kind by reading it, not by the pill's absence
-			line1 = app.getString(R.string.chizu_fix_sat, ChizuGnssLog.usedCount());
+			line1 = ChizuPills.text(app, R.string.chizu_fix_sat, ChizuGnssLog.usedCount());
 			noteSat(app);
 			Location l = app.getLocationProvider().getLastKnownLocation();
 			if (l != null && l.hasAccuracy()) {
-				line2 = app.getString(R.string.chizu_fix_accuracy, Math.round(l.getAccuracy()));
+				line2 = ChizuPills.text(app, R.string.chizu_fix_accuracy, Math.round(l.getAccuracy()));
 			}
 		} else if (kind == Kind.CAR) {
-			line1 = app.getString(R.string.chizu_fix_car);
+			line1 = ChizuPills.text(app, R.string.chizu_fix_car);
 		} else if (kind == Kind.WIFI) {
 			Location l = app.getLocationProvider().getLastKnownLocation();
-			line1 = app.getString(R.string.chizu_fix_wifi, l != null && l.hasAccuracy() ? Math.round(l.getAccuracy()) : 0);
+			line1 = ChizuPills.text(app, R.string.chizu_fix_wifi, l != null && l.hasAccuracy() ? Math.round(l.getAccuracy()) : 0);
 		} else if (kind == Kind.EST) {
-			line1 = app.getString(R.string.chizu_fix_est);
+			line1 = ChizuPills.text(app, R.string.chizu_fix_est);
 		} else if (kind == Kind.NET) {
 			Location l = app.getLocationProvider().getLastKnownLocation();
-			line1 = l != null && l.hasAccuracy() ? app.getString(R.string.chizu_fix_net, Math.round(l.getAccuracy()))
-					: app.getString(R.string.chizu_fix_net_plain);
+			line1 = l != null && l.hasAccuracy() ? ChizuPills.text(app, R.string.chizu_fix_net, Math.round(l.getAccuracy()))
+					: ChizuPills.text(app, R.string.chizu_fix_net_plain);
 		} else {
-			line1 = app.getString(R.string.chizu_fix_none);
+			line1 = ChizuPills.text(app, R.string.chizu_fix_none);
 		}
 		if (kind == Kind.WIFI && ChizuWifiLocator.holdsAgainstSat()) {
 			// +094: the receiver has a fix; the taught place is shown in its stead — said so, not “SEARCH”
 			searching = false;
 			searchSinceMs = 0;
-			line2 = app.getString(R.string.chizu_fix_sat_beside, ChizuGnssLog.usedCount());
+			line2 = ChizuPills.text(app, R.string.chizu_fix_sat_beside, ChizuGnssLog.usedCount());
 		}
 		if (searching) {
 			long s = (now - searchSinceMs) / 1000;
-			line2 = app.getString(R.string.chizu_fix_search, ChizuGnssLog.heardCount(), Math.round(ChizuGnssLog.top4()),
+			line2 = ChizuPills.text(app, R.string.chizu_fix_search, ChizuGnssLog.heardCount(), Math.round(ChizuGnssLog.top4()),
 					String.format(Locale.US, "%d:%02d", s / 60, s % 60));
 		}
 		// +088: the pill says when it can be taught — no position of 地図's own, and networks in range to go by
 		String teach = (kind == Kind.NONE || kind == Kind.NET) && ChizuWifiLocator.teachable(app)
-				? app.getString(R.string.chizu_fix_teach) : null;
+				? ChizuPills.text(app, R.string.chizu_fix_teach) : null;
 		return new String[] {line1, line2, teach};
 	}
 
@@ -249,7 +249,7 @@ public final class ChizuFix {
 		if (kind != Kind.SAT && kind != Kind.CAR && !(kind == Kind.WIFI && ChizuWifiLocator.holdsAgainstSat())) {
 			String age = lastSatAge(app);
 			if (age != null) {
-				rows.add(app.getString(R.string.chizu_fix_last_sat, age));
+				rows.add(ChizuPills.text(app, R.string.chizu_fix_last_sat, age));
 			}
 		}
 		// +090: the favourite the Wi-Fi position lands on

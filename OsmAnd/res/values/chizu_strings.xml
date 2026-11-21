@@ -281,4 +281,7 @@
 	<string name="chizu_gnss_menu_settings">Satellite receiver settings</string>
 	<string name="chizu_reset_order">Reset section order</string>
 	<string name="chizu_reset_order_descr">Put the sections back in the built-in order.</string>
+	<string name="chizu_subgroup_pill_language">Map pills</string>
+	<string name="chizu_pills_japanese">Map pills in Japanese</string>
+	<string name="chizu_pills_japanese_descr">The pills drawn over the map — the position pill on the phone and on the car screen — are worded in Japanese, whatever language 地図 and the phone use.</string>
 </resources>

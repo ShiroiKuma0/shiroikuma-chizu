@@ -23,7 +23,52 @@ public final class ChizuPills {
 	public static final float MAIN_DP = 3f;
 	public static final float REGULAR_DP = 1.25f;
 
+	private static final String KEY_JAPANESE = "overlay_pills_japanese";
+	private static volatile Boolean japanese;
+	private static android.content.res.Resources japaneseResources;
+
 	private ChizuPills() {
+	}
+
+	/** +106: the pills drawn over the map are worded in Japanese, whatever language 地図 and the phone run in. Off by default. */
+	public static boolean isJapanese(@NonNull Context c) {
+		Boolean on = japanese;
+		if (on == null) {
+			on = c.getApplicationContext().getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE)
+					.getBoolean(KEY_JAPANESE, false);
+			japanese = on;
+		}
+		return on;
+	}
+
+	public static void setJapanese(@NonNull net.osmand.plus.OsmandApplication app, boolean on) {
+		app.getSharedPreferences(ChizuTheme.PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_JAPANESE, on).apply();
+		japanese = on;
+		ChizuDriveLog.log("map pills in Japanese " + (on ? "on" : "off"));
+		app.getOsmandMap().refreshMap();
+	}
+
+	/** The preferences were replaced under us (a restore): read the switch again. */
+	public static void forgetJapanese() {
+		japanese = null;
+	}
+
+	/**
+	 * +106: the wording of a pill drawn over the map (the position pill on the phone and on the car screen,
+	 * and any later one) — in 地図's language, or in Japanese when the switch is on. Every such pill takes its
+	 * text from here, never from {@code app.getString}.
+	 */
+	@NonNull
+	public static String text(@NonNull net.osmand.plus.OsmandApplication app, int id, Object... args) {
+		if (!isJapanese(app)) {
+			return app.getString(id, args);
+		}
+		android.content.res.Resources r = japaneseResources;
+		if (r == null) {
+			r = app.getLocaleHelper().getLocalizedResources(java.util.Locale.JAPANESE);
+			japaneseResources = r;
+		}
+		return r.getString(id, args);
 	}
 
 	/** The pill's background: the page's own background inside, the accent frame, an accent ripple. */
