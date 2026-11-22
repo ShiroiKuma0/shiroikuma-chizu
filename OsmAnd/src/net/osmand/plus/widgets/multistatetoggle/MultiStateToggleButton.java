@@ -29,6 +29,10 @@ public abstract class MultiStateToggleButton<_Radio extends RadioItem> {
 
 	protected static final float BACKGROUND_ALPHA = 0.1f;
 	protected static final float BACKGROUND_STROKE_ALPHA = 0.5f;
+	// 白い熊 地図 +108: the frame widths of a main and a regular pill, and how far an unselected segment dims.
+	protected static final float SELECTED_STROKE_DP = 3f;
+	protected static final float UNSELECTED_STROKE_DP = 1.25f;
+	protected static final float UNSELECTED_DIM = 0.55f;
 
 	protected final OsmandApplication app;
 	protected final UiUtilities uiUtilities;
@@ -162,17 +166,20 @@ public abstract class MultiStateToggleButton<_Radio extends RadioItem> {
 			} else {
 				background.setCornerRadii(internalBtnRadii);
 			}
+			// 白い熊 地図 +108: the selected segment is told by weight, as a main pill is — a thick frame in the
+			// full colour and bold text, nothing filled — and the others step back to a thin, dim frame and dim
+			// text. Upstream's 10 % fill inside a half-transparent frame was the dimmest segment of the row here,
+			// where the outline of an unselected one is the full accent.
 			if (selectedItem == item) {
-				background.setColor(ColorUtilities.getColorWithAlpha(selectedBgColor, BACKGROUND_ALPHA));
-				background.setStroke(AndroidUtils.dpToPx(app, 1.5f), ColorUtilities.getColorWithAlpha(selectedBgColor, BACKGROUND_STROKE_ALPHA));
+				background.setStroke(AndroidUtils.dpToPx(app, SELECTED_STROKE_DP), selectedBgColor);
 				borderBackgroundView.setBackground(background);
 				updateItemView(button, item, true, textColor);
 			} else {
 				LayerDrawable layerDrawable = new LayerDrawable(new GradientDrawable[]{background});
 				setupLayerInset(i, selectedItemIndex, radius, layerDrawable);
-				background.setStroke(AndroidUtils.dpToPx(app, 1.5f), ColorUtilities.getStrokedButtonsOutlineColor(app, nightMode));
+				background.setStroke(AndroidUtils.dpToPx(app, UNSELECTED_STROKE_DP), dim(selectedBgColor));
 				borderBackgroundView.setBackground(layerDrawable);
-				updateItemView(button, item, false, itemColor);
+				updateItemView(button, item, false, item.getCustomColor() != null && enabled ? itemColor : dim(itemColor));
 			}
 			String contentDescription = item.getContentDescription();
 			if (contentDescription != null) {
@@ -181,6 +188,15 @@ public abstract class MultiStateToggleButton<_Radio extends RadioItem> {
 			Drawable selectedDrawable = UiUtilities.getColoredSelectableDrawable(app, selectedBgColor, BACKGROUND_ALPHA);
 			borderBackgroundView.setForeground(selectedDrawable);
 		}
+	}
+
+	/** 白い熊 地図 +108: the colour at 55 % of its strength, opaque — #8C8C00 for the yellow accent. */
+	@ColorInt
+	private static int dim(@ColorInt int color) {
+		return 0xFF000000
+				| Math.round(((color >> 16) & 0xFF) * UNSELECTED_DIM) << 16
+				| Math.round(((color >> 8) & 0xFF) * UNSELECTED_DIM) << 8
+				| Math.round((color & 0xFF) * UNSELECTED_DIM);
 	}
 
 	private void setupLayerInset(int currentItemIndex, int selectedItemIndex, int radius, @NonNull LayerDrawable layerDrawable) {

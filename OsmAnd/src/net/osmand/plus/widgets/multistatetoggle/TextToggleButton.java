@@ -1,5 +1,6 @@
 package net.osmand.plus.widgets.multistatetoggle;
 
+import android.graphics.Typeface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
@@ -84,6 +85,8 @@ public class TextToggleButton extends MultiStateToggleButton<TextRadioItem> {
 								  boolean selected, @ColorInt int color) {
 		TextView tvTitle = view.findViewById(R.id.title);
 		tvTitle.setTextColor(color);
+		// 白い熊 地図 +108: the selected segment's label is bold, the others' normal.
+		tvTitle.setTypeface(Typeface.create(tvTitle.getTypeface(), selected ? Typeface.BOLD : Typeface.NORMAL));
 	}
 
 	public static class TextRadioItem extends RadioItem {
