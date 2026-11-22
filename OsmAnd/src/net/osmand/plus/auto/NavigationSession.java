@@ -233,7 +233,7 @@ public class NavigationSession extends Session implements NavigationListener, Os
 	 * (north-up, tiles reloaded, recentred at zoom 15) around a position minutes old.
 	 */
 	public boolean chizuHoldsMap() {
-		return !hasStarted() && isStateAtLeast(State.CREATED) && settings != null && !settings.MAP_ACTIVITY_ENABLED
+		return !hasStarted() && AndroidUtils.isStateAtLeast(this, State.CREATED) && settings != null && !settings.MAP_ACTIVITY_ENABLED
 				&& navigationCarSurface != null;
 	}
 
@@ -853,7 +853,7 @@ public class NavigationSession extends Session implements NavigationListener, Os
 	private void chizuShowFreeRide() {
 		String why = chizuFreeRideWhy;
 		chizuFreeRideWhy = "";
-		if (!isStateAtLeast(State.CREATED)) {
+		if (!AndroidUtils.isStateAtLeast(this, State.CREATED)) {
 			return;
 		}
 		// a cleared route is also the first step of a new one: a destination set again means a new route is
