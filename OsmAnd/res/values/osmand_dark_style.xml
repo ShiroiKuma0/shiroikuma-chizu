@@ -46,6 +46,8 @@
 
 
     <style name="OsmandDarkTheme" parent="Theme.MaterialComponents">
+        <!-- shiroikuma fork +107: pill buttons on every stock dialog, see ChizuViewInflater -->
+        <item name="viewInflaterClass">net.osmand.plus.chizu.ChizuViewInflater</item>
         <!-- shiroikuma fork: alert dialogs need a visible edge, see chizu_dialog_styles.xml -->
         <item name="alertDialogTheme">@style/ChizuAlertDialogDark</item>
         <item name="alert_dialog_theme">@style/OsmandDarkTheme</item>

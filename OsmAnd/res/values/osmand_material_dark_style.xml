@@ -5,6 +5,8 @@
 	     Material 3 screens are designed with (connected button groups, sized sliders, expressive
 	     buttons and dialogs). Screens that need the stock M3 switch set its style explicitly. -->
 	<style name="OsmandMaterialDarkTheme" parent="Theme.Material3Expressive.Dark">
+        <!-- shiroikuma fork +107: pill buttons on every stock dialog, see ChizuViewInflater -->
+        <item name="viewInflaterClass">net.osmand.plus.chizu.ChizuViewInflater</item>
 
 		<item name="colorSurface">@color/surface_dark</item>
 		<item name="colorSurfaceDim">@color/surface_dark</item>
