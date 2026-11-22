@@ -3,6 +3,27 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.5.0+107 — 2026-11-22
+
+Built on the same upstream base as 5.5.0+106 (OsmAnd 5.5.0, `master` at `55e2985b11`).
+
+### Black-yellow theme
+
+- **Every stock dialog has pill buttons.** Only the fork's own dialogs had them; OsmAnd's own alert
+  dialogs — "Overlay map", "Map source" and some 150 others — still showed bare-text OK / CANCEL.
+  The buttons of every dialog are now outlined pills: the confirming one with a 3 dp frame and bold
+  text, the others 1.25 dp, and red when the confirming label is Delete, Delete all, Remove or
+  Uninstall. Done in one place, the themes' view inflater, so dialogs added upstream later are
+  covered too.
+- **An action in a choice list looks like an action.** A row whose label ends in "…" — "Add more…"
+  under the list of overlay maps — was drawn as one more radio choice. It is now a full-width pill
+  with a › and no selection mark, its label on the same edge as the choices above it.
+- **Dialog choice lists are in the text colour**, not Material's white.
+- **OsmAnd's own button is an outlined pill.** The button used on bottom sheets and cards was a
+  filled yellow slab as the primary action and bare text as the tertiary one. Now the primary is the
+  3 dp bold pill, every other kind the 1.25 dp one, a harmful kind lends its red to frame and label,
+  and a disabled one is drawn at 38 %. Never filled.
+
 ## 5.5.0+106 — 2026-11-21
 
 Built on the same upstream base as 5.5.0+105 (OsmAnd 5.5.0, `master` at `55e2985b11`).
