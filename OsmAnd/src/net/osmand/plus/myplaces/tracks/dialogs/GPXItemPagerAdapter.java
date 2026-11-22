@@ -1081,9 +1081,11 @@ public class GPXItemPagerAdapter extends PagerAdapter implements CustomTabProvid
 		Context context = tabsView.getContext();
 
 		PagerSlidingTabStrip tabLayout = tabsView.findViewById(R.id.sliding_tabs);
-		tabLayout.setTabBackground(AndroidUtils.resolveAttribute(context, R.attr.btn_bg_border_inactive));
+		// 白い熊 地図 +109: each tab draws its own frame (ChizuSelection), so the strip's full-colour outline and
+		// the dividers between the tabs go — they would outshine the chosen tab.
+		tabLayout.setTabBackground(android.R.color.transparent);
 		tabLayout.setDividerWidth(AndroidUtils.dpToPx(context, 1));
-		tabLayout.setDividerColor(ColorUtilities.getStrokedButtonsOutlineColor(context, nightMode));
+		tabLayout.setDividerColor(android.graphics.Color.TRANSPARENT);
 		tabLayout.setIndicatorHeight(0);
 		tabLayout.setShouldExpand(true);
 

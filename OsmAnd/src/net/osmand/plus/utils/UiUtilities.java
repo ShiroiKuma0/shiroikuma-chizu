@@ -434,6 +434,14 @@ public class UiUtilities {
 				centerButtonContainer.setBackgroundColor(Color.TRANSPARENT);
 			}
 		}
+		// 白い熊 地図 +109: the chosen part by weight, not by a faint tint — see ChizuSelection.
+		int selectedIndex = buttonType == CustomRadioButtonType.START ? 0 : buttonType == CustomRadioButtonType.CENTER ? 1 : 2;
+		net.osmand.plus.chizu.ChizuSelection.row(app, selectedIndex, activeColor, textColor, radius, isLayoutRtl,
+				new View[] {startButtonContainer, centerButtonContainer, endButtonContainer},
+				new TextView[] {
+						startButtonContainer == null ? null : startButtonContainer.findViewById(R.id.left_button),
+						centerButtonContainer == null ? null : centerButtonContainer.findViewById(R.id.center_button),
+						endButtonContainer == null ? null : endButtonContainer.findViewById(R.id.right_button)});
 	}
 
 	public static void setupCompoundButtonDrawable(Context ctx, boolean nightMode, @ColorInt int activeColor, Drawable drawable) {

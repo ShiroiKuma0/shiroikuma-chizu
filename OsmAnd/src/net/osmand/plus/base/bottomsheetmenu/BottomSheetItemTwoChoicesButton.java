@@ -158,6 +158,14 @@ public class BottomSheetItemTwoChoicesButton extends BottomSheetItemWithCompound
 			leftBtnContainer.setBackgroundColor(Color.TRANSPARENT);
 			leftBtn.setTextColor(activeColor);
 		}
+		// 白い熊 地図 +109: the chosen half by weight, not by a faint tint; the row's own full-colour outline
+		// goes, since each half now carries its frame — see ChizuSelection.
+		if (bottomButtons != null) {
+			bottomButtons.setBackground(null);
+		}
+		net.osmand.plus.chizu.ChizuSelection.row(leftBtn.getContext(), isLeftBtnSelected ? 0 : 1, activeColor,
+				bottomBtnTextColor, bottomBtnBgRadius, false,
+				new View[] {leftBtnContainer, rightBtnContainer}, new TextView[] {leftBtn, rightBtn});
 	}
 
 	public static class Builder extends BottomSheetItemWithCompoundButton.Builder {

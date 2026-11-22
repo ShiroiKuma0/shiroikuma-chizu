@@ -128,9 +128,10 @@ public class FolderListAdapter extends RecyclerView.Adapter<FolderViewHolder> {
 		int activeColorId = ColorUtilities.getActiveColorId(nightMode);
 		GradientDrawable drawable = (GradientDrawable) AppCompatResources.getDrawable(app, R.drawable.bg_select_group_button_outline);
 		if (drawable != null) {
-			int strokeWidth = selected ? 2 : 1;
+			// 白い熊 地図 +109: 2 dp against 1 dp in one and the same colour did not tell the chosen tile.
 			int strokeColor = selected ? activeColorId : getStrokedButtonsOutlineColorId(nightMode);
-			drawable.setStroke(AndroidUtils.dpToPx(app, strokeWidth), ContextCompat.getColor(app, strokeColor));
+			drawable.setStroke(net.osmand.plus.chizu.ChizuSelection.strokePx(app, selected),
+					net.osmand.plus.chizu.ChizuSelection.strokeColor(selected, ContextCompat.getColor(app, strokeColor)));
 			holder.groupButton.setImageDrawable(drawable);
 		}
 		holder.groupIcon.setImageDrawable(uiUtilities.getIcon(R.drawable.ic_action_folder, activeColorId));

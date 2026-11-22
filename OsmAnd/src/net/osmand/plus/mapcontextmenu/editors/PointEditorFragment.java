@@ -588,7 +588,10 @@ public abstract class PointEditorFragment extends EditorFragment {
 				GradientDrawable rectContourDrawable = (GradientDrawable) AppCompatResources.getDrawable(app,
 						R.drawable.bg_select_group_button_outline);
 				if (rectContourDrawable != null) {
-					rectContourDrawable.setStroke(AndroidUtils.dpToPx(app, strokeWidth), strokeColor);
+					// 白い熊 地図 +109: 2 dp against 1 dp in one and the same colour did not tell the chosen tile.
+					boolean chosen = strokeWidth == 2;
+					rectContourDrawable.setStroke(net.osmand.plus.chizu.ChizuSelection.strokePx(app, chosen),
+							net.osmand.plus.chizu.ChizuSelection.strokeColor(chosen, strokeColor));
 					holder.groupButton.setImageDrawable(rectContourDrawable);
 				}
 				int color;

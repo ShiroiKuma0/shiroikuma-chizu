@@ -302,7 +302,7 @@ public class TripRecordingBottomSheet extends MenuBottomSheetDialogFragment impl
 		WrapContentHeightViewPager pager = segmentView.findViewById(R.id.pager);
 		PagerSlidingTabStrip tabLayout = segmentView.findViewById(R.id.sliding_tabs);
 		tabLayout.setDividerWidth(AndroidUtils.dpToPx(app, 1));
-		tabLayout.setDividerColor(ColorUtilities.getStrokedButtonsOutlineColor(app, nightMode));
+		tabLayout.setDividerColor(android.graphics.Color.TRANSPARENT); // 白い熊 地図 +109: the tabs carry their own frames
 		tabLayout.setOnTabReselectedListener(new PagerSlidingTabStrip.OnTabReselectedListener() {
 			@Override
 			public void onTabSelected(int position) {

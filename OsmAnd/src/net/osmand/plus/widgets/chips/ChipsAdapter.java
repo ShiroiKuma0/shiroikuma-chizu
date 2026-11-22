@@ -2,6 +2,7 @@ package net.osmand.plus.widgets.chips;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
@@ -19,6 +20,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 import androidx.recyclerview.widget.RecyclerView;
 
 import net.osmand.plus.R;
+import net.osmand.plus.chizu.ChizuSelection;
 import net.osmand.plus.utils.AndroidUtils;
 import net.osmand.plus.utils.UiUtilities;
 
@@ -95,6 +97,19 @@ public class ChipsAdapter extends RecyclerView.Adapter<ChipViewHolder> {
 		tvTitle.setVisibility(View.VISIBLE);
 		tvTitle.setText(capitalizeFirstLetter(chip.title));
 		tvTitle.setTextColor(color);
+		// 白い熊 地図 +109: the chosen chip's label is bold, the others' normal.
+		boolean chosen = chip.isEnabled && dataHolder.isSelected(chip);
+		tvTitle.setTypeface(Typeface.create(tvTitle.getTypeface(), chosen ? Typeface.BOLD : Typeface.NORMAL));
+	}
+
+	/**
+	 * 白い熊 地図 +109: a chosen chip is no longer a slab of the accent with its label knocked out of it. It
+	 * keeps the background of the others and takes the accent as a thick frame and as the colour of its label
+	 * and icon; the others get a thin, dimmed frame and a dimmed label. See ChizuSelection.
+	 */
+	@ColorInt
+	private int getAccent(@NonNull ChipItem chip) {
+		return chip.bgSelectedColor != null ? chip.bgSelectedColor : defAttrs.bgSelectedColor;
 	}
 
 	private void bindIcon(
@@ -132,7 +147,7 @@ public class ChipsAdapter extends RecyclerView.Adapter<ChipViewHolder> {
 	private int getBgColor(@NonNull ChipItem chip) {
 		if (chip.isEnabled) {
 			if (dataHolder.isSelected(chip)) {
-				return chip.bgSelectedColor != null ? chip.bgSelectedColor : defAttrs.bgSelectedColor;
+				return chip.bgColor != null ? chip.bgColor : defAttrs.bgColor; // 白い熊 地図 +109: not filled
 			} else {
 				return chip.bgColor != null ? chip.bgColor : defAttrs.bgColor;
 			}
@@ -145,9 +160,9 @@ public class ChipsAdapter extends RecyclerView.Adapter<ChipViewHolder> {
 	private int getTitleColor(@NonNull ChipItem chip) {
 		if (chip.isEnabled) {
 			if (dataHolder.isSelected(chip)) {
-				return chip.titleSelectedColor != null ? chip.titleSelectedColor : defAttrs.titleSelectedColor;
+				return getAccent(chip); // 白い熊 地図 +109: the selected title colour is meant for the fill
 			} else {
-				return chip.titleColor != null ? chip.titleColor : defAttrs.titleColor;
+				return chip.titleColor != null ? chip.titleColor : ChizuSelection.dim(defAttrs.titleColor);
 			}
 		} else {
 			return chip.titleDisabledColor != null ? chip.titleDisabledColor : defAttrs.titleDisabledColor;
@@ -158,7 +173,7 @@ public class ChipsAdapter extends RecyclerView.Adapter<ChipViewHolder> {
 	private int getIconColor(@NonNull ChipItem chip) {
 		if (chip.isEnabled) {
 			if (dataHolder.isSelected(chip)) {
-				return chip.iconSelectedColor != null ? chip.iconSelectedColor : defAttrs.iconSelectedColor;
+				return getAccent(chip); // 白い熊 地図 +109: as the title
 			} else {
 				return chip.iconColor != null ? chip.iconColor : defAttrs.iconColor;
 			}
@@ -171,9 +186,9 @@ public class ChipsAdapter extends RecyclerView.Adapter<ChipViewHolder> {
 	private int getStrokeColor(@NonNull ChipItem chip) {
 		if (chip.isEnabled) {
 			if (dataHolder.isSelected(chip)) {
-				return chip.strokeSelectedColor != null ? chip.strokeSelectedColor : defAttrs.strokeColor;
+				return chip.strokeSelectedColor != null ? chip.strokeSelectedColor : getAccent(chip);
 			} else {
-				return chip.strokeColor != null ? chip.strokeColor : defAttrs.strokeColor;
+				return chip.strokeColor != null ? chip.strokeColor : ChizuSelection.dim(defAttrs.strokeColor);
 			}
 		} else {
 			return chip.strokeDisabledColor != null ? chip.strokeDisabledColor : defAttrs.strokeColor;
@@ -188,9 +203,9 @@ public class ChipsAdapter extends RecyclerView.Adapter<ChipViewHolder> {
 	private int getStrokeWidth(@NonNull ChipItem chip) {
 		if (chip.isEnabled) {
 			if (dataHolder.isSelected(chip)) {
-				return chip.strokeSelectedWidth != null ? chip.strokeSelectedWidth : defAttrs.strokeWidth;
+				return chip.strokeSelectedWidth != null ? chip.strokeSelectedWidth : ChizuSelection.strokePx(ctx, true);
 			} else {
-				return chip.strokeWidth != null ? chip.strokeWidth : defAttrs.strokeWidth;
+				return chip.strokeWidth != null ? chip.strokeWidth : ChizuSelection.strokePx(ctx, false);
 			}
 		} else {
 			return chip.strokeDisabledWidth != null ? chip.strokeDisabledWidth : defAttrs.strokeWidth;

@@ -124,8 +124,9 @@ public class GpsFilterScreensAdapter extends PagerAdapter implements CustomTabPr
 	private void updateCustomRadioButtons(View buttonsView, int position) {
 		TextView leftButton = buttonsView.findViewById(R.id.left_button);
 		TextView rightButton = buttonsView.findViewById(R.id.right_button);
-		leftButton.setTextColor(position == 0 ? selectedTextColor : unselectedTextColor);
-		rightButton.setTextColor(position == 1 ? selectedTextColor : unselectedTextColor);
+		// 白い熊 地図 +109: bold for the chosen screen, dimmed for the other — both colours are the accent here.
+		net.osmand.plus.chizu.ChizuSelection.label(leftButton, position == 0, selectedTextColor, unselectedTextColor);
+		net.osmand.plus.chizu.ChizuSelection.label(rightButton, position == 1, selectedTextColor, unselectedTextColor);
 	}
 
 	@NonNull
