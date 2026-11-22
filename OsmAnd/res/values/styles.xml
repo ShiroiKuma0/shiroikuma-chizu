@@ -95,6 +95,10 @@
     </style>
 
     <style name="Theme.MaterialComponents.Dialog.Alert.NoAnimation">
+        <!-- shiroikuma fork +107: pill buttons on every stock dialog, see ChizuViewInflater -->
+        <item name="viewInflaterClass">net.osmand.plus.chizu.ChizuViewInflater</item>
+        <!-- shiroikuma fork +107: the rows of a dialog's choice list in the text colour, not Material's white -->
+        <item name="textColorAlertDialogListItem">@color/text_color_primary_dark</item>
         <!-- shiroikuma fork: the visible edge, see chizu_dialog_styles.xml -->
         <item name="android:windowBackground">@drawable/chizu_dialog_background</item>
         <item name="buttonBarNegativeButtonStyle">@style/DialogButtonStyleDark</item>
@@ -104,6 +108,10 @@
     </style>
 
     <style name="Theme.MaterialComponents.Light.Dialog.Alert.NoAnimation">
+        <!-- shiroikuma fork +107: pill buttons on every stock dialog, see ChizuViewInflater -->
+        <item name="viewInflaterClass">net.osmand.plus.chizu.ChizuViewInflater</item>
+        <!-- shiroikuma fork +107: the rows of a dialog's choice list in the text colour, not Material's white -->
+        <item name="textColorAlertDialogListItem">@color/text_color_primary_light</item>
         <!-- shiroikuma fork: the visible edge, see chizu_dialog_styles.xml -->
         <item name="android:windowBackground">@drawable/chizu_dialog_background_light</item>
         <item name="buttonBarNegativeButtonStyle">@style/DialogButtonStyleLight</item>

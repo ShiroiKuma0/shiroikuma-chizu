@@ -110,6 +110,8 @@ public class DialogButtonViewHolder {
 			tvTitle.setCompoundDrawablesWithIntrinsicBounds(icon, null, null, null);
 			tvTitle.setCompoundDrawablePadding(ctx.getResources().getDimensionPixelSize(R.dimen.content_padding_half));
 		}
+		// shiroikuma fork +107: every button is an outlined pill, never a filled slab or bare text
+		net.osmand.plus.chizu.ChizuPills.styleDialogButton(view, attrs.getButtonType());
 	}
 
 	public void updateTitle() {
