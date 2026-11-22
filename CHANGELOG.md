@@ -3,6 +3,70 @@
 Everything built on top of stock OsmAnd (`upstream/master`). The version is
 `<upstream base>+<fork build>`; the base commits track OsmAnd's development line.
 
+## 5.6.0+001 — 2026-11-22
+
+First build on **OsmAnd 5.6.0** (`master` at `6b00e99fc1`, 295 upstream commits after the 5.5.0 base
+`55e2985b11`). The fork's build counter restarts at 001.
+
+### Black-yellow theme
+
+- **A selection shows what is selected.** OsmAnd marks the chosen part of a selector with a faint
+  tint of the accent inside a half-transparent frame, next to parts drawn in the outline colour. In
+  this palette the outline is the accent itself, so the chosen part — "Meters" beside "Feet" on the
+  contour-line download sheet — was the dimmest of its row and read as the one not chosen. One rule
+  now holds for every selection control, the rule a main pill follows: the chosen part has a 3 dp
+  frame in the full colour and a bold label, every other part a 1.25 dp frame and a label at 55 % of
+  the colour (`#8C8C00` for the yellow accent, and following a changed accent). Nothing is filled.
+  - **Segmented selectors** — some 30 screens: the download sheet, map mode, speedometer and widget
+    settings, line style, split interval, Plan a route, profiles, hazmat, live updates. A segment
+    that carries a colour of its own keeps it when not chosen.
+  - **The older radio rows** — a track's statistics tabs and the trip recording sheet. The parts not
+    chosen had no frame at all; they have the thin one now. The strip's own full-colour outline and
+    the dividers between the tabs are gone, since each part carries its frame.
+  - **The two-choice button** under a switch row — Configure map → Details.
+  - **The GPS filter screens** of a track: the chosen screen's label is bold, the other dimmed.
+  - **Group tiles** in the point editor and in the Plan a route save sheet: 2 dp against 1 dp in one
+    and the same yellow did not tell the chosen group.
+  - **Chips are outlined.** A chosen chip was a slab of the accent with its label knocked out of it,
+    the last filled yellow element left. It keeps the black background and takes the accent as a
+    thick frame, a bold label and the colour of its icon.
+
+### Upstream 5.6.0
+
+Everything OsmAnd added between the two bases comes with it, among it:
+
+- **Terrain shadows**, a new visualisation with adjustable 3D relief shading, and Live / Date /
+  Manual sun-position modes; the Sun entry and 3D Relief are rearranged in Configure map.
+- **Track speed colours and legend** scale from 0 to the larger of the profile speed and the track's
+  maximum; direction arrows sit on the dashes without OpenGL.
+- **Search**: results ranked from the city centre for any POI category, the house whose first number
+  matches preferred, the real radius shown when nothing is found, a cancelled search stops reading
+  the name index.
+- **POI details**: the opening-hours check date in its own row, Christmas opening hours.
+- **Media**: a Rename dialog with inline errors, Attach to favorite, Mapillary author, licence and
+  photo page.
+- **Android Auto**: History shows POI, address and coordinate items; the car tilt is restored
+  correctly; a track's line stays while its menu is open.
+- **Navigation**: no empty voice command on a silent route recalculation.
+- **Fixes** for track sort modes rewritten at every start, GPX selection lost when a file is
+  replaced, nested KML favorites, an overlay or underlay pointing at a missing map source, and
+  several crashes on restoring a screen after process death.
+
+### Where upstream met the fork
+
+- **App language.** Upstream fixed the language flipping to the phone's on a configuration change in
+  its own way, on the lines the fork's fix of 5.5.0+106 changed. Both are kept: the fork's rebuild of
+  the localized resources runs first, upstream's update of the application resources after it.
+- **Android Auto History and search** follow upstream's new logic and keep the fork's yellow glyphs
+  and coloured text.
+- **Voice** on a recalculated route follows upstream's logic and keeps the drive-log line.
+- **Android Auto session** calls upstream's shared lifecycle helper, which replaced the private one.
+
+### Packaging
+
+- `versionName` 5.6.0+001, `versionCode` 56500001 — above every 5.5.0 build, so it installs as an
+  update. arm64-v8a, signed, with the native routing library.
+
 ## 5.5.0+107 — 2026-11-22
 
 Built on the same upstream base as 5.5.0+106 (OsmAnd 5.5.0, `master` at `55e2985b11`).
