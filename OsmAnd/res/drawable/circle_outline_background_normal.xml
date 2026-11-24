@@ -7,5 +7,5 @@
 
     <stroke
         android:width="1dp"
-        android:color="#28727272" />
+        android:color="@color/chizu_lit_circle_outline" />
 </shape>

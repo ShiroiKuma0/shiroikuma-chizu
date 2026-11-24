@@ -280,6 +280,7 @@ public class OsmandApplication extends MultiDexApplication {
 		settings = appCustomization.getOsmandSettings();
 		// shiroikuma fork: 白い熊 地図 UI theming + fonts
 		net.osmand.plus.chizu.ChizuTheme.init(this);
+		net.osmand.plus.chizu.ChizuPalette.install(this); // 5.6.0+004: the colour roles over OsmAnd's colour resources
 		net.osmand.plus.chizu.ChizuFonts.init(this);
 		net.osmand.plus.chizu.ChizuDiag.init(this); // the switches first: off-by-default diagnostics
 		net.osmand.plus.chizu.ChizuPerfLog.init(this); // 白い熊 地図: the minute CPU, memory and battery line

@@ -61,6 +61,12 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	private final java.util.Map<String, View> sectionWrappers = new java.util.HashMap<>();
 	private final java.util.Map<String, View> sectionBodies = new java.util.HashMap<>();
 	private final java.util.Map<String, TextView> sectionChevrons = new java.util.HashMap<>();
+	// 5.6.0+003: every section's icon and colour, read by its heading and by its chip alike
+	private final java.util.Map<String, Integer> sectionIcons = new java.util.HashMap<>();
+	private final java.util.Map<String, ChizuTheme.Slot> sectionTones = new java.util.HashMap<>();
+	private java.util.Map<String, ChizuRowIcons.Spec> rowIcons = new java.util.HashMap<>();
+	// 5.6.0+004: the rows of a folded section are built when it is first opened, so the page opens fast
+	private final java.util.Map<String, Runnable> pendingContent = new java.util.HashMap<>();
 	private float density;
 	private ActivityResultLauncher<String[]> fontImportLauncher;
 	private ChizuExim exim;
@@ -68,6 +74,20 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	private boolean diagCleanupDue;
 	/** When the drawer button's touch began (uptime), for “first frame N ms after the touch”. */
 	public static volatile long chizuTouchUptime;
+	/** 5.6.0+003: the default order of the sections — “App language” first, no two neighbours of one colour. */
+	private static final String[] DEFAULT_ORDER = {ChizuPageState.FIRST_KEY, "exim", "foundation", "text", "buttons",
+			"lists", "controls", "topbar", "mapbuttons", "mapw", "menus", "fonts", "car", "speeds", "traffic", "nav",
+			"charts", "gnss", "voice", "scheme", "keys", "wifi", "diag", "extras", "msgs", "maint"};
+	/** The same touch, kept by the page it opened: every step of the opening is logged against it. */
+	private long chizuOpenTouch;
+
+	/** One step of the page's opening, counted from the drawer button's touch; nothing without one. */
+	private static void logOpenStep(@NonNull String step, long touch) {
+		if (touch > 0) {
+			ChizuDriveLog.log("ui page: " + step + ", "
+					+ (android.os.SystemClock.uptimeMillis() - touch) + " ms after the touch");
+		}
+	}
 
 	@Override
 	public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -87,6 +107,23 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		density = view.getResources().getDisplayMetrics().density;
 		holder = view.findViewById(R.id.chizu_holder);
 		view.findViewById(R.id.chizu_back).setOnClickListener(v -> requireActivity().onBackPressed());
+		long touch = chizuOpenTouch;
+		chizuOpenTouch = 0; // the opening only, not a view rebuilt later
+		if (touch > 0 && ChizuDriveLog.on(ChizuDiag.Group.UI)) {
+			logOpenStep("view created", touch);
+			view.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+				@Override
+				public boolean onPreDraw() {
+					view.getViewTreeObserver().removeOnPreDrawListener(this);
+					logOpenStep("first draw pass begins", touch);
+					if (android.os.Build.VERSION.SDK_INT >= 29) {
+						view.getViewTreeObserver().registerFrameCommitCallback(
+								() -> logOpenStep("first frame handed to the system", touch));
+					}
+					return true;
+				}
+			});
+		}
 		return view;
 	}
 
@@ -139,6 +176,11 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		sectionWrappers.clear();
 		sectionBodies.clear();
 		sectionChevrons.clear();
+		sectionIcons.clear();
+		sectionTones.clear();
+		pendingContent.clear();
+		ChizuPalette.apply(requireActivity()); // a colour just set reaches what is built from here on
+		rowIcons = ChizuRowIcons.byTitle(requireContext());
 		body = holder;
 
 		// 白い熊 地図 +067: the page's link to the app's own settings, first and thick (black-yellow skill)
@@ -150,7 +192,10 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		java.util.Map<String, Runnable> content = new java.util.HashMap<>();
 		java.util.Map<String, Integer> labels = new java.util.HashMap<>();
 
-		reg(keys, content, labels, "exim", R.string.chizu_section_exim, () -> {
+		// 5.6.0+003: “App language” leads the page — its chip is the first of the index (白い熊, 2026-11-24)
+		reg(keys, content, labels, ChizuPageState.FIRST_KEY, R.string.chizu_section_language,
+				R.drawable.ic_action_map_language, ChizuTheme.Slot.SECTION_WORDS, this::addLanguageRows);
+		reg(keys, content, labels, "exim", R.string.chizu_section_exim, R.drawable.ic_action_export, ChizuTheme.Slot.SECTION_REACH, () -> {
 			addEximDirRow(1);
 			addEximOpenRow(1);
 			addAutomationSwitchRow(1);
@@ -159,7 +204,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 				addAutomationTokenRow(1);
 			}
 		});
-		reg(keys, content, labels, "foundation", R.string.chizu_section_foundation, () -> {
+		reg(keys, content, labels, "foundation", R.string.chizu_section_foundation, R.drawable.ic_action_appearance, ChizuTheme.Slot.SECTION_BASE, () -> {
 			addColorRow(ChizuTheme.Slot.BACKGROUND, 1);
 			addColorRow(ChizuTheme.Slot.CARD_BACKGROUND, 1);
 			addColorRow(ChizuTheme.Slot.TEXT, 1);
@@ -167,8 +212,26 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			addColorRow(ChizuTheme.Slot.ACCENT, 1);
 			addColorRow(ChizuTheme.Slot.ICON, 1);
 			addColorRow(ChizuTheme.Slot.DIVIDER, 1);
+			// 5.6.0+003: the roles of the fork's own surfaces, each settable
+			addSubgroup(R.string.chizu_subgroup_switches, accent, 1);
+			addColorRow(ChizuTheme.Slot.SWITCH_OFF, 2);
+			addSubgroup(R.string.chizu_subgroup_row_icons, accent, 1);
+			addColorRow(ChizuTheme.Slot.MENU_CONNECT, 2);
+			addColorRow(ChizuTheme.Slot.MENU_MESSAGE, 2);
+			addColorRow(ChizuTheme.Slot.MENU_CONTACT, 2);
+			addColorRow(ChizuTheme.Slot.MENU_SHARE, 2);
+			addColorRow(ChizuTheme.Slot.MENU_BLOCK, 2);
+			addColorRow(ChizuTheme.Slot.MENU_DELETE, 2);
+			addSubgroup(R.string.chizu_subgroup_section_icons, accent, 1);
+			addColorRow(ChizuTheme.Slot.SECTION_BASE, 2);
+			addColorRow(ChizuTheme.Slot.SECTION_CONTROLS, 2);
+			addColorRow(ChizuTheme.Slot.SECTION_WORDS, 2);
+			addColorRow(ChizuTheme.Slot.SECTION_FRAME, 2);
+			addColorRow(ChizuTheme.Slot.SECTION_REACH, 2);
+			addColorRow(ChizuTheme.Slot.SECTION_WARNING, 2);
+			addColorRow(ChizuTheme.Slot.SECTION_FLASH, 2);
 		});
-		reg(keys, content, labels, "fonts", R.string.chizu_section_fonts, () -> {
+		reg(keys, content, labels, "fonts", R.string.chizu_section_fonts, R.drawable.ic_action_text_dark, ChizuTheme.Slot.SECTION_WORDS, () -> {
 			addSubgroup(R.string.chizu_subgroup_app_font, accent, 1);
 			addFontFamilyRow(2);
 			addFontWeightRow(2);
@@ -176,28 +239,39 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			refreshFontSample(fontSample);
 			addSubgroup(R.string.chizu_subgroup_sizes, accent, 1);
 			addMapTextSizeRow(2);
-			addSubgroup(R.string.chizu_subgroup_pill_language, accent, 1);
-			net.osmand.plus.OsmandApplication chizuApp = (net.osmand.plus.OsmandApplication) requireContext().getApplicationContext();
-			addSwitchRow(R.string.chizu_pills_japanese, R.string.chizu_pills_japanese_descr, 2, ChizuPills.isJapanese(chizuApp),
-					checked -> ChizuPills.setJapanese(chizuApp, checked));
 		});
-		reg(keys, content, labels, "topbar", R.string.chizu_section_top_bar, () ->
-				addColorRow(ChizuTheme.Slot.TOOLBAR_BACKGROUND, 1));
-		reg(keys, content, labels, "mapbuttons", R.string.chizu_section_map_buttons, () -> {
+		reg(keys, content, labels, "topbar", R.string.chizu_section_top_bar, R.drawable.ic_action_device_topbar, ChizuTheme.Slot.SECTION_FRAME, () -> {
+			addColorRow(ChizuTheme.Slot.TOOLBAR_BACKGROUND, 1);
+			addRoleRows("bars", 1);
+		});
+		// 5.6.0+004: the item colour roles, each in the section of its item (black-yellow skill, “Colours”)
+		regRoles(keys, content, labels, "text", R.string.chizu_section_r_text, R.drawable.ic_action_text_preview, ChizuTheme.Slot.SECTION_WORDS);
+		regRoles(keys, content, labels, "buttons", R.string.chizu_section_r_buttons, R.drawable.ic_action_button_default, ChizuTheme.Slot.SECTION_CONTROLS);
+		regRoles(keys, content, labels, "controls", R.string.chizu_section_r_controls, R.drawable.ic_action_touch_screen_unlock, ChizuTheme.Slot.SECTION_CONTROLS);
+		regRoles(keys, content, labels, "lists", R.string.chizu_section_r_lists, R.drawable.ic_action_list_folders, ChizuTheme.Slot.SECTION_FRAME);
+		regRoles(keys, content, labels, "menus", R.string.chizu_section_r_menus, R.drawable.ic_action_context_menu, ChizuTheme.Slot.SECTION_REACH);
+		regRoles(keys, content, labels, "mapw", R.string.chizu_section_r_mapw, R.drawable.ic_action_device_widget, ChizuTheme.Slot.SECTION_BASE);
+		regRoles(keys, content, labels, "nav", R.string.chizu_section_r_nav, R.drawable.ic_action_gdirections_dark, ChizuTheme.Slot.SECTION_BASE);
+		regRoles(keys, content, labels, "charts", R.string.chizu_section_r_charts, R.drawable.ic_action_elevation_profile, ChizuTheme.Slot.SECTION_FRAME);
+		regRoles(keys, content, labels, "keys", R.string.chizu_section_r_keys, R.drawable.ic_action_keyboard, ChizuTheme.Slot.SECTION_WORDS);
+		regRoles(keys, content, labels, "msgs", R.string.chizu_section_r_msgs, R.drawable.ic_action_alert, ChizuTheme.Slot.SECTION_FLASH);
+		regRoles(keys, content, labels, "scheme", R.string.chizu_section_r_scheme, R.drawable.ic_action_file_color_palette, ChizuTheme.Slot.SECTION_BASE);
+		regRoles(keys, content, labels, "extras", R.string.chizu_section_r_extras, R.drawable.ic_action_additional_option, ChizuTheme.Slot.SECTION_REACH);
+		reg(keys, content, labels, "mapbuttons", R.string.chizu_section_map_buttons, R.drawable.ic_quick_action, ChizuTheme.Slot.SECTION_CONTROLS, () -> {
 			addSubgroup(R.string.chizu_subgroup_colors, accent, 1);
 			addColorRow(ChizuTheme.Slot.MAP_BUTTON_BACKGROUND, 2);
 			addColorRow(ChizuTheme.Slot.MAP_BUTTON_ICON, 2);
 			addSubgroup(R.string.chizu_subgroup_shape, accent, 1);
 			addMapButtonSliders(2);
 		});
-		reg(keys, content, labels, "car", R.string.chizu_section_car_screen, () -> {
+		reg(keys, content, labels, "car", R.string.chizu_section_car_screen, R.drawable.ic_action_car_dark, ChizuTheme.Slot.SECTION_FRAME, () -> {
 			addSliderRow(getString(R.string.chizu_car_tilt), 1, 10, 89, ChizuCarView.getTilt(requireContext()), "°",
 					(value, preview) -> ChizuCarView.setTilt(requireContext(), value), null);
 			addNoteRow(R.string.chizu_car_tilt_note, 1);
 		});
-		reg(keys, content, labels, "wifi", R.string.chizu_section_wifi, this::addWifiRows);
-		reg(keys, content, labels, "gnss", R.string.chizu_section_gnss, this::addGnssRows);
-		reg(keys, content, labels, "traffic", R.string.chizu_section_traffic, () -> {
+		reg(keys, content, labels, "wifi", R.string.chizu_section_wifi, R.drawable.ic_action_signal, ChizuTheme.Slot.SECTION_BASE, this::addWifiRows);
+		reg(keys, content, labels, "gnss", R.string.chizu_section_gnss, R.drawable.ic_action_gps_info, ChizuTheme.Slot.SECTION_BASE, this::addGnssRows);
+		reg(keys, content, labels, "traffic", R.string.chizu_section_traffic, R.drawable.ic_action_car_running_time, ChizuTheme.Slot.SECTION_REACH, () -> {
 			addSwitchRow(R.string.chizu_traffic_enabled, R.string.chizu_traffic_enabled_descr, 1,
 					ChizuTrafficPrefs.isEnabled(requireContext()),
 					checked -> ChizuTrafficPrefs.setEnabled(requireContext(), checked));
@@ -232,7 +306,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			addSliderRow(getString(R.string.chizu_shimmer_sparkle_size), 2, 30, 300, shimmer.sparkleSizePercent, "%",
 					(value, preview) -> ChizuTrafficPrefs.setShimmerSparkleSizePercent(requireContext(), value), null);
 		});
-		reg(keys, content, labels, "speeds", R.string.chizu_section_speeds, () -> {
+		reg(keys, content, labels, "speeds", R.string.chizu_section_speeds, R.drawable.ic_action_speed, ChizuTheme.Slot.SECTION_BASE, () -> {
 			addSwitchRow(R.string.chizu_speeds_enabled, R.string.chizu_speeds_enabled_descr, 1,
 					ChizuSpeeds.isEnabled(requireContext()),
 					checked -> ChizuSpeeds.setEnabled(requireContext(), checked));
@@ -257,13 +331,22 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			addNoteRow(R.string.chizu_speeds_extra_note, 1);
 			addSpeedGroups(accent);
 		});
-		reg(keys, content, labels, "voice", R.string.chizu_section_voice, () ->
+		reg(keys, content, labels, "voice", R.string.chizu_section_voice, R.drawable.ic_action_volume_up, ChizuTheme.Slot.SECTION_WORDS, () ->
 				addSwitchRow(R.string.chizu_voice_prerender, R.string.chizu_voice_prerender_descr, 1,
 						net.osmand.plus.voice.ChizuVoice.isEnabled(requireContext()),
 						checked -> net.osmand.plus.voice.ChizuVoice.setEnabled(requireContext(), checked)));
-		reg(keys, content, labels, "diag", R.string.chizu_section_diagnostics, () -> addDiagRows(accent));
-		reg(keys, content, labels, "maint", R.string.chizu_section_maintenance, () -> {
+		reg(keys, content, labels, "diag", R.string.chizu_section_diagnostics, R.drawable.ic_action_bug_outlined, ChizuTheme.Slot.SECTION_WARNING, () -> addDiagRows(accent));
+		reg(keys, content, labels, "maint", R.string.chizu_section_maintenance, R.drawable.ic_action_reset, ChizuTheme.Slot.SECTION_WARNING, () -> {
 			addResetRow(1);
+			addPillRow(getString(R.string.chizu_reset_colors), getString(R.string.chizu_reset_colors_descr), 1, false, false,
+					v -> pillDialog(new AlertDialog.Builder(requireActivity())
+							.setMessage(R.string.chizu_reset_colors_confirm)
+							.setPositiveButton(android.R.string.ok, (dialog, which) -> {
+								ChizuTheme.clearAll(requireContext());
+								buildRows();
+							})
+							.setNegativeButton(android.R.string.cancel, null)
+							.show()));
 			addPillRow(getString(R.string.chizu_reset_order), getString(R.string.chizu_reset_order_descr), 1, false, false, v -> {
 				ChizuPageState.resetOrder(requireContext());
 				buildRows();
@@ -272,10 +355,17 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		});
 
 		// 白い熊 地図 +103: the jump index under the app-settings pill, then the sections in the stored order
+		// 5.6.0+003: the default order keeps sections of one colour apart (no slabs); a section this list
+		// does not name keeps its built place at the end. A stored order is never touched.
+		java.util.List<String> defaults = java.util.Arrays.asList(DEFAULT_ORDER);
+		java.util.Collections.sort(keys, (a, b) -> {
+			int ia = defaults.indexOf(a), ib = defaults.indexOf(b);
+			return Integer.compare(ia < 0 ? Integer.MAX_VALUE : ia, ib < 0 ? Integer.MAX_VALUE : ib);
+		});
 		java.util.List<String> order = ChizuPageState.order(requireContext(), keys);
 		java.util.List<ChizuSectionIndex.Item> items = new java.util.ArrayList<>();
 		for (String k : order) {
-			items.add(new ChizuSectionIndex.Item(k, getString(labels.get(k))));
+			items.add(new ChizuSectionIndex.Item(k, getString(labels.get(k)), sectionIcons.get(k), color(sectionTones.get(k))));
 		}
 		int dim = color(ChizuTheme.Slot.TEXT_SECONDARY);
 		View indexView = ChizuSectionIndex.build(requireContext(), items, accent, dim, new ChizuSectionIndex.Listener() {
@@ -296,10 +386,14 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		holder.addView(indexWrap);
 
 		for (String k : order) {
-			addSection(k, labels.get(k), accent);
+			addSection(k, labels.get(k), accent, sectionIcons.get(k), color(sectionTones.get(k)));
 			Runnable r = content.get(k);
 			if (r != null) {
-				r.run();
+				if (ChizuPageState.isOpen(requireContext(), k)) {
+					r.run();
+				} else {
+					pendingContent.put(k, r);
+				}
 			}
 		}
 		body = holder;
@@ -322,6 +416,219 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			holder.post(() -> jumpToSection(jj));
 		}
 		ChizuDriveLog.log("ui page rows built in " + (System.currentTimeMillis() - chizuT0) + " ms");
+	}
+
+	/**
+	 * 5.6.0+003: “App language” — one pill that names the language and opens the list, and the switch for
+	 * the pills drawn over the map. The value is OsmAnd's own “Display language” setting: both pickers set
+	 * the one stored value, which the app re-asserts at every start.
+	 */
+	private void addLanguageRows() {
+		String tag = settings.PREFERRED_LOCALE.get();
+		addPillRow(getString(R.string.chizu_lang_row, languageName(tag == null ? "" : tag)),
+				getString(R.string.chizu_lang_row_descr), 1, true, true, ChizuRowIcons.LANGUAGE, v -> showLanguageDialog());
+		addSwitchRow(R.string.chizu_pills_japanese, R.string.chizu_pills_japanese_descr, 1, ChizuPills.isJapanese(app),
+				checked -> ChizuPills.setJapanese(app, checked));
+	}
+
+	/** A language in its own words, with its tag; “System default” for the empty tag. */
+	@NonNull
+	private String languageName(@NonNull String tag) {
+		if (tag.isEmpty()) {
+			return getString(R.string.chizu_lang_system);
+		}
+		Locale locale = net.osmand.plus.helpers.SupportedLocale.parseLocale(tag);
+		if (locale == null) {
+			return tag;
+		}
+		String name = locale.getDisplayName(locale);
+		if (!name.isEmpty()) {
+			name = name.substring(0, 1).toUpperCase(locale) + name.substring(1);
+		}
+		return name + " (" + tag + ")";
+	}
+
+	/**
+	 * 5.6.0+006: the language list in its settled look (black-yellow skill, 2026-11-24): plain rows — the
+	 * selection ring, the language in its own words with its country beneath in dim gold, the tag in
+	 * dim-gold monospace in a right-hand column of its own — and only the current language in a pill.
+	 */
+	private void showLanguageDialog() {
+		String current = settings.PREFERRED_LOCALE.get() == null ? "" : settings.PREFERRED_LOCALE.get();
+		java.util.List<net.osmand.plus.helpers.SupportedLocale> locales = new java.util.ArrayList<>();
+		for (net.osmand.plus.helpers.SupportedLocale l : net.osmand.plus.helpers.SupportedLocale.values()) {
+			if (!l.getOsmandTag().isEmpty()) {
+				locales.add(l);
+			}
+		}
+		java.text.Collator collator = java.text.Collator.getInstance();
+		java.util.Collections.sort(locales, (x, y) -> collator.compare(ownName(x.getOsmandTag()), ownName(y.getOsmandTag())));
+
+		Context c = requireContext();
+		LinearLayout list = new LinearLayout(c);
+		list.setOrientation(LinearLayout.VERTICAL);
+		list.setPadding(dp(8), dp(4), dp(8), dp(4));
+		android.widget.ScrollView scroller = new android.widget.ScrollView(c);
+		scroller.addView(list);
+		AlertDialog dialog = new AlertDialog.Builder(requireActivity())
+				.setTitle(R.string.chizu_section_language)
+				.setView(scroller)
+				.setNegativeButton(android.R.string.cancel, null)
+				.create();
+
+		View[] currentRow = new View[1];
+		boolean previousCurrent = addLanguageListRow(list, dialog, "", getString(R.string.chizu_lang_system), "", "",
+				current, true, currentRow);
+		for (net.osmand.plus.helpers.SupportedLocale l : locales) {
+			String tag = l.getOsmandTag();
+			Locale locale = net.osmand.plus.helpers.SupportedLocale.parseLocale(tag);
+			String country = "";
+			if (locale != null) {
+				country = locale.getDisplayCountry(locale);
+				if (country.isEmpty()) {
+					country = locale.getDisplayScript(locale);
+				}
+			}
+			boolean isCurrent = tag.equals(current);
+			if (!previousCurrent && !isCurrent) {
+				// a hairline between two plain rows, inset to the text; none beside the current row's pill
+				View line = new View(c);
+				line.setBackgroundColor(ChizuMenuPills.divider(c));
+				LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1);
+				lp.setMarginStart(dp(14 + 18 + 12));
+				lp.setMarginEnd(dp(14));
+				list.addView(line, lp);
+			}
+			previousCurrent = addLanguageListRow(list, dialog, tag, ownName(tag), country, l.getModernTag(), current,
+					false, currentRow);
+		}
+		dialog.show();
+		pillDialog(dialog);
+		if (currentRow[0] != null) {
+			View row = currentRow[0];
+			scroller.post(() -> scroller.scrollTo(0, Math.max(0, row.getTop() - dp(48))));
+		}
+	}
+
+	/** A language in its own words, without its country: the name the list sorts by. */
+	@NonNull
+	private String ownName(@NonNull String tag) {
+		Locale locale = net.osmand.plus.helpers.SupportedLocale.parseLocale(tag);
+		if (locale == null) {
+			return tag;
+		}
+		String name = locale.getDisplayLanguage(locale);
+		if (name.isEmpty()) {
+			return tag;
+		}
+		return name.substring(0, 1).toUpperCase(locale) + name.substring(1);
+	}
+
+	/** One row of the language list; returns whether it is the current one. */
+	private boolean addLanguageListRow(@NonNull LinearLayout list, @NonNull AlertDialog dialog, @NonNull String tag,
+			@NonNull String name, @NonNull String country, @NonNull String shownTag, @NonNull String current,
+			boolean system, @NonNull View[] currentRow) {
+		Context c = requireContext();
+		boolean isCurrent = tag.equals(current);
+		int accent = color(ChizuTheme.Slot.ACCENT);
+		int dim = color(ChizuTheme.Slot.TEXT_SECONDARY);
+
+		LinearLayout row = new LinearLayout(c);
+		row.setOrientation(LinearLayout.HORIZONTAL);
+		row.setGravity(Gravity.CENTER_VERTICAL);
+		// one layout for every language: the name at the left, the tag in its column at the right
+		row.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+		row.setPadding(dp(14), dp(7), dp(14), dp(7));
+		row.setMinimumHeight(0);
+
+		// the selection mark: a ring, accent with a dot on the current row, the switch-off yellow on the others
+		int markColor = isCurrent ? accent : ChizuMenuPills.switchOff(c);
+		GradientDrawable ring = new GradientDrawable();
+		ring.setShape(GradientDrawable.OVAL);
+		ring.setColor(0);
+		ring.setStroke(dp(2), markColor);
+		android.graphics.drawable.Drawable mark = ring;
+		if (isCurrent) {
+			GradientDrawable dot = new GradientDrawable();
+			dot.setShape(GradientDrawable.OVAL);
+			dot.setColor(markColor);
+			android.graphics.drawable.LayerDrawable both = new android.graphics.drawable.LayerDrawable(
+					new android.graphics.drawable.Drawable[] {ring, dot});
+			both.setLayerInset(1, dp(5), dp(5), dp(5), dp(5));
+			mark = both;
+		}
+		View markView = new View(c);
+		markView.setBackground(mark);
+		LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(18), dp(18));
+		markParams.rightMargin = dp(12);
+		row.addView(markView, markParams);
+
+		LinearLayout words = new LinearLayout(c);
+		words.setOrientation(LinearLayout.VERTICAL);
+		TextView nameView = new TextView(c);
+		nameView.setText(name);
+		nameView.setTextSize(16);
+		nameView.setTextColor(color(ChizuTheme.Slot.TEXT));
+		nameView.setTypeface(currentGlobalOrDefault(), isCurrent ? Typeface.BOLD : Typeface.NORMAL);
+		nameView.setGravity(Gravity.LEFT);
+		words.addView(nameView);
+		if (!system && !country.isEmpty()) {
+			TextView countryView = new TextView(c);
+			countryView.setText(country);
+			countryView.setTextSize(13);
+			countryView.setTextColor(dim);
+			applyGlobalFont(countryView);
+			countryView.setGravity(Gravity.LEFT);
+			words.addView(countryView);
+		}
+		row.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+		if (!system) {
+			TextView tagView = new TextView(c);
+			tagView.setText(shownTag);
+			tagView.setTextSize(13);
+			tagView.setTextColor(dim);
+			tagView.setTypeface(Typeface.MONOSPACE);
+			tagView.setGravity(Gravity.RIGHT);
+			LinearLayout.LayoutParams tagParams = new LinearLayout.LayoutParams(
+					ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+			tagParams.leftMargin = dp(12);
+			row.addView(tagView, tagParams);
+		}
+
+		LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+		if (isCurrent) {
+			// the one thing the pill marks: the current language, full width, 3 dp
+			row.setBackground(ChizuPills.drawable(c, accent, color(ChizuTheme.Slot.BACKGROUND), true));
+			rowParams.topMargin = dp(4);
+			rowParams.bottomMargin = dp(4);
+			currentRow[0] = row;
+		}
+		row.setOnClickListener(v -> {
+			dialog.dismiss();
+			pickLanguage(tag, current);
+		});
+		list.addView(row, rowParams);
+		return isCurrent;
+	}
+
+	/** Applies the chosen language at once, for this app only. */
+	private void pickLanguage(@NonNull String picked, @NonNull String current) {
+		if (picked.equals(current)) {
+			return;
+		}
+		FragmentActivity activity = requireActivity();
+		settings.PREFERRED_LOCALE.set(picked);
+		if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+			// 地図 takes the language and comes back in it
+			app.getLocaleHelper().checkPreferredLocale();
+			net.osmand.plus.activities.RestartActivity.doRestartSilent(activity);
+		} else {
+			// Android 13+ hands the language to the system first, so the restart waits for a tap
+			// (as upstream's own picker does — a restart at once would race the system)
+			net.osmand.plus.activities.RestartActivity.requestRestart(activity);
+		}
 	}
 
 	/** 白い熊 地図 +088: the Wi-Fi locator's switches, what it knows, the way to the system's scan limit, and forgetting. */
@@ -380,10 +687,51 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	// first, then a big bold heading with a text-wide underline.
 	/** 白い熊 地図 +103: registers a section — a stable key, its heading, and a Runnable that fills its rows. */
 	private void reg(@NonNull java.util.List<String> keys, @NonNull java.util.Map<String, Runnable> content,
-			@NonNull java.util.Map<String, Integer> labels, @NonNull String key, int labelRes, @NonNull Runnable r) {
+			@NonNull java.util.Map<String, Integer> labels, @NonNull String key, int labelRes,
+			int iconRes, @NonNull ChizuTheme.Slot tone, @NonNull Runnable r) {
+		sectionIcons.put(key, iconRes);
+		sectionTones.put(key, tone);
 		keys.add(key);
 		content.put(key, r);
 		labels.put(key, labelRes);
+	}
+
+	/** 5.6.0+004: a section that holds nothing but the colour roles of its items. */
+	private void regRoles(@NonNull java.util.List<String> keys, @NonNull java.util.Map<String, Runnable> content,
+			@NonNull java.util.Map<String, Integer> labels, @NonNull String key, int labelRes,
+			int iconRes, @NonNull ChizuTheme.Slot tone) {
+		reg(keys, content, labels, key, labelRes, iconRes, tone, () -> addRoleRows(key, 1));
+	}
+
+	private void addRoleRows(@NonNull String section, int level) {
+		for (ChizuRoles.Role role : ChizuRoles.inSection(section)) {
+			addRoleRow(role, level);
+		}
+	}
+
+	/** One item's colour: a swatch that opens the picker, whose reset goes back to the role's rule. */
+	private void addRoleRow(@NonNull ChizuRoles.Role role, int level) {
+		LinearLayout row = tightRow(level);
+		row.addView(itemLabel(getString(role.labelRes), ChizuRowIcons.COLOR));
+		View swatch = new View(requireContext());
+		swatch.setLayoutParams(new LinearLayout.LayoutParams(dp(30), dp(22)));
+		setSwatch(swatch, ChizuRoles.color(requireContext(), role));
+		row.addView(swatch);
+		row.setOnClickListener(v -> ChizuColorPickerDialog.show(requireActivity(), ChizuRoles.color(requireContext(), role),
+				ChizuRoles.isSet(requireContext(), role), new ChizuColorPickerDialog.Callback() {
+					@Override
+					public void onColorPicked(int picked) {
+						ChizuRoles.set(requireContext(), role, picked);
+						buildRows();
+					}
+
+					@Override
+					public void onReset() {
+						ChizuRoles.reset(requireContext(), role);
+						buildRows();
+					}
+				}));
+		body.addView(row);
 	}
 
 	private void toggleSection(@NonNull String key) {
@@ -394,6 +742,12 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		ChizuPageState.setOpen(requireContext(), key, open);
 		View inner = sectionBodies.get(key);
 		TextView chev = sectionChevrons.get(key);
+		Runnable fill = open ? pendingContent.remove(key) : null;
+		if (fill != null && inner instanceof LinearLayout) {
+			body = (LinearLayout) inner;
+			fill.run();
+			body = holder;
+		}
 		if (inner != null) {
 			inner.setVisibility(open ? View.VISIBLE : View.GONE);
 		}
@@ -415,7 +769,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 
 	// 白い熊 地図 +103: a foldable section — the settled heading with a ›/⌄ at its right, the thin section
 	// divider kept above it whether folded or open, and its rows in an inner body that folds away.
-	private void addSection(@NonNull String key, int labelRes, @ColorInt int accent) {
+	private void addSection(@NonNull String key, int labelRes, @ColorInt int accent, int iconRes, @ColorInt int tone) {
 		boolean first = sectionCount == 0;
 		sectionCount++;
 
@@ -424,7 +778,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		wrapper.setPadding(0, first ? dp(12) : dp(10), 0, dp(2));
 		if (!first) {
 			View spacer = new View(requireContext());
-			spacer.setBackgroundColor(accent);
+			spacer.setBackgroundColor(ChizuMenuPills.divider(requireContext())); // the darker accent, folded or open
 			wrapper.addView(spacer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
 		}
 
@@ -439,8 +793,14 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		label.setTextSize(20);
 		label.setTypeface(currentGlobalOrDefault(), Typeface.BOLD);
 		label.setTextColor(accent);
+		// 5.6.0+003: the section's icon in the section's colour — the same pair as on its chip
+		int gutter = ChizuRowIcons.set(label, iconRes, tone, true);
 		labelCol.addView(label);
-		labelCol.addView(textWideRule(label, accent, 2.5f));
+		View rule = textWideRule(label, accent, 2.5f);
+		LinearLayout.LayoutParams ruleParams = (LinearLayout.LayoutParams) rule.getLayoutParams();
+		ruleParams.width = Math.max(0, ruleParams.width - gutter); // under the text, not under the icon
+		ruleParams.setMarginStart(gutter);
+		labelCol.addView(rule);
 		header.addView(labelCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 		TextView chev = new TextView(requireContext());
 		chev.setTextSize(20);
@@ -520,6 +880,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			value.setText(status.dirName);
 			value.setTextColor(color(ChizuTheme.Slot.ACCENT));
 		}
+		rowIcon(value, "", ChizuRowIcons.DIRECTORY);
 		box.addView(value);
 
 		TextView statusLine = new TextView(requireContext());
@@ -656,6 +1017,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		titleView.setTextSize(16);
 		titleView.setTextColor(color(ChizuTheme.Slot.TEXT));
 		titleView.setTypeface(currentGlobalOrDefault(), Typeface.BOLD); // +067: bold label over its explanation
+		int gutter = rowIcon(titleView, title, ChizuRowIcons.SETTING);
 		labels.addView(titleView);
 
 		TextView descrView = new TextView(requireContext());
@@ -663,6 +1025,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		descrView.setTextSize(13);
 		descrView.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
 		applyGlobalFont(descrView);
+		descrView.setPaddingRelative(gutter, 0, 0, 0); // under the label's text, not under its icon
 		labels.addView(descrView);
 
 		return labels;
@@ -686,7 +1049,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	private void addColorRow(ChizuTheme.Slot slot, int level) {
 		LinearLayout row = tightRow(level);
 
-		TextView label = itemLabel(getString(slot.labelRes));
+		TextView label = itemLabel(getString(slot.labelRes), ChizuRowIcons.COLOR);
 		row.addView(label);
 
 		View swatch = new View(requireContext());
@@ -918,7 +1281,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 				rows.setOrientation(LinearLayout.VERTICAL);
 				rows.setVisibility(View.GONE);
 				LinearLayout header = tightRow(1);
-				TextView label = itemLabel("▸ " + group);
+				TextView label = itemLabel("▸ " + group, null); // a sub-heading that folds, not a row
 				label.setTextColor(accent);
 				label.setTypeface(currentGlobalOrDefault(), Typeface.BOLD);
 				header.addView(label);
@@ -948,7 +1311,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	@NonNull
 	private View speedRow(@NonNull ChizuSpeeds.Row r) {
 		LinearLayout row = tightRow(2);
-		TextView labelView = itemLabel(r.label());
+		TextView labelView = itemLabel(r.label(), ChizuRowIcons.SPEED);
 		labelView.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.5f));
 		row.addView(labelView);
 
@@ -1086,6 +1449,11 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	 */
 	private void addPillRow(@NonNull String title, @Nullable String descr, int level, boolean main, boolean opens,
 			@NonNull View.OnClickListener listener) {
+		addPillRow(title, descr, level, main, opens, null, listener);
+	}
+
+	private void addPillRow(@NonNull String title, @Nullable String descr, int level, boolean main, boolean opens,
+			@Nullable ChizuRowIcons.Spec spec, @NonNull View.OnClickListener listener) {
 		LinearLayout row = new LinearLayout(requireContext());
 		row.setOrientation(LinearLayout.HORIZONTAL);
 		row.setPadding(level == 0 ? dp(SECTION_INSET_DP) : indent(level), dp(3), dp(BASE_INSET_DP), dp(3));
@@ -1093,7 +1461,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		LinearLayout box = new LinearLayout(requireContext());
 		box.setOrientation(LinearLayout.VERTICAL);
 		box.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-		TextView pill = pill(title, main, opens);
+		TextView pill = pill(title, main, opens, spec);
 		pill.setOnClickListener(listener);
 		box.addView(pill, new LinearLayout.LayoutParams(
 				ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1103,7 +1471,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			d.setTextSize(13);
 			d.setTextColor(color(ChizuTheme.Slot.TEXT_SECONDARY));
 			applyGlobalFont(d);
-			d.setPadding(pill.getPaddingLeft(), dp(2), 0, 0); // under the label, not the pill's edge
+			d.setPadding(pill.getCompoundPaddingLeft(), dp(2), 0, 0); // under the label's text, not the pill's edge or its icon
 			box.addView(d);
 		}
 		row.addView(box);
@@ -1116,14 +1484,29 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	/** The pill itself: 3 dp + bold for the main action, 1.25 dp + normal otherwise; never filled. */
 	@NonNull
 	private TextView pill(@NonNull String title, boolean main, boolean opens) {
+		return pill(title, main, opens, null);
+	}
+
+	/** {@code spec}: the pill's icon when the table does not name its title. A pill that deletes is red. */
+	@NonNull
+	private TextView pill(@NonNull String title, boolean main, boolean opens, @Nullable ChizuRowIcons.Spec spec) {
+		ChizuRowIcons.Spec known = rowIcons.get(title);
+		if (known != null) {
+			spec = known;
+		} else if (spec == null) {
+			spec = ChizuRowIcons.SETTING;
+		}
+		// a destructive action lends its red to frame and label, still unfilled
+		int ink = spec.role == ChizuRowIcons.Role.DELETE ? spec.role.color(requireContext()) : color(ChizuTheme.Slot.ACCENT);
 		TextView pill = new TextView(requireContext());
 		pill.setText(opens ? title + "  ›" : title);
 		pill.setTextSize(16);
-		pill.setTextColor(color(ChizuTheme.Slot.ACCENT));
+		pill.setTextColor(ink);
 		pill.setTypeface(currentGlobalOrDefault(), main ? Typeface.BOLD : Typeface.NORMAL);
 		pill.setPadding(dp(16), dp(9), dp(16), dp(9));
-		pill.setBackground(ChizuPills.drawable(requireContext(), color(ChizuTheme.Slot.ACCENT),
+		pill.setBackground(ChizuPills.drawable(requireContext(), ink,
 				color(ChizuTheme.Slot.BACKGROUND), main));
+		ChizuRowIcons.set(pill, spec.icon, spec.role.color(requireContext()), true); // the icon inside the pill, at its left
 		pill.setClickable(true);
 		pill.setFocusable(true);
 		return pill;
@@ -1280,11 +1663,17 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 	}
 
 	private TextView itemLabel(String label) {
+		return itemLabel(label, ChizuRowIcons.SETTING);
+	}
+
+	/** {@code fallback}: the icon of a row whose title the table does not name; null for a row without one. */
+	private TextView itemLabel(String label, @Nullable ChizuRowIcons.Spec fallback) {
 		TextView view = new TextView(requireContext());
 		view.setText(label);
 		view.setTextSize(16);
 		view.setTextColor(color(ChizuTheme.Slot.TEXT));
 		applyGlobalFont(view);
+		rowIcon(view, label, fallback);
 		view.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 		return view;
 	}
@@ -1302,6 +1691,18 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 		drawable.setStroke(Math.max(1, dp(1)), color(ChizuTheme.Slot.DIVIDER));
 		drawable.setCornerRadius(dp(4));
 		view.setBackground(drawable);
+	}
+
+	/**
+	 * 5.6.0+003: the row's icon at the start of its label, coloured by what the row does and sized by the
+	 * label (black-yellow skill, “Row icons”). Returns the gutter, for what sits under the label's text.
+	 */
+	private int rowIcon(@NonNull TextView label, @NonNull String title, @Nullable ChizuRowIcons.Spec fallback) {
+		ChizuRowIcons.Spec spec = rowIcons.get(title);
+		if (spec == null) {
+			spec = fallback;
+		}
+		return spec == null ? 0 : ChizuRowIcons.set(label, spec.icon, spec.role.color(requireContext()), true);
 	}
 
 	private void applyGlobalFont(TextView view) {
@@ -1385,6 +1786,9 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 			args.putBoolean(ARG_GNSS, gnss);
 			args.putBoolean(ARG_SPEEDS, speeds);
 			fragment.setArguments(args);
+			long touch = chizuTouchUptime; // onResume clears it, inside the transaction below
+			fragment.chizuOpenTouch = touch;
+			logOpenStep("showInstance begins", touch);
 			manager.beginTransaction()
 					.replace(R.id.fragmentContainer, fragment, TAG)
 					.addToBackStack(TAG)
@@ -1394,6 +1798,7 @@ public class ChizuUiFragment extends BaseOsmAndFragment {
 				manager.executePendingTransactions();
 			} catch (Exception ignored) {
 			}
+			logOpenStep("transaction executed", touch);
 		}
 	}
 }

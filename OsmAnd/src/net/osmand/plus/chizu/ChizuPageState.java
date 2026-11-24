@@ -25,6 +25,8 @@ public final class ChizuPageState {
 
 	private static final String KEY_ORDER = "ui_section_order";
 	private static final String KEY_OPEN = "ui_section_open";
+	/** The section that leads the default order, and joins a stored one in first place. */
+	public static final String FIRST_KEY = "language";
 
 	private ChizuPageState() {
 	}
@@ -51,7 +53,13 @@ public final class ChizuPageState {
 		}
 		for (String k : built) {
 			if (!result.contains(k)) {
-				result.add(k);
+				// 5.6.0+003: “App language” is the first section also in a stored order that predates it —
+				// nothing dragged it anywhere yet (black-yellow skill, 2026-11-24)
+				if (FIRST_KEY.equals(k)) {
+					result.add(0, k);
+				} else {
+					result.add(k);
+				}
 			}
 		}
 		return result;

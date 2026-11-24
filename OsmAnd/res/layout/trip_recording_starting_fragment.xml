@@ -86,9 +86,9 @@
 			app:labelBehavior="gone"
 			app:thumbColor="@color/profile_icon_color_blue_light"
 			app:thumbRadius="@dimen/content_padding_small_half"
-			app:tickColorInactive="#007EB3"
+			app:tickColorInactive="@color/chizu_lit_recording_tick"
 			app:trackColorActive="@color/profile_icon_color_blue_light"
-			app:trackColorInactive="#4D007EB3"
+			app:trackColorInactive="@color/chizu_lit_recording_track"
 			app:trackHeight="@dimen/slider_track_height"
 			tools:visibility="visible" />
 

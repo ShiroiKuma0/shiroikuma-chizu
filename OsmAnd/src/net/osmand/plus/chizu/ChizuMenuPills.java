@@ -39,10 +39,6 @@ public final class ChizuMenuPills {
 	public static final int DISABLED_ALPHA = 97; // 38 %
 	public static final int PILL_MARGIN_DP = 3;
 	public static final int TOGGLE_HEIGHT_DP = 36;
-	@ColorInt
-	private static final int WARNING = 0xFFFF0000;
-	@ColorInt
-	private static final int SHARE = 0xFFFF8000;
 
 	private ChizuMenuPills() {
 	}
@@ -60,7 +56,7 @@ public final class ChizuMenuPills {
 	/** The warning role: what deletes. */
 	@ColorInt
 	public static int warning(@NonNull Context c) {
-		return WARNING;
+		return ChizuTheme.getColor(c, ChizuTheme.Slot.MENU_DELETE);
 	}
 
 	/** A group divider: 70 % of the way from the background to the accent, opaque. */
@@ -72,6 +68,9 @@ public final class ChizuMenuPills {
 	/** A switch that is off: 55 % of the way from the background to the text, opaque — darker, not faded. */
 	@ColorInt
 	public static int switchOff(@NonNull Context c) {
+		if (ChizuTheme.isOverridden(c, ChizuTheme.Slot.SWITCH_OFF)) {
+			return ChizuTheme.getColor(c, ChizuTheme.Slot.SWITCH_OFF);
+		}
 		return ColorUtils.blendARGB(background(c), ChizuTheme.getColor(c, ChizuTheme.Slot.TEXT), 0.55f);
 	}
 
@@ -115,7 +114,7 @@ public final class ChizuMenuPills {
 		}
 		if (says(c, title, R.string.shared_string_share, R.string.shared_string_export, R.string.shared_string_copy,
 				R.string.shared_string_save, R.string.shared_string_download)) {
-			return SHARE;
+			return ChizuTheme.getColor(c, ChizuTheme.Slot.MENU_SHARE);
 		}
 		return accent(c);
 	}

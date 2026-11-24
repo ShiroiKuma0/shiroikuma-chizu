@@ -29,10 +29,15 @@ public final class ChizuSectionIndex {
 	public static final class Item {
 		final String key;
 		final String label;
+		final int icon;
+		final int color;
 
-		public Item(@NonNull String key, @NonNull String label) {
+		/** {@code icon} and {@code color} are the section's own: the same pair its heading shows. */
+		public Item(@NonNull String key, @NonNull String label, int icon, int color) {
 			this.key = key;
 			this.label = label;
+			this.icon = icon;
+			this.color = color;
 		}
 	}
 
@@ -54,6 +59,8 @@ public final class ChizuSectionIndex {
 		final List<View> chips = new ArrayList<>();
 		for (Item it : items) {
 			TextView chip = chip(c, it.label, accent, d);
+			// 5.6.0+003: the section's icon in the section's colour, sized by the chip's label
+			ChizuRowIcons.set(chip, it.icon, it.color, false);
 			chip.setTag(it.key);
 			chip.setOnClickListener(v -> listener.onJump((String) v.getTag()));
 			chip.setOnLongClickListener(v -> {

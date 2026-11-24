@@ -30,6 +30,15 @@ public class ChizuTheme {
 	public static final int YELLOW = 0xFFFFFF00;
 	public static final int YELLOW_SECONDARY = 0xFFC8C800; // 白い熊 地図 +067: the skill’s dim gold (was 70 % yellow)
 
+	// 白い熊 地図 5.6.0+003: the colours that carry meaning, written once (black-yellow skill, 2026-11-23 defaults)
+	public static final int SWITCH_OFF_DIM = 0xFF8C8C00;
+	public static final int HEAVY_GREEN = 0xFF00A550;
+	public static final int HEAVY_BLUE = 0xFF0066FF;
+	public static final int LIGHT_BLUE = 0xFF00B0FF;
+	public static final int ORANGE = 0xFFFF8000;
+	public static final int ROSE = 0xFFFF3D7F;
+	public static final int RED = 0xFFFF0000;
+
 	private static final String RECENT_COLORS_KEY = "recent_colors";
 	private static final int RECENT_COLORS_MAX = 8;
 
@@ -58,7 +67,22 @@ public class ChizuTheme {
 		MAP_BUTTON_BACKGROUND("map_btn_bg", R.string.chizu_slot_map_button_background, BLACK,
 				new int[] {R.color.map_button_background_color_dark, R.color.map_button_background_color_light}),
 		MAP_BUTTON_ICON("map_btn_icon", R.string.chizu_slot_map_button_icon, YELLOW,
-				new int[] {R.color.map_button_icon_color_dark, R.color.map_button_icon_color_light});
+				new int[] {R.color.map_button_icon_color_dark, R.color.map_button_icon_color_light}),
+		// 白い熊 地図 5.6.0+003: roles of the fork's own surfaces, tied to no OsmAnd colour resource
+		SWITCH_OFF("switch_off", R.string.chizu_slot_switch_off, SWITCH_OFF_DIM, new int[0]),
+		MENU_CONNECT("menu_connect", R.string.chizu_slot_menu_connect, HEAVY_GREEN, new int[0]),
+		MENU_MESSAGE("menu_message", R.string.chizu_slot_menu_message, HEAVY_BLUE, new int[0]),
+		MENU_CONTACT("menu_contact", R.string.chizu_slot_menu_contact, LIGHT_BLUE, new int[0]),
+		MENU_SHARE("menu_share", R.string.chizu_slot_menu_share, ORANGE, new int[0]),
+		MENU_BLOCK("menu_block", R.string.chizu_slot_menu_block, ROSE, new int[0]),
+		MENU_DELETE("menu_delete", R.string.chizu_slot_menu_delete, RED, new int[0]),
+		SECTION_BASE("section_base", R.string.chizu_slot_section_base, YELLOW, new int[0]),
+		SECTION_CONTROLS("section_controls", R.string.chizu_slot_section_controls, HEAVY_GREEN, new int[0]),
+		SECTION_WORDS("section_words", R.string.chizu_slot_section_words, LIGHT_BLUE, new int[0]),
+		SECTION_FRAME("section_frame", R.string.chizu_slot_section_frame, HEAVY_BLUE, new int[0]),
+		SECTION_REACH("section_reach", R.string.chizu_slot_section_reach, ORANGE, new int[0]),
+		SECTION_WARNING("section_warning", R.string.chizu_slot_section_warning, RED, new int[0]),
+		SECTION_FLASH("section_flash", R.string.chizu_slot_section_flash, ROSE, new int[0]);
 
 		public final String key;
 		public final int labelRes;
@@ -78,6 +102,7 @@ public class ChizuTheme {
 	// colorResId -> override color, rebuilt on every change; empty when nothing is overridden
 	private static final SparseIntArray OVERRIDES = new SparseIntArray();
 	private static volatile boolean hasOverrides;
+	private static volatile int generation;
 
 	private ChizuTheme() {
 	}
@@ -88,36 +113,62 @@ public class ChizuTheme {
 	}
 
 	@NonNull
-	private static SharedPreferences prefs(@NonNull Context context) {
+	static SharedPreferences prefs(@NonNull Context context) {
 		if (prefs == null) {
 			init(context);
 		}
 		return prefs;
 	}
 
-	private static void rebuildOverrides() {
+	/** A foundation colour straight from the store: what was set, else the default. */
+	@ColorInt
+	static int slotColor(@Nullable SharedPreferences store, @NonNull Slot slot) {
+		int stored = store == null ? UNSET : store.getInt(slot.key, UNSET);
+		return stored != UNSET ? stored : slot.defaultColor;
+	}
+
+	/**
+	 * 5.6.0+004: every colour resource a role governs, with the role's present value — set or default.
+	 * Always filled: one role feeds the dark and the light name alike, so the values of {@code colors.xml}
+	 * are never what shows (白い熊, 2026-11-24: always black-yellow, whichever theme is on).
+	 */
+	static void rebuildOverrides() {
 		synchronized (OVERRIDES) {
 			OVERRIDES.clear();
 			if (prefs != null) {
 				for (Slot slot : Slot.values()) {
-					int stored = prefs.getInt(slot.key, UNSET);
-					if (stored != UNSET) {
-						for (int resId : slot.colorResIds) {
-							OVERRIDES.put(resId, stored);
-						}
-					}
-					if (slot == Slot.ACCENT && stored != UNSET) {
-						// Content on the accent fill is derived, never picked: keep it readable
-						// whatever accent was chosen. Left alone when the accent is the default,
-						// so the static per-theme values in chizu_colors.xml apply.
-						int onAccent = contrastOn(stored);
-						OVERRIDES.put(R.color.chizu_on_accent_dark, onAccent);
-						OVERRIDES.put(R.color.chizu_on_accent_light, onAccent);
+					int color = slotColor(prefs, slot);
+					for (int resId : slot.colorResIds) {
+						OVERRIDES.put(resId, color);
 					}
 				}
+				// content on the accent fill is derived, never picked: readable whatever the accent
+				int onAccent = contrastOn(slotColor(prefs, Slot.ACCENT));
+				OVERRIDES.put(R.color.chizu_on_accent_dark, onAccent);
+				OVERRIDES.put(R.color.chizu_on_accent_light, onAccent);
+				OVERRIDES.put(R.color.chizu_dialog_border, slotColor(prefs, Slot.DIVIDER));
+				ChizuRoles.fill(prefs, OVERRIDES);
 			}
 			hasOverrides = OVERRIDES.size() > 0;
+			generation++;
 		}
+	}
+
+	/** Counts the states of the roles: {@link ChizuPalette} rebuilds its loader when this moved. */
+	static int generation() {
+		return generation;
+	}
+
+	/** Colour resource id → ARGB, for the loader. */
+	@NonNull
+	static java.util.Map<Integer, Integer> resourceColors() {
+		java.util.Map<Integer, Integer> map = new java.util.HashMap<>();
+		synchronized (OVERRIDES) {
+			for (int i = 0; i < OVERRIDES.size(); i++) {
+				map.put(OVERRIDES.keyAt(i), OVERRIDES.valueAt(i));
+			}
+		}
+		return map;
 	}
 
 	/**
@@ -185,6 +236,7 @@ public class ChizuTheme {
 		for (Slot slot : Slot.values()) {
 			editor.remove(slot.key);
 		}
+		ChizuRoles.clearAll(editor); // 5.6.0+004: the item roles go back to their rules too
 		editor.apply();
 		rebuildOverrides();
 	}

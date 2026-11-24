@@ -2,8 +2,8 @@
 <!-- 白い熊 地図 +090: the ground of a popup menu in the black-yellow theme: black, with a yellow frame (白い熊, 2026-11-19: every menu has a yellow border) so the menu
      stands off a dark map. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-	<solid android:color="#FF000000" />
+	<solid android:color="@color/list_background_color_dark" />
 	<corners android:radius="16dp" />
-	<stroke android:width="1.25dp" android:color="#FFFFFF00" />
+	<stroke android:width="1.25dp" android:color="@color/chizu_dialog_border" />
 	<padding android:top="4dp" android:bottom="4dp" />
 </shape>

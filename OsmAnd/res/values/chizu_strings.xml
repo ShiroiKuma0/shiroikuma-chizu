@@ -46,7 +46,7 @@
 
 	<string name="chizu_section_foundation">Foundation</string>
 	<string name="chizu_section_fonts">Text &amp; fonts</string>
-	<string name="chizu_section_top_bar">Top bar</string>
+	<string name="chizu_section_top_bar">Bars</string>
 	<string name="chizu_section_map_buttons">Map buttons</string>
 	<string name="chizu_section_maintenance">Maintenance</string>
 
@@ -281,7 +281,44 @@
 	<string name="chizu_gnss_menu_settings">Satellite receiver settings</string>
 	<string name="chizu_reset_order">Reset section order</string>
 	<string name="chizu_reset_order_descr">Put the sections back in the built-in order.</string>
-	<string name="chizu_subgroup_pill_language">Map pills</string>
 	<string name="chizu_pills_japanese">Map pills in Japanese</string>
 	<string name="chizu_pills_japanese_descr">The pills drawn over the map — the position pill on the phone and on the car screen — are worded in Japanese, whatever language 地図 and the phone use.</string>
+	<!-- 白い熊 地図 5.6.0+003: the App language section, and the colour roles of the fork's own surfaces -->
+	<string name="chizu_section_language">App language</string>
+	<string name="chizu_lang_row">Language: %1$s</string>
+	<string name="chizu_lang_row_descr">The language of 地図’s own screens, for this app only. It is the same setting as “Display language” in the OsmAnd settings. 地図 restarts to apply it.</string>
+	<string name="chizu_lang_system">System default</string>
+	<string name="chizu_subgroup_switches">Switches</string>
+	<string name="chizu_subgroup_row_icons">Row and menu icons, by what the row does</string>
+	<string name="chizu_subgroup_section_icons">Section icons of this page</string>
+	<string name="chizu_slot_switch_off">Switch that is off</string>
+	<string name="chizu_slot_menu_connect">Connects, synchronises, resets</string>
+	<string name="chizu_slot_menu_message">Writes, speaks</string>
+	<string name="chizu_slot_menu_contact">About a person</string>
+	<string name="chizu_slot_menu_share">Copies, shares, exports</string>
+	<string name="chizu_slot_menu_block">Blocks, locks, keeps secret</string>
+	<string name="chizu_slot_menu_delete">Deletes, removes</string>
+	<string name="chizu_slot_section_base">The base: what the app is, and its settings</string>
+	<string name="chizu_slot_section_controls">Controls: what you operate</string>
+	<string name="chizu_slot_section_words">Words, written and read</string>
+	<string name="chizu_slot_section_frame">The frame and its boxes</string>
+	<string name="chizu_slot_section_reach">The app reaches out</string>
+	<string name="chizu_slot_section_warning">Warning</string>
+	<string name="chizu_slot_section_flash">A brief flash</string>
+	<!-- 白い熊 地図 5.6.0+004: the sections of the item colour roles -->
+	<string name="chizu_section_r_text">Text and icons</string>
+	<string name="chizu_section_r_buttons">Buttons</string>
+	<string name="chizu_section_r_controls">Switches, chips and fields</string>
+	<string name="chizu_section_r_lists">Lists and cards</string>
+	<string name="chizu_section_r_menus">Menus and sheets</string>
+	<string name="chizu_section_r_mapw">Map widgets</string>
+	<string name="chizu_section_r_nav">Navigation</string>
+	<string name="chizu_section_r_charts">Charts</string>
+	<string name="chizu_section_r_keys">Keyboard and coordinates</string>
+	<string name="chizu_section_r_msgs">Messages</string>
+	<string name="chizu_section_r_scheme">Newer screens</string>
+	<string name="chizu_section_r_extras">Plugins and purchases</string>
+	<string name="chizu_reset_colors">Reset all colours</string>
+	<string name="chizu_reset_colors_descr">Every colour of this page goes back to its default; fonts, sizes and switches stay.</string>
+	<string name="chizu_reset_colors_confirm">Reset every colour to its default?</string>
 </resources>

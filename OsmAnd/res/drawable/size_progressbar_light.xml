@@ -3,7 +3,7 @@
 	<!-- Define the background properties like color etc -->
 	<item android:id="@android:id/background">
 		<shape>
-			<solid android:color="#475259"/>
+			<solid android:color="@color/chizu_lit_size_progress"/>
 		</shape>
 	</item>
 

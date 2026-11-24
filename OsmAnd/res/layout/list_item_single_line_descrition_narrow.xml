@@ -47,7 +47,7 @@
                 android:gravity="end"
                 android:maxLines="1"
                 android:maxWidth="@dimen/list_item_description_width"
-                android:textColor="#bebebe"
+                android:textColor="@color/chizu_lit_list_note"
                 android:textSize="@dimen/default_desc_text_size"
                 tools:text="Offline vector maps"/>
 

@@ -85,6 +85,10 @@ public class DrawerMenuButton extends MapButton {
 			case MotionEvent.ACTION_UP:
 			case MotionEvent.ACTION_CANCEL:
 				removeCallbacks(chizuLongPress);
+				// a press that never reaches the app shows by this line's absence
+				net.osmand.plus.chizu.ChizuDriveLog.log("drawer touch ended, action "
+						+ MotionEvent.actionToString(event.getActionMasked())
+						+ ", held " + (event.getEventTime() - chizuDownTime) + " ms");
 				break;
 		}
 		if (chizuLongPressFired) {
