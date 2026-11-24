@@ -10,7 +10,7 @@ A fork of [OsmAnd](https://github.com/osmandapp/OsmAnd) with **major additions**
 
 Installs **side-by-side** with the official OsmAnd (app id `shiroikuma.chizu`).
 
-**📥 Latest release: [`5.6.0+001`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
+**📥 Latest release: [`5.6.0+006`](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases/latest)** — [all releases & APK downloads »](https://github.com/ShiroiKuma0/shiroikuma-chizu/releases)
 
 </div>
 
@@ -43,7 +43,10 @@ place is trusted over a satellite fix a few metres off it.
 ## 🗂️ A settings page you fold and reorder
 The long settings page became a **folding accordion with a draggable index** — a row of chips jumps
 to any section, a long-press drags a chip to reorder the whole page live, every section folds away,
-and your arrangement is remembered and carried in the backup.
+and your arrangement is remembered and carried in the backup. Every heading and every chip carries
+an icon in one of seven colors that say what kind of section it is, every row an icon colored by
+what the row does, and **App language** leads the page: one pill opens a list of every language in
+its own words, the current one alone in a pill.
 
 ---
 
@@ -53,6 +56,16 @@ The dark theme is the default and means it: pure-black backgrounds, cards, app b
 Dialogs get an edge of their own. Upstream paints its panel dark grey over a lighter map, so the dim behind it reads as a boundary; on a black panel over a black map it does not, and a dialog appeared to float with nothing marking where it began or ended. Every alert dialog now takes a yellow-stroked, rounded window background — including the what's-new notes on first launch, whose title and body Material paints straight from the theme and which therefore arrived in stock's near-white until the fork's theme claimed them.
 
 Anything drawn **on** the yellow accent — the trip-recording Start button, every primary dialog button, the navigation Go button, accent-filled FABs — takes a contrasting dark label rather than stock's near-white, which would be unreadable. That contrast is derived, not hard-coded: change the accent to a dark color in the theming page and the labels flip to white on their own, by relative luminance.
+
+---
+
+## 🌈 Every item its own color
+More than 200 items of the app — button grounds and frames, chips, fields, bars, menus, map widgets,
+charts, the keyboard, messages — each have a color of their own on the theming page, in the section
+of the item. OsmAnd's layouts are left as upstream wrote them: the stored colors are laid over
+OsmAnd's own color names at run time, the same for the dark and the light theme, so 地図 is black and
+yellow whichever theme is on. An item nobody set follows the foundation colors — change the accent
+and everything accent-colored moves with it.
 
 ---
 
